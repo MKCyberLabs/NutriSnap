@@ -12,17 +12,23 @@ import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analy
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Calendar, History, TrendingUp, Info } from 'lucide-react';
-import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarIcon, History, TrendingUp, Info, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, isSameDay, addDays, subDays } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [activeAnalysis, setActiveAnalysis] = useState<MealCategory | null>(null);
   const [logs, setLogs] = useState<MealLog[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     const session = getAuthSession();
     if (!session) {
       router.push('/');
@@ -40,10 +46,15 @@ export default function DashboardPage() {
   const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput) => {
     if (!activeAnalysis) return;
 
+    // Create a timestamp that preserves the selected date but uses current time
+    const now = new Date();
+    const logTimestamp = new Date(selectedDate);
+    logTimestamp.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
     const newLog: MealLog = {
       id: Math.random().toString(36).substr(2, 9),
       category: activeAnalysis,
-      timestamp: new Date().toISOString(),
+      timestamp: logTimestamp.toISOString(),
       items: data.foodItems.map(item => ({
         ...item,
         id: Math.random().toString(36).substr(2, 9),
@@ -57,24 +68,80 @@ export default function DashboardPage() {
     setActiveAnalysis(null);
   };
 
+  const filteredLogs = logs.filter(log => isSameDay(new Date(log.timestamp), selectedDate));
+
   const getCategoryTotal = (cat: MealCategory) => {
-    return logs
+    return filteredLogs
       .filter(l => l.category === cat)
       .reduce((sum, log) => sum + log.totalNutrients.calories, 0);
   };
 
-  const totalToday = logs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
+  const totalForDay = filteredLogs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
+
+  if (!isMounted) return null;
 
   return (
     <div className="min-h-svh bg-background">
       <Navbar />
       <main className="container mx-auto px-4 py-8 max-w-7xl">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-4xl font-headline font-bold text-primary">Daily Overview</h1>
-            <p className="text-muted-foreground flex items-center gap-2 mt-1">
-              <Calendar className="h-4 w-4" /> {format(new Date(), 'EEEE, MMMM do')}
-            </p>
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+          <div className="space-y-4">
+            <div>
+              <h1 className="text-4xl font-headline font-bold text-primary">Daily Overview</h1>
+              <div className="flex items-center gap-2 mt-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className={cn(
+                        "justify-start text-left font-normal border-slate-200 hover:bg-slate-50",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-accent" />
+                      {format(selectedDate, 'EEEE, MMMM do')}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => date && setSelectedDate(date)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                
+                <div className="flex items-center gap-1">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-9 w-9" 
+                    onClick={() => setSelectedDate(subDays(selectedDate, 1))}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-9 w-9" 
+                    onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  {!isSameDay(selectedDate, new Date()) && (
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="text-xs text-accent"
+                      onClick={() => setSelectedDate(new Date())}
+                    >
+                      Go to Today
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex gap-4">
             <Card className="bg-primary text-primary-foreground border-none shadow-lg px-6 py-4 flex items-center gap-4">
@@ -83,7 +150,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-xs opacity-70 font-medium uppercase tracking-tighter">Total Calories</p>
-                <p className="text-2xl font-bold">{totalToday} <span className="text-sm font-normal opacity-70">kcal</span></p>
+                <p className="text-2xl font-bold">{totalForDay} <span className="text-sm font-normal opacity-70">kcal</span></p>
               </div>
             </Card>
           </div>
@@ -118,19 +185,21 @@ export default function DashboardPage() {
                   <CardTitle className="font-headline text-2xl flex items-center gap-2">
                     <History className="h-5 w-5 text-accent" /> Activity Log
                   </CardTitle>
-                  <CardDescription>Your chronological intake feed</CardDescription>
+                  <CardDescription>
+                    {isSameDay(selectedDate, new Date()) ? 'Your chronological intake feed for today' : `Logs for ${format(selectedDate, 'MMM do, yyyy')}`}
+                  </CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px] pr-4">
-                  {logs.length === 0 ? (
+                  {filteredLogs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl">
-                      <p>No activity logged for today.</p>
+                      <p>No activity logged for this day.</p>
                       <p className="text-sm opacity-60">Tap + on a category above to start.</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {logs.map((log) => (
+                      {filteredLogs.map((log) => (
                         <div key={log.id} className="relative pl-6 border-l-2 border-slate-100 pb-4 last:pb-0">
                           <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-accent border-4 border-white shadow-sm" />
                           <div className="bg-slate-50 rounded-xl p-4 hover:bg-slate-100/50 transition-colors">
@@ -176,28 +245,43 @@ export default function DashboardPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="font-medium">Protein</span>
-                    <span className="text-muted-foreground">120g / 150g</span>
+                    <span className="text-muted-foreground">
+                      {filteredLogs.reduce((acc, log) => acc + log.totalNutrients.protein, 0)}g / 150g
+                    </span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: '80%' }} />
+                    <div 
+                      className="h-full bg-blue-500 transition-all duration-500" 
+                      style={{ width: `${Math.min((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.protein, 0) / 150) * 100, 100)}%` }} 
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="font-medium">Carbohydrates</span>
-                    <span className="text-muted-foreground">180g / 220g</span>
+                    <span className="text-muted-foreground">
+                      {filteredLogs.reduce((acc, log) => acc + log.totalNutrients.carbs, 0)}g / 220g
+                    </span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-green-500" style={{ width: '82%' }} />
+                    <div 
+                      className="h-full bg-green-500 transition-all duration-500" 
+                      style={{ width: `${Math.min((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.carbs, 0) / 220) * 100, 100)}%` }} 
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="font-medium">Fats</span>
-                    <span className="text-muted-foreground">45g / 65g</span>
+                    <span className="text-muted-foreground">
+                      {filteredLogs.reduce((acc, log) => acc + log.totalNutrients.fat, 0)}g / 65g
+                    </span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-yellow-500" style={{ width: '69%' }} />
+                    <div 
+                      className="h-full bg-yellow-500 transition-all duration-500" 
+                      style={{ width: `${Math.min((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.fat, 0) / 65) * 100, 100)}%` }} 
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -210,7 +294,10 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-accent-foreground font-body leading-relaxed">
-                You've tracked 85% of your protein goal for today. Adding a snack like Greek yogurt or almonds could help you reach your target.
+                {filteredLogs.length === 0 
+                  ? "Start logging your meals to see personalized nutritional insights."
+                  : "You've tracked " + Math.round((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.protein, 0) / 150) * 100) + "% of your protein goal for this day."
+                }
               </CardContent>
             </Card>
           </aside>
