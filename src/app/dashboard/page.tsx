@@ -110,26 +110,6 @@ function calculateNutrientTargets(metrics?: UserMetrics) {
   };
 }
 
-/**
- * Resilient image component to handle local paths and prevent noisy 404s
- */
-function MealImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  const [error, setError] = useState(false);
-  
-  const isValidSrc = src && (src.startsWith('/') || src.startsWith('http') || src.startsWith('data:'));
-
-  if (error || !isValidSrc) return null;
-
-  return (
-    <img 
-      src={src} 
-      alt={alt} 
-      className={className}
-      onError={() => setError(true)}
-    />
-  );
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -191,7 +171,6 @@ export default function DashboardPage() {
     }
 
     const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
-    
     const validImagePath = imagePath && (imagePath.startsWith('/') || imagePath.startsWith('http') || imagePath.startsWith('data:')) ? imagePath : undefined;
 
     const newLog: MealLog = {
@@ -488,13 +467,13 @@ export default function DashboardPage() {
                                       <Dialog>
                                         <DialogTrigger asChild>
                                           <div className="absolute inset-0 z-10 w-full h-full cursor-pointer hover:opacity-90 transition-opacity">
-                                            <MealImage src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
+                                            <img src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
                                           </div>
                                         </DialogTrigger>
                                         <DialogContent className="sm:max-w-[600px] border-primary/20 bg-background rounded-3xl p-6">
                                           <DialogHeader><DialogTitle className="text-2xl font-headline font-bold text-primary">{log.category} Photo</DialogTitle></DialogHeader>
                                           <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-secondary/10 flex items-center justify-center">
-                                            <MealImage src={log.imagePath} alt={log.category} className="max-w-full max-h-full object-contain" />
+                                            <img src={log.imagePath} alt={log.category} className="max-w-full max-h-full object-contain" />
                                           </div>
                                           <div className="mt-4 text-center text-sm font-medium text-muted-foreground">Logged at {format(new Date(log.timestamp), 'h:mm a')}</div>
                                         </DialogContent>
