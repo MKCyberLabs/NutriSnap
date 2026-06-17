@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Camera, FileText, Loader2, Sparkles, Plus, Image as ImageIcon } from 'lucide-react';
+import { Camera, FileText, Loader2, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { MealCategory } from '@/lib/types';
@@ -52,10 +52,12 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
       });
       onAnalysisComplete(result);
     } catch (error) {
+      // Robust error handling to prevent UI crashes
+      console.error("Health Matrix Bot Error:", error);
       toast({
         variant: "destructive",
-        title: "Analysis failed",
-        description: "There was an error analyzing your meal. Please try again.",
+        title: "Analysis issue",
+        description: "The analysis system encountered an error. Logging details to console.",
       });
     } finally {
       setIsAnalyzing(false);
@@ -68,9 +70,9 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="font-headline text-xl text-primary flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-accent animate-pulse" /> Smart-Vision Analysis
+              <Sparkles className="h-5 w-5 text-accent animate-pulse" /> Health Matrix Bot
             </CardTitle>
-            <CardDescription>Log your {category} with AI assistance</CardDescription>
+            <CardDescription>Get instant biological insights for your {category}</CardDescription>
           </div>
           <Badge variant="outline" className="border-accent text-accent">{category}</Badge>
         </div>
@@ -78,10 +80,10 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <label className="text-sm font-medium flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" /> Describe your meal
+            <FileText className="h-4 w-4 text-muted-foreground" /> Input meal details
           </label>
           <Textarea 
-            placeholder="Example: Two scrambled eggs, a slice of whole grain toast, and half an avocado."
+            placeholder="E.g., Chicken breast with brown rice..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="min-h-[100px] border-accent/20 focus-visible:ring-accent"
@@ -128,11 +130,11 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         <Button onClick={handleAnalyze} disabled={isAnalyzing} className="flex-1 bg-primary hover:bg-primary/90">
           {isAnalyzing ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simulating AI Analysis...
             </>
           ) : (
             <>
-              Analyze Meal <Sparkles className="ml-2 h-4 w-4" />
+              Analyze with Health Matrix <Sparkles className="ml-2 h-4 w-4" />
             </>
           )}
         </Button>

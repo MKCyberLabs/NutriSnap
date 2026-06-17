@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarIcon, History, TrendingUp, Info, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, History, TrendingUp, Info, ChevronLeft, ChevronRight, BrainCircuit } from 'lucide-react';
 import { format, isSameDay, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +36,6 @@ export default function DashboardPage() {
     }
     setUser(session);
     
-    // Load logs from local storage
     const savedLogs = localStorage.getItem('nutrisnap_logs');
     if (savedLogs) {
       setLogs(JSON.parse(savedLogs));
@@ -46,7 +45,6 @@ export default function DashboardPage() {
   const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput) => {
     if (!activeAnalysis) return;
 
-    // Create a timestamp that preserves the selected date but uses current time
     const now = new Date();
     const logTimestamp = new Date(selectedDate);
     logTimestamp.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
@@ -55,15 +53,22 @@ export default function DashboardPage() {
       id: Math.random().toString(36).substr(2, 9),
       category: activeAnalysis,
       timestamp: logTimestamp.toISOString(),
-      items: data.foodItems.map(item => ({
+      items: (data.foodItems || []).map(item => ({
         ...item,
         id: Math.random().toString(36).substr(2, 9),
       })),
-      totalNutrients: data.totalNutrients,
+      totalNutrients: {
+        calories: data.calories,
+        protein: data.protein,
+        carbs: data.carbs,
+        fat: data.fat,
+      },
+      healthInsight: data.healthInsight
     };
 
     const updatedLogs = [newLog, ...logs];
     setLogs(updatedLogs);
+    // Simulating "Prisma Database Save" via local storage for the prototype
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
     setActiveAnalysis(null);
   };
@@ -76,7 +81,14 @@ export default function DashboardPage() {
       .reduce((sum, log) => sum + log.totalNutrients.calories, 0);
   };
 
-  const totalForDay = filteredLogs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
+  const totalCaloriesForDay = filteredLogs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
+
+  // Helper to parse "25g" into number 25
+  const parseAmount = (str: string) => parseInt(str.replace(/[^0-9]/g, '')) || 0;
+
+  const totalProtein = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.protein), 0);
+  const totalCarbs = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.carbs), 0);
+  const totalFats = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.fat), 0);
 
   if (!isMounted) return null;
 
@@ -129,16 +141,6 @@ export default function DashboardPage() {
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
-                  {!isSameDay(selectedDate, new Date()) && (
-                    <Button 
-                      variant="link" 
-                      size="sm" 
-                      className="text-xs text-accent"
-                      onClick={() => setSelectedDate(new Date())}
-                    >
-                      Go to Today
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>
@@ -150,7 +152,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-xs opacity-70 font-medium uppercase tracking-tighter">Total Calories</p>
-                <p className="text-2xl font-bold">{totalForDay} <span className="text-sm font-normal opacity-70">kcal</span></p>
+                <p className="text-2xl font-bold">{totalCaloriesForDay} <span className="text-sm font-normal opacity-70">kcal</span></p>
               </div>
             </Card>
           </div>
@@ -183,19 +185,19 @@ export default function DashboardPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                    <History className="h-5 w-5 text-accent" /> Activity Log
+                    <History className="h-5 w-5 text-accent" /> Health Activity Log
                   </CardTitle>
                   <CardDescription>
-                    {isSameDay(selectedDate, new Date()) ? 'Your chronological intake feed for today' : `Logs for ${format(selectedDate, 'MMM do, yyyy')}`}
+                    {isSameDay(selectedDate, new Date()) ? 'Real-time biological intake feed' : `Historical logs for ${format(selectedDate, 'MMM do, yyyy')}`}
                   </CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[400px] pr-4">
+                <ScrollArea className="h-[500px] pr-4">
                   {filteredLogs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl">
-                      <p>No activity logged for this day.</p>
-                      <p className="text-sm opacity-60">Tap + on a category above to start.</p>
+                      <p>No health data logged for this day.</p>
+                      <p className="text-sm opacity-60">Initialize analysis on a category above.</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -212,18 +214,18 @@ export default function DashboardPage() {
                               </div>
                               <span className="font-bold text-primary">{log.totalNutrients.calories} kcal</span>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              {log.items.map((item) => (
-                                <div key={item.id} className="text-xs bg-white border border-slate-100 rounded-md p-2 flex flex-col">
-                                  <span className="font-semibold truncate">{item.name}</span>
-                                  <span className="text-muted-foreground">{item.calories} cal</span>
-                                </div>
-                              ))}
-                            </div>
+                            
+                            {log.healthInsight && (
+                              <div className="mb-3 p-3 bg-white/60 border border-accent/10 rounded-lg flex items-start gap-2">
+                                <BrainCircuit className="h-4 w-4 text-accent shrink-0 mt-0.5" />
+                                <p className="text-xs italic text-slate-600 leading-relaxed">{log.healthInsight}</p>
+                              </div>
+                            )}
+
                             <div className="mt-3 flex gap-4 text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                              <span>P: {log.totalNutrients.protein}g</span>
-                              <span>C: {log.totalNutrients.carbs}g</span>
-                              <span>F: {log.totalNutrients.fat}g</span>
+                              <span>P: {log.totalNutrients.protein}</span>
+                              <span>C: {log.totalNutrients.carbs}</span>
+                              <span>F: {log.totalNutrients.fat}</span>
                             </div>
                           </div>
                         </div>
@@ -238,49 +240,43 @@ export default function DashboardPage() {
           <aside className="space-y-6">
             <Card className="border-none shadow-sm bg-white">
               <CardHeader>
-                <CardTitle className="font-headline text-xl">Target Macros</CardTitle>
-                <CardDescription>Based on your profile metrics</CardDescription>
+                <CardTitle className="font-headline text-xl">Metabolic Targets</CardTitle>
+                <CardDescription>Target vs Actual intake</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="font-medium">Protein</span>
-                    <span className="text-muted-foreground">
-                      {filteredLogs.reduce((acc, log) => acc + log.totalNutrients.protein, 0)}g / 150g
-                    </span>
+                    <span className="text-muted-foreground">{totalProtein}g / 150g</span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-blue-500 transition-all duration-500" 
-                      style={{ width: `${Math.min((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.protein, 0) / 150) * 100, 100)}%` }} 
+                      style={{ width: `${Math.min((totalProtein / 150) * 100, 100)}%` }} 
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="font-medium">Carbohydrates</span>
-                    <span className="text-muted-foreground">
-                      {filteredLogs.reduce((acc, log) => acc + log.totalNutrients.carbs, 0)}g / 220g
-                    </span>
+                    <span className="text-muted-foreground">{totalCarbs}g / 220g</span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-green-500 transition-all duration-500" 
-                      style={{ width: `${Math.min((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.carbs, 0) / 220) * 100, 100)}%` }} 
+                      style={{ width: `${Math.min((totalCarbs / 220) * 100, 100)}%` }} 
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="font-medium">Fats</span>
-                    <span className="text-muted-foreground">
-                      {filteredLogs.reduce((acc, log) => acc + log.totalNutrients.fat, 0)}g / 65g
-                    </span>
+                    <span className="text-muted-foreground">{totalFats}g / 65g</span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-yellow-500 transition-all duration-500" 
-                      style={{ width: `${Math.min((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.fat, 0) / 65) * 100, 100)}%` }} 
+                      style={{ width: `${Math.min((totalFats / 65) * 100, 100)}%` }} 
                     />
                   </div>
                 </div>
@@ -296,7 +292,7 @@ export default function DashboardPage() {
               <CardContent className="text-sm text-accent-foreground font-body leading-relaxed">
                 {filteredLogs.length === 0 
                   ? "Start logging your meals to see personalized nutritional insights."
-                  : "You've tracked " + Math.round((filteredLogs.reduce((acc, log) => acc + log.totalNutrients.protein, 0) / 150) * 100) + "% of your protein goal for this day."
+                  : "Current intake is being processed through the Health Matrix system. Your protein goal is " + Math.round((totalProtein / 150) * 100) + "% complete for today."
                 }
               </CardContent>
             </Card>

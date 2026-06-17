@@ -22,9 +22,9 @@ export interface FoodItem {
   id: string;
   name: string;
   calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
+  protein: string;
+  carbs: string;
+  fat: string;
 }
 
 export interface MealLog {
@@ -34,10 +34,11 @@ export interface MealLog {
   items: FoodItem[];
   totalNutrients: {
     calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
+    protein: string;
+    carbs: string;
+    fat: string;
   };
+  healthInsight?: string;
   description?: string;
   photoUrl?: string;
 }
