@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,7 +61,10 @@ import {
   Plus,
   Loader2,
   Sparkles,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Coffee,
+  Utensils,
+  Apple
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -454,11 +457,11 @@ export default function DashboardPage() {
                             <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background" />
                             <div className="bg-secondary/30 rounded-xl p-4 border border-primary/5">
                               <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2">
-                                  {log.imagePath && (
+                                <div className="flex items-center gap-3">
+                                  {log.imagePath ? (
                                     <Dialog>
                                       <DialogTrigger asChild>
-                                        <div className="relative h-10 w-10 rounded-md overflow-hidden border border-primary/20 cursor-pointer hover:opacity-80 transition-opacity">
+                                        <div className="relative h-10 w-10 rounded-md overflow-hidden border border-primary/20 cursor-pointer hover:opacity-80 transition-opacity shrink-0">
                                           <MealImage 
                                             src={log.imagePath} 
                                             alt={log.category} 
@@ -484,9 +487,18 @@ export default function DashboardPage() {
                                         </div>
                                       </DialogContent>
                                     </Dialog>
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-lg bg-muted/50 border border-muted-foreground/10 flex items-center justify-center shrink-0" title={`${log.category} (No Photo)`}>
+                                      {log.category === 'Breakfast' && <Coffee className="w-5 h-5 text-muted-foreground/60" />}
+                                      {log.category === 'Lunch' && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
+                                      {log.category === 'Dinner' && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
+                                      {log.category === 'Snacks' && <Apple className="w-5 h-5 text-muted-foreground/60" />}
+                                    </div>
                                   )}
-                                  <Badge variant="secondary" className="bg-primary/10 text-primary">{log.category}</Badge>
-                                  <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="secondary" className="bg-primary/10 text-primary">{log.category}</Badge>
+                                    <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-bold text-primary">{log.totalNutrients.calories} kcal</span>
