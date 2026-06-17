@@ -120,10 +120,10 @@ export default function DashboardPage() {
         id: Math.random().toString(36).substr(2, 9),
       })),
       totalNutrients: {
-        calories: data.calories,
-        protein: data.protein,
-        carbs: data.carbs,
-        fat: data.fat,
+        calories: Number(data.calories),
+        protein: Number(data.protein),
+        carbs: Number(data.carbs),
+        fat: Number(data.fat),
       },
       healthInsight: data.healthInsight
     };
@@ -193,10 +193,10 @@ export default function DashboardPage() {
     return generateMockDataForRange(activeWeeklyRange.from, activeWeeklyRange.to);
   }, [activeWeeklyRange]);
 
-  const totalCaloriesForDay = filteredLogs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
-  const totalProtein = filteredLogs.reduce((acc, log) => acc + log.totalNutrients.protein, 0);
-  const totalCarbs = filteredLogs.reduce((acc, log) => acc + log.totalNutrients.carbs, 0);
-  const totalFats = filteredLogs.reduce((acc, log) => acc + log.totalNutrients.fat, 0);
+  const totalCaloriesForDay = filteredLogs.reduce((sum, l) => sum + Number(l.totalNutrients.calories || 0), 0);
+  const totalProtein = filteredLogs.reduce((acc, log) => acc + Number(log.totalNutrients.protein || 0), 0);
+  const totalCarbs = filteredLogs.reduce((acc, log) => acc + Number(log.totalNutrients.carbs || 0), 0);
+  const totalFats = filteredLogs.reduce((acc, log) => acc + Number(log.totalNutrients.fat || 0), 0);
 
   const weeklyAvgCalories = Math.round(dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0) / dynamicWeeklyData.length);
   const weeklyTotalProtein = dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0);
@@ -372,8 +372,8 @@ export default function DashboardPage() {
                 <CardContent className="space-y-6">
                   {[ { label: 'Protein', val: totalProtein, max: 150 }, { label: 'Carbs', val: totalCarbs, max: 220 }, { label: 'Fats', val: totalFats, max: 65 } ].map(m => (
                     <div key={m.label} className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground"><span>{m.label}</span><span className="text-primary">{m.val.toFixed(1)}g / {m.max}g</span></div>
-                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden"><div className="h-full bg-primary" style={{ width: `${Math.min((m.val / m.max) * 100, 100)}%` }} /></div>
+                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground"><span>{m.label}</span><span className="text-primary">{Number(m.val || 0).toFixed(1)}g / {m.max}g</span></div>
+                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden"><div className="h-full bg-primary" style={{ width: `${Math.min((Number(m.val || 0) / m.max) * 100, 100)}%` }} /></div>
                     </div>
                   ))}
                 </CardContent>
@@ -416,8 +416,8 @@ export default function DashboardPage() {
                 <CardContent className="space-y-6">
                   {[ { label: 'Protein', val: weeklyTotalProtein, max: 150 }, { label: 'Carbs', val: weeklyTotalCarbs, max: 220 }, { label: 'Fats', val: weeklyTotalFats, max: 65 } ].map(m => (
                     <div key={m.label} className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground"><span>{m.label}</span><span className="text-secondary-foreground">{m.val}g / {m.max * dynamicWeeklyData.length}g</span></div>
-                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden"><div className="h-full bg-secondary-foreground" style={{ width: `${Math.min((m.val / (m.max * dynamicWeeklyData.length)) * 100, 100)}%` }} /></div>
+                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground"><span>{m.label}</span><span className="text-secondary-foreground">{Number(m.val || 0).toFixed(1)}g / {(m.max * dynamicWeeklyData.length).toFixed(1)}g</span></div>
+                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden"><div className="h-full bg-secondary-foreground" style={{ width: `${Math.min((Number(m.val || 0) / (m.max * dynamicWeeklyData.length)) * 100, 100)}%` }} /></div>
                     </div>
                   ))}
                 </CardContent>
