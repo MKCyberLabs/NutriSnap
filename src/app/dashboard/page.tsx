@@ -116,7 +116,6 @@ function calculateNutrientTargets(metrics?: UserMetrics) {
 function MealImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
   const [error, setError] = useState(false);
   
-  // Basic validation: must start with /, http, or data:
   const isValidSrc = src && (src.startsWith('/') || src.startsWith('http') || src.startsWith('data:'));
 
   if (error || !isValidSrc) return null;
@@ -161,7 +160,6 @@ export default function DashboardPage() {
     if (savedLogs) {
       try {
         const parsed = JSON.parse(savedLogs);
-        // Data Sanitizer: Clean up corrupted image paths from previous dev sessions
         const cleanedLogs = parsed.map((log: any) => {
           if (log.imagePath && !log.imagePath.startsWith('/') && !log.imagePath.startsWith('http') && !log.imagePath.startsWith('data:')) {
             return { ...log, imagePath: undefined };
@@ -193,7 +191,6 @@ export default function DashboardPage() {
 
     const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
     
-    // Final check for imagePath sanity
     const validImagePath = imagePath && (imagePath.startsWith('/') || imagePath.startsWith('http') || imagePath.startsWith('data:')) ? imagePath : undefined;
 
     const newLog: MealLog = {
@@ -475,36 +472,39 @@ export default function DashboardPage() {
                             <div className="bg-secondary/30 rounded-xl p-4 border border-primary/5">
                               <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-3">
-                                  {log.imagePath ? (
-                                    <Dialog>
-                                      <DialogTrigger asChild>
-                                        <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-primary/10 bg-muted/30 cursor-pointer hover:opacity-80 transition-opacity shrink-0 flex items-center justify-center">
-                                          <MealImage src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
-                                        </div>
-                                      </DialogTrigger>
-                                      <DialogContent className="sm:max-w-[600px] border-primary/20 bg-background rounded-3xl p-6">
-                                        <DialogHeader><DialogTitle className="text-2xl font-headline font-bold text-primary">{log.category} Photo</DialogTitle></DialogHeader>
-                                        <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-secondary/10 flex items-center justify-center">
-                                          <MealImage src={log.imagePath} alt={log.category} className="max-w-full max-h-full object-contain" />
-                                        </div>
-                                        <div className="mt-4 text-center text-sm font-medium text-muted-foreground">Logged at {format(new Date(log.timestamp), 'h:mm a')}</div>
-                                      </DialogContent>
-                                    </Dialog>
-                                  ) : (
-                                    <div className="w-10 h-10 rounded-lg bg-muted/50 border border-muted-foreground/10 flex items-center justify-center shrink-0">
-                                      {log.category === 'Breakfast' && <Coffee className="w-5 h-5 text-muted-foreground/60" />}
-                                      {log.category === 'Lunch' && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
-                                      {log.category === 'Dinner' && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
-                                      {log.category === 'Snacks' && <Apple className="w-5 h-5 text-muted-foreground/60" />}
+                                  <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-primary/10 bg-white/60 shrink-0 flex items-center justify-center shadow-sm">
+                                    {log.imagePath ? (
+                                      <Dialog>
+                                        <DialogTrigger asChild>
+                                          <div className="w-full h-full cursor-pointer hover:opacity-80 transition-opacity">
+                                            <MealImage src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
+                                          </div>
+                                        </DialogTrigger>
+                                        <DialogContent className="sm:max-w-[600px] border-primary/20 bg-background rounded-3xl p-6">
+                                          <DialogHeader><DialogTitle className="text-2xl font-headline font-bold text-primary">{log.category} Photo</DialogTitle></DialogHeader>
+                                          <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-secondary/10 flex items-center justify-center">
+                                            <MealImage src={log.imagePath} alt={log.category} className="max-w-full max-h-full object-contain" />
+                                          </div>
+                                          <div className="mt-4 text-center text-sm font-medium text-muted-foreground">Logged at {format(new Date(log.timestamp), 'h:mm a')}</div>
+                                        </DialogContent>
+                                      </Dialog>
+                                    ) : (
+                                      <div className="flex items-center justify-center w-full h-full">
+                                        {log.category === 'Breakfast' && <Coffee className="w-5 h-5 text-muted-foreground/60" />}
+                                        {(log.category === 'Lunch' || log.category === 'Dinner') && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
+                                        {log.category === 'Snacks' && <Apple className="w-5 h-5 text-muted-foreground/60" />}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary" className="bg-primary/10 text-primary h-5 px-1.5 text-[10px] font-bold">{log.category}</Badge>
+                                      <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
                                     </div>
-                                  )}
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="secondary" className="bg-primary/10 text-primary">{log.category}</Badge>
-                                    <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <span className="font-bold text-primary">{log.totalNutrients.calories} kcal</span>
+                                  <span className="font-bold text-primary text-sm">{log.totalNutrients.calories} kcal</span>
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground/60 hover:text-primary"><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -563,7 +563,7 @@ export default function DashboardPage() {
                                 <div className="pt-2 flex justify-end">
                                   <Popover>
                                     <PopoverTrigger asChild>
-                                      <Button variant="outline" size="sm" className="h-8 text-[10px] gap-2 border-primary/20 hover:bg-primary/5 font-bold uppercase tracking-tighter">
+                                      <Button variant="outline" size="sm" className="h-8 text-[10px] gap-2 border-primary/20 hover:bg-primary/5 font-bold uppercase tracking-tighter rounded-lg">
                                         <Plus className="h-3 w-3" /> Add Item
                                       </Button>
                                     </PopoverTrigger>
