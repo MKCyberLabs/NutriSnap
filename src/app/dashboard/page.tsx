@@ -124,6 +124,9 @@ export default function DashboardPage() {
         protein: Number(data.protein),
         carbs: Number(data.carbs),
         fat: Number(data.fat),
+        fiber: Number(data.fiber),
+        saturatedFat: Number(data.saturatedFat),
+        sugar: Number(data.sugar),
       },
       healthInsight: data.healthInsight
     };
@@ -148,6 +151,9 @@ export default function DashboardPage() {
           protein: Number((item.protein * ratio).toFixed(1)),
           carbs: Number((item.carbs * ratio).toFixed(1)),
           fat: Number((item.fat * ratio).toFixed(1)),
+          fiber: Number((item.fiber * ratio).toFixed(1)),
+          saturatedFat: Number((item.saturatedFat * ratio).toFixed(1)),
+          sugar: Number((item.sugar * ratio).toFixed(1)),
         };
       });
 
@@ -155,6 +161,9 @@ export default function DashboardPage() {
       const totalProtein = updatedItems.reduce((sum, i) => sum + i.protein, 0);
       const totalCarbs = updatedItems.reduce((sum, i) => sum + i.carbs, 0);
       const totalFat = updatedItems.reduce((sum, i) => sum + i.fat, 0);
+      const totalFiber = updatedItems.reduce((sum, i) => sum + (i.fiber || 0), 0);
+      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (i.saturatedFat || 0), 0);
+      const totalSugar = updatedItems.reduce((sum, i) => sum + (i.sugar || 0), 0);
 
       return {
         ...log,
@@ -164,6 +173,9 @@ export default function DashboardPage() {
           protein: Number(totalProtein.toFixed(1)),
           carbs: Number(totalCarbs.toFixed(1)),
           fat: Number(totalFat.toFixed(1)),
+          fiber: Number(totalFiber.toFixed(1)),
+          saturatedFat: Number(totalSaturatedFat.toFixed(1)),
+          sugar: Number(totalSugar.toFixed(1)),
         }
       };
     });
@@ -285,7 +297,7 @@ export default function DashboardPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[500px] pr-4">
+                  <ScrollArea className="h-[600px] pr-4">
                     {filteredLogs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border border-dashed border-primary/20 rounded-xl bg-muted/30">
                         <p className="font-medium">No activity recorded yet.</p>
@@ -318,27 +330,37 @@ export default function DashboardPage() {
                                 </div>
                               </div>
                               
-                              <div className="mt-4 mb-4 space-y-2">
+                              <div className="mt-4 mb-4 space-y-4">
                                 {log.items.map((item) => (
-                                  <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-2 px-3 rounded-lg bg-white/50 border border-primary/5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-bold text-foreground/90">{item.name}</span>
-                                      <div className="flex items-center gap-1 ml-2">
-                                        <Input 
-                                          type="number" 
-                                          className="w-16 h-7 text-[10px] text-center p-0 border-primary/10 focus:ring-primary/20 bg-background"
-                                          defaultValue={item.grams}
-                                          onBlur={(e) => handleUpdateGrams(log.id, item.id, parseInt(e.target.value))}
-                                          onKeyDown={(e) => { if(e.key === 'Enter') handleUpdateGrams(log.id, item.id, parseInt((e.target as HTMLInputElement).value)) }}
-                                        />
-                                        <span className="text-[10px] font-bold text-muted-foreground">g</span>
+                                  <div key={item.id} className="p-3 rounded-lg bg-white/50 border border-primary/5 space-y-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold text-foreground/90">{item.name}</span>
+                                        <div className="flex items-center gap-1 ml-2">
+                                          <Input 
+                                            type="number" 
+                                            className="w-16 h-7 text-[10px] text-center p-0 border-primary/10 focus:ring-primary/20 bg-background"
+                                            defaultValue={item.grams}
+                                            onBlur={(e) => handleUpdateGrams(log.id, item.id, parseInt(e.target.value))}
+                                            onKeyDown={(e) => { if(e.key === 'Enter') handleUpdateGrams(log.id, item.id, parseInt((e.target as HTMLInputElement).value)) }}
+                                          />
+                                          <span className="text-[10px] font-bold text-muted-foreground">g</span>
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">{item.calories} kcal</Badge>
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">P: {item.protein}g</Badge>
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">C: {item.carbs}g</Badge>
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">F: {item.fat}g</Badge>
                                       </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">{item.calories} kcal</Badge>
-                                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">P: {item.protein}g</Badge>
-                                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">C: {item.carbs}g</Badge>
-                                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">F: {item.fat}g</Badge>
+                                    
+                                    <div className="text-xs text-muted-foreground/80 ml-4 flex flex-wrap gap-4">
+                                      <span>Fiber: {item.fiber}g</span>
+                                      <span>•</span>
+                                      <span>Sat. Fat: {item.saturatedFat}g</span>
+                                      <span>•</span>
+                                      <span>Sugar: {item.sugar}g</span>
                                     </div>
                                   </div>
                                 ))}
@@ -351,10 +373,13 @@ export default function DashboardPage() {
                                 </div>
                               )}
 
-                              <div className="mt-3 flex gap-4 text-[10px] uppercase font-bold tracking-widest text-primary/70">
+                              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] uppercase font-bold tracking-widest text-primary/70">
                                 <span>TOTAL P: {log.totalNutrients.protein}g</span>
                                 <span>TOTAL C: {log.totalNutrients.carbs}g</span>
                                 <span>TOTAL F: {log.totalNutrients.fat}g</span>
+                                <span>TOTAL FIBER: {log.totalNutrients.fiber}g</span>
+                                <span>TOTAL SAT. FAT: {log.totalNutrients.saturatedFat}g</span>
+                                <span>TOTAL SUGAR: {log.totalNutrients.sugar}g</span>
                               </div>
                             </div>
                           </div>
@@ -370,10 +395,19 @@ export default function DashboardPage() {
               <Card className="border-primary/10 shadow-sm bg-card">
                 <CardHeader><CardTitle className="font-headline text-xl text-primary">Biometric Targets</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
-                  {[ { label: 'Protein', val: totalProtein, max: 150 }, { label: 'Carbs', val: totalCarbs, max: 220 }, { label: 'Fats', val: totalFats, max: 65 } ].map(m => (
+                  {[ 
+                    { label: 'Protein', val: totalProtein, max: 150 }, 
+                    { label: 'Carbs', val: totalCarbs, max: 220 }, 
+                    { label: 'Fats', val: totalFats, max: 65 } 
+                  ].map(m => (
                     <div key={m.label} className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground"><span>{m.label}</span><span className="text-primary">{Number(m.val || 0).toFixed(1)}g / {m.max}g</span></div>
-                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden"><div className="h-full bg-primary" style={{ width: `${Math.min((Number(m.val || 0) / m.max) * 100, 100)}%` }} /></div>
+                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                        <span>{m.label}</span>
+                        <span className="text-primary">{Number(m.val || 0).toFixed(1)}g / {m.max}g</span>
+                      </div>
+                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-primary" style={{ width: `${Math.min((Number(m.val || 0) / m.max) * 100, 100)}%` }} />
+                      </div>
                     </div>
                   ))}
                 </CardContent>

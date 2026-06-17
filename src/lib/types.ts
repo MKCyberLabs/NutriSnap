@@ -26,6 +26,9 @@ export interface FoodItem {
   protein: number;
   carbs: number;
   fat: number;
+  fiber: number;
+  saturatedFat: number;
+  sugar: number;
 }
 
 export interface MealLog {
@@ -38,6 +41,9 @@ export interface MealLog {
     protein: number;
     carbs: number;
     fat: number;
+    fiber: number;
+    saturatedFat: number;
+    sugar: number;
   };
   healthInsight?: string;
   description?: string;
