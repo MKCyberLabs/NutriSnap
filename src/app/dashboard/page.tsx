@@ -576,8 +576,8 @@ export default function DashboardPage() {
                                           }}
                                         >
                                           <PopoverTrigger asChild>
-                                            <button className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors group/edit">
-                                              {item.grams}g <Edit2 className="h-2.5 w-2.5 opacity-0 group-hover/edit:opacity-100" />
+                                            <button className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors">
+                                              {item.grams}g <Edit2 className="h-2.5 w-2.5 text-primary/60" />
                                             </button>
                                           </PopoverTrigger>
                                           <PopoverContent className="glass-card w-40 p-3 rounded-xl border-none shadow-xl" align="start">
@@ -609,7 +609,7 @@ export default function DashboardPage() {
                                         <Badge variant="outline" className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap">F: {item.fat}g</Badge>
                                         <Badge variant="outline" className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap">S: {item.sugar}g</Badge>
                                       </div>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteItem(log.id, item.id)}><X className="h-3 w-3" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground/60" onClick={() => handleDeleteItem(log.id, item.id)}><X className="h-3 w-3" /></Button>
                                     </div>
                                   </div>
                                 ))}
