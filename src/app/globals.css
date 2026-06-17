@@ -1,51 +1,50 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 225 20% 97%;
-    --foreground: 219 40% 15%;
-    --card: 0 0% 100%;
-    --card-foreground: 219 40% 15%;
+    --background: 140 20% 98%;      /* Soft, warm lilypad off-white (#F5F8F6) */
+    --foreground: 150 30% 12%;      /* Deep forest green for highly readable text (#14221B) */
+    --card: 0 0% 100%;              /* Pure white card backgrounds */
+    --card-foreground: 150 30% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 219 40% 15%;
-    --primary: 219 40% 35%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 225 20% 90%;
-    --secondary-foreground: 219 40% 25%;
-    --muted: 225 20% 92%;
-    --muted-foreground: 219 20% 45%;
-    --accent: 240 47% 65%;
-    --accent-foreground: 210 20% 98%;
+    --popover-foreground: 150 30% 12%;
+    --primary: 152 48% 28%;         /* Rich Lotus Stem Green (#236B43) */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 145 25% 90%;       /* Soft Sage Green (#DBE9E1) */
+    --secondary-foreground: 152 48% 28%;
+    --muted: 145 15% 94%;           /* Very pale background tint (#EEF3F0) */
+    --muted-foreground: 150 10% 40%;/* Desaturated green-gray for labels */
+    --accent: 355 75% 93%;          /* Gentle Lotus Petal Blush Pink (#FDE2E4) */
+    --accent-foreground: 355 50% 30%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 20% 98%;
-    --border: 219 20% 88%;
-    --input: 219 20% 88%;
-    --ring: 240 47% 65%;
+    --border: 145 15% 88%;          /* Clean, soft border color */
+    --input: 145 15% 88%;
+    --ring: 152 48% 28%;
     --radius: 0.75rem;
   }
   .dark {
-    --background: 219 40% 10%;
-    --foreground: 210 20% 98%;
-    --card: 219 40% 12%;
-    --card-foreground: 210 20% 98%;
-    --popover: 219 40% 12%;
-    --popover-foreground: 210 20% 98%;
-    --primary: 210 20% 98%;
-    --primary-foreground: 219 40% 15%;
-    --secondary: 219 40% 20%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 219 40% 20%;
-    --muted-foreground: 219 20% 65%;
-    --accent: 240 47% 65%;
-    --accent-foreground: 210 20% 98%;
+    --background: 160 30% 8%;
+    --foreground: 140 20% 98%;
+    --card: 160 30% 10%;
+    --card-foreground: 140 20% 98%;
+    --popover: 160 30% 10%;
+    --popover-foreground: 140 20% 98%;
+    --primary: 152 48% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 160 30% 15%;
+    --secondary-foreground: 152 48% 35%;
+    --muted: 160 30% 15%;
+    --muted-foreground: 140 10% 65%;
+    --accent: 355 40% 25%;
+    --accent-foreground: 355 75% 93%;
     --destructive: 0 62% 30%;
     --destructive-foreground: 210 20% 98%;
-    --border: 219 40% 20%;
-    --input: 219 40% 20%;
-    --ring: 240 47% 65%;
+    --border: 160 30% 20%;
+    --input: 160 30% 20%;
+    --ring: 152 48% 35%;
   }
 }
 

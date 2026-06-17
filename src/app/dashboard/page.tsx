@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -68,7 +67,6 @@ export default function DashboardPage() {
 
     const updatedLogs = [newLog, ...logs];
     setLogs(updatedLogs);
-    // Simulating "Prisma Database Save" via local storage for the prototype
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
     setActiveAnalysis(null);
   };
@@ -83,7 +81,6 @@ export default function DashboardPage() {
 
   const totalCaloriesForDay = filteredLogs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
 
-  // Helper to parse "25g" into number 25
   const parseAmount = (str: string) => parseInt(str.replace(/[^0-9]/g, '')) || 0;
 
   const totalProtein = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.protein), 0);
@@ -99,18 +96,18 @@ export default function DashboardPage() {
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
           <div className="space-y-4">
             <div>
-              <h1 className="text-4xl font-headline font-bold text-primary">Daily Overview</h1>
+              <h1 className="text-4xl font-headline font-bold text-primary">Wellness Hub</h1>
               <div className="flex items-center gap-2 mt-2">
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button 
                       variant="outline" 
                       className={cn(
-                        "justify-start text-left font-normal border-slate-200 hover:bg-slate-50",
+                        "justify-start text-left font-normal border-primary/20 hover:bg-secondary",
                         !selectedDate && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4 text-accent" />
+                      <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
                       {format(selectedDate, 'EEEE, MMMM do')}
                     </Button>
                   </PopoverTrigger>
@@ -128,7 +125,7 @@ export default function DashboardPage() {
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-9 w-9" 
+                    className="h-9 w-9 text-primary hover:bg-secondary" 
                     onClick={() => setSelectedDate(subDays(selectedDate, 1))}
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -136,7 +133,7 @@ export default function DashboardPage() {
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-9 w-9" 
+                    className="h-9 w-9 text-primary hover:bg-secondary" 
                     onClick={() => setSelectedDate(addDays(selectedDate, 1))}
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -151,7 +148,7 @@ export default function DashboardPage() {
                 <TrendingUp className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-xs opacity-70 font-medium uppercase tracking-tighter">Total Calories</p>
+                <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest">Intake</p>
                 <p className="text-2xl font-bold">{totalCaloriesForDay} <span className="text-sm font-normal opacity-70">kcal</span></p>
               </div>
             </Card>
@@ -181,34 +178,34 @@ export default function DashboardPage() {
               </section>
             )}
 
-            <Card className="border-none shadow-sm bg-white">
+            <Card className="border-primary/10 shadow-sm bg-card">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                    <History className="h-5 w-5 text-accent" /> Health Activity Log
+                  <CardTitle className="font-headline text-2xl flex items-center gap-2 text-primary">
+                    <History className="h-5 w-5 text-primary" /> Daily Activity
                   </CardTitle>
                   <CardDescription>
-                    {isSameDay(selectedDate, new Date()) ? 'Real-time biological intake feed' : `Historical logs for ${format(selectedDate, 'MMM do, yyyy')}`}
+                    {isSameDay(selectedDate, new Date()) ? 'Real-time metabolic intake' : `Nutritional history for ${format(selectedDate, 'MMM do')}`}
                   </CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[500px] pr-4">
+                <ScrollArea className="h-[400px] pr-4">
                   {filteredLogs.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl">
-                      <p>No health data logged for this day.</p>
-                      <p className="text-sm opacity-60">Initialize analysis on a category above.</p>
+                    <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border border-dashed border-primary/20 rounded-xl bg-muted/30">
+                      <p className="font-medium">No activity recorded yet.</p>
+                      <p className="text-xs opacity-60">Log a meal to see biological insights.</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {filteredLogs.map((log) => (
-                        <div key={log.id} className="relative pl-6 border-l-2 border-slate-100 pb-4 last:pb-0">
-                          <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-accent border-4 border-white shadow-sm" />
-                          <div className="bg-slate-50 rounded-xl p-4 hover:bg-slate-100/50 transition-colors">
+                        <div key={log.id} className="relative pl-6 border-l-2 border-secondary pb-4 last:pb-0">
+                          <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background shadow-sm" />
+                          <div className="bg-secondary/30 rounded-xl p-4 hover:bg-secondary/50 transition-colors border border-primary/5">
                             <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <Badge variant="secondary" className="mb-1">{log.category}</Badge>
-                                <span className="text-xs text-muted-foreground ml-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/20">{log.category}</Badge>
+                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
                                   {format(new Date(log.timestamp), 'h:mm a')}
                                 </span>
                               </div>
@@ -216,13 +213,13 @@ export default function DashboardPage() {
                             </div>
                             
                             {log.healthInsight && (
-                              <div className="mb-3 p-3 bg-white/60 border border-accent/10 rounded-lg flex items-start gap-2">
-                                <BrainCircuit className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-                                <p className="text-xs italic text-slate-600 leading-relaxed">{log.healthInsight}</p>
+                              <div className="mb-3 p-3 bg-white/40 border border-primary/5 rounded-lg flex items-start gap-2">
+                                <BrainCircuit className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                <p className="text-xs italic text-foreground/80 leading-relaxed">{log.healthInsight}</p>
                               </div>
                             )}
 
-                            <div className="mt-3 flex gap-4 text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                            <div className="mt-3 flex gap-4 text-[10px] uppercase font-bold tracking-widest text-primary/70">
                               <span>P: {log.totalNutrients.protein}</span>
                               <span>C: {log.totalNutrients.carbs}</span>
                               <span>F: {log.totalNutrients.fat}</span>
@@ -238,44 +235,44 @@ export default function DashboardPage() {
           </div>
 
           <aside className="space-y-6">
-            <Card className="border-none shadow-sm bg-white">
+            <Card className="border-primary/10 shadow-sm bg-card">
               <CardHeader>
-                <CardTitle className="font-headline text-xl">Metabolic Targets</CardTitle>
+                <CardTitle className="font-headline text-xl text-primary">Biometric Targets</CardTitle>
                 <CardDescription>Target vs Actual intake</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Protein</span>
-                    <span className="text-muted-foreground">{totalProtein}g / 150g</span>
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                    <span>Protein</span>
+                    <span className="text-primary">{totalProtein}g / 150g</span>
                   </div>
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-blue-500 transition-all duration-500" 
+                      className="h-full bg-primary transition-all duration-500" 
                       style={{ width: `${Math.min((totalProtein / 150) * 100, 100)}%` }} 
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Carbohydrates</span>
-                    <span className="text-muted-foreground">{totalCarbs}g / 220g</span>
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                    <span>Carbs</span>
+                    <span className="text-primary">{totalCarbs}g / 220g</span>
                   </div>
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-green-500 transition-all duration-500" 
+                      className="h-full bg-primary transition-all duration-500" 
                       style={{ width: `${Math.min((totalCarbs / 220) * 100, 100)}%` }} 
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Fats</span>
-                    <span className="text-muted-foreground">{totalFats}g / 65g</span>
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                    <span>Fats</span>
+                    <span className="text-primary">{totalFats}g / 65g</span>
                   </div>
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-yellow-500 transition-all duration-500" 
+                      className="h-full bg-primary transition-all duration-500" 
                       style={{ width: `${Math.min((totalFats / 65) * 100, 100)}%` }} 
                     />
                   </div>
@@ -283,16 +280,16 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-accent/10 border-none">
-              <CardHeader>
-                <CardTitle className="font-headline text-lg flex items-center gap-2 text-accent">
+            <Card className="bg-accent/10 border-accent/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="font-headline text-lg flex items-center gap-2 text-accent-foreground">
                   <Info className="h-4 w-4" /> Insight
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-accent-foreground font-body leading-relaxed">
+              <CardContent className="text-sm text-accent-foreground/90 font-body leading-relaxed">
                 {filteredLogs.length === 0 
-                  ? "Start logging your meals to see personalized nutritional insights."
-                  : "Current intake is being processed through the Health Matrix system. Your protein goal is " + Math.round((totalProtein / 150) * 100) + "% complete for today."
+                  ? "Initialize your daily log to unlock personalized wellness analytics."
+                  : "Metabolic tracking active. You have achieved " + Math.round((totalProtein / 150) * 100) + "% of your daily protein target."
                 }
               </CardContent>
             </Card>

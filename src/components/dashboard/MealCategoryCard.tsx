@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,31 +22,36 @@ export function MealCategoryCard({ category, onAddClick, totalCalories }: MealCa
   const Icon = CATEGORY_ICONS[category];
 
   return (
-    <Card className="overflow-hidden group hover:border-accent/40 transition-all duration-300 shadow-sm hover:shadow-md bg-white border-slate-100">
+    <Card className="overflow-hidden group hover:border-primary/40 transition-all duration-300 shadow-sm hover:shadow-md bg-card border-primary/10 border-[0.5px]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-slate-50 text-accent group-hover:bg-accent group-hover:text-white transition-colors duration-300">
+            <div className="p-2 rounded-xl bg-secondary text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300">
               <Icon className="h-5 w-5" />
             </div>
             <div>
               <CardTitle className="text-lg font-headline">{category}</CardTitle>
-              <p className="text-sm text-muted-foreground font-body">Recommended intake</p>
+              <p className="text-xs text-muted-foreground font-body">Nutritional Slot</p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onAddClick} className="rounded-full hover:bg-accent hover:text-white">
-            <Plus className="h-5 w-5" />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onAddClick} 
+            className="rounded-full hover:bg-primary hover:text-primary-foreground h-8 w-8"
+          >
+            <Plus className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline gap-1">
           <span className="text-3xl font-bold text-primary">{totalCalories}</span>
-          <span className="text-sm text-muted-foreground font-medium uppercase tracking-wider">kcal logged</span>
+          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">kcal</span>
         </div>
-        <div className="mt-4 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+        <div className="mt-4 w-full bg-secondary rounded-full h-1.5 overflow-hidden">
           <div 
-            className="bg-accent h-full transition-all duration-500 ease-out" 
+            className="bg-primary h-full transition-all duration-500 ease-out" 
             style={{ width: `${Math.min((totalCalories / 600) * 100, 100)}%` }}
           />
         </div>
