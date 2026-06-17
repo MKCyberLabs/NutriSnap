@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
@@ -22,7 +22,6 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
-  Tooltip, 
   ResponsiveContainer,
   Cell 
 } from 'recharts';
@@ -35,21 +34,32 @@ import {
   ChevronRight, 
   BrainCircuit,
   BarChart3,
-  Flame
+  Flame,
+  Filter
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays } from 'date-fns';
+import { format, isSameDay, addDays, subDays, isWithinInterval, startOfDay, endOfDay, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { DateRange } from 'react-day-picker';
 
-// Mock weekly data for the analytical layout
-const MOCK_WEEKLY_DATA = [
-  { day: 'Mon', calories: 1850, protein: 140, carbs: 210, fat: 60 },
-  { day: 'Tue', calories: 2100, protein: 155, carbs: 230, fat: 70 },
-  { day: 'Wed', calories: 1750, protein: 130, carbs: 190, fat: 55 },
-  { day: 'Thu', calories: 1950, protein: 145, carbs: 215, fat: 65 },
-  { day: 'Fri', calories: 2200, protein: 160, carbs: 240, fat: 75 },
-  { day: 'Sat', calories: 1600, protein: 120, carbs: 180, fat: 50 },
-  { day: 'Sun', calories: 1420, protein: 105, carbs: 160, fat: 45 },
-];
+/**
+ * Generates dynamic mock data based on a date range to simulate historical logs.
+ */
+function generateMockDataForRange(from: Date, to: Date) {
+  const days = eachDayOfInterval({ start: from, end: to });
+  return days.map(date => {
+    // Use the date's time as a seed for consistent but varying mock data
+    const seed = date.getTime() % 1000;
+    const baseCals = 1600 + (seed % 600);
+    return {
+      day: format(date, 'EEE'),
+      fullDate: date,
+      calories: baseCals,
+      protein: Math.round(baseCals * 0.08),
+      carbs: Math.round(baseCals * 0.12),
+      fat: Math.round(baseCals * 0.03),
+    };
+  });
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -57,8 +67,15 @@ export default function DashboardPage() {
   const [activeAnalysis, setActiveAnalysis] = useState<MealCategory | null>(null);
   const [logs, setLogs] = useState<MealLog[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState('daily');
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Advanced Date Filtering State
+  const [weeklyPivotDate, setWeeklyPivotDate] = useState<Date>(new Date());
+  const [customRange, setCustomRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 6),
+    to: new Date(),
+  });
 
   useEffect(() => {
     setIsMounted(true);
@@ -105,27 +122,37 @@ export default function DashboardPage() {
     setActiveAnalysis(null);
   };
 
+  // Filter real logs based on selected date (for daily view)
   const filteredLogs = logs.filter(log => isSameDay(new Date(log.timestamp), selectedDate));
 
-  const getCategoryTotal = (cat: MealCategory) => {
-    return filteredLogs
-      .filter(l => l.category === cat)
-      .reduce((sum, log) => sum + log.totalNutrients.calories, 0);
-  };
+  // Determine the active range for weekly/summary view
+  const activeWeeklyRange = useMemo(() => {
+    if (customRange?.from && customRange?.to) {
+      return { from: customRange.from, to: customRange.to };
+    }
+    return {
+      from: subDays(weeklyPivotDate, 6),
+      to: weeklyPivotDate
+    };
+  }, [weeklyPivotDate, customRange]);
+
+  // Generate mock analytical data for the selected range
+  const dynamicWeeklyData = useMemo(() => {
+    return generateMockDataForRange(activeWeeklyRange.from, activeWeeklyRange.to);
+  }, [activeWeeklyRange]);
 
   const totalCaloriesForDay = filteredLogs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
-
   const parseAmount = (str: string) => parseInt(str.replace(/[^0-9]/g, '')) || 0;
-
+  
   const totalProtein = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.protein), 0);
   const totalCarbs = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.carbs), 0);
   const totalFats = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.fat), 0);
 
-  // Weekly calculations
-  const weeklyAvgCalories = Math.round(MOCK_WEEKLY_DATA.reduce((acc, d) => acc + d.calories, 0) / MOCK_WEEKLY_DATA.length);
-  const weeklyTotalProtein = MOCK_WEEKLY_DATA.reduce((acc, d) => acc + d.protein, 0);
-  const weeklyTotalCarbs = MOCK_WEEKLY_DATA.reduce((acc, d) => acc + d.carbs, 0);
-  const weeklyTotalFats = MOCK_WEEKLY_DATA.reduce((acc, d) => acc + d.fat, 0);
+  // Weekly analytics based on dynamic mock data
+  const weeklyAvgCalories = Math.round(dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0) / dynamicWeeklyData.length);
+  const weeklyTotalProtein = dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0);
+  const weeklyTotalCarbs = dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0);
+  const weeklyTotalFats = dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0);
 
   const chartConfig = {
     calories: {
@@ -152,14 +179,14 @@ export default function DashboardPage() {
                   </TabsList>
                 </Tabs>
                 
-                {activeTab === 'daily' && (
-                  <div className="flex items-center gap-2">
+                {activeTab === 'daily' ? (
+                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button 
                           variant="outline" 
                           className={cn(
-                            "justify-start text-left font-normal border-primary/20 hover:bg-secondary",
+                            "justify-start text-left font-normal border-primary/20 hover:bg-secondary min-w-[200px]",
                             !selectedDate && "text-muted-foreground"
                           )}
                         >
@@ -196,6 +223,57 @@ export default function DashboardPage() {
                       </Button>
                     </div>
                   </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                    <div className="flex items-center gap-2 bg-secondary/30 p-1 rounded-lg border border-primary/10">
+                      <div className="flex items-center gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-primary" 
+                          onClick={() => {
+                            setWeeklyPivotDate(subDays(weeklyPivotDate, 7));
+                            setCustomRange(undefined);
+                          }}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="text-xs font-bold text-primary/80 px-2 min-w-[160px] text-center">
+                          {format(activeWeeklyRange.from, 'MMM d')} - {format(activeWeeklyRange.to, 'MMM d, yyyy')}
+                        </span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-primary" 
+                          onClick={() => {
+                            setWeeklyPivotDate(addDays(weeklyPivotDate, 7));
+                            setCustomRange(undefined);
+                          }}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="border-primary/20 hover:bg-secondary gap-2">
+                          <Filter className="h-3.5 w-3.5" />
+                          Custom Range
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                          initialFocus
+                          mode="range"
+                          defaultMonth={activeWeeklyRange.from}
+                          selected={customRange}
+                          onSelect={setCustomRange}
+                          numberOfMonths={2}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 )}
               </div>
             </div>
@@ -208,7 +286,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest">
-                  {activeTab === 'daily' ? 'Intake' : 'Weekly Avg'}
+                  {activeTab === 'daily' ? 'Intake' : 'Range Avg'}
                 </p>
                 <p className="text-2xl font-bold">
                   {activeTab === 'daily' ? totalCaloriesForDay : weeklyAvgCalories} 
@@ -227,7 +305,7 @@ export default function DashboardPage() {
                   <MealCategoryCard 
                     key={cat} 
                     category={cat} 
-                    totalCalories={getCategoryTotal(cat)}
+                    totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + log.totalNutrients.calories, 0)}
                     onAddClick={() => setActiveAnalysis(cat)} 
                   />
                 ))}
@@ -345,13 +423,13 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-accent/10 border-accent/20">
+              <Card className="bg-secondary/20 border-secondary/20">
                 <CardHeader className="pb-2">
-                  <CardTitle className="font-headline text-lg flex items-center gap-2 text-accent-foreground">
+                  <CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground">
                     <Info className="h-4 w-4" /> Insight
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm text-accent-foreground/90 font-body leading-relaxed">
+                <CardContent className="text-sm text-secondary-foreground/90 font-body leading-relaxed">
                   {filteredLogs.length === 0 
                     ? "Initialize your daily log to unlock personalized wellness analytics."
                     : "Metabolic tracking active. You have achieved " + Math.round((totalProtein / 150) * 100) + "% of your daily protein target."
@@ -361,7 +439,6 @@ export default function DashboardPage() {
             </aside>
           </div>
         ) : (
-          /* Weekly Summary View */
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
             <div className="lg:col-span-2 space-y-6">
               <Card className="border-primary/10 shadow-sm bg-card">
@@ -369,12 +446,12 @@ export default function DashboardPage() {
                   <CardTitle className="font-headline text-2xl flex items-center gap-2 text-primary">
                     <BarChart3 className="h-5 w-5" /> Calorie Trends
                   </CardTitle>
-                  <CardDescription>Daily intake for the last 7 days</CardDescription>
+                  <CardDescription>Daily intake for the selected window</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6">
                   <ChartContainer config={chartConfig} className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={MOCK_WEEKLY_DATA}>
+                      <BarChart data={dynamicWeeklyData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted-foreground))" opacity={0.1} />
                         <XAxis 
                           dataKey="day" 
@@ -393,7 +470,7 @@ export default function DashboardPage() {
                           radius={[4, 4, 0, 0]} 
                           maxBarSize={40}
                         >
-                          {MOCK_WEEKLY_DATA.map((entry, index) => (
+                          {dynamicWeeklyData.map((entry, index) => (
                             <Cell 
                               key={`cell-${index}`} 
                               fill={entry.calories > 2000 ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.7)'} 
@@ -422,7 +499,7 @@ export default function DashboardPage() {
                     <div className="flex justify-center mb-2">
                       <BarChart3 className="h-6 w-6 text-primary" />
                     </div>
-                    <p className="text-2xl font-bold text-primary">{Math.max(...MOCK_WEEKLY_DATA.map(d => d.calories))}</p>
+                    <p className="text-2xl font-bold text-primary">{Math.max(...dynamicWeeklyData.map(d => d.calories))}</p>
                     <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Peak Day Kcal</p>
                   </CardContent>
                 </Card>
@@ -431,8 +508,8 @@ export default function DashboardPage() {
                     <div className="flex justify-center mb-2">
                       <History className="h-6 w-6 text-primary" />
                     </div>
-                    <p className="text-2xl font-bold text-primary">7 / 7</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Days Logged</p>
+                    <p className="text-2xl font-bold text-primary">{dynamicWeeklyData.length} / {dynamicWeeklyData.length}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Days Tracked</p>
                   </CardContent>
                 </Card>
               </div>
@@ -441,57 +518,57 @@ export default function DashboardPage() {
             <aside className="space-y-6">
               <Card className="border-primary/10 shadow-sm bg-card">
                 <CardHeader>
-                  <CardTitle className="font-headline text-xl text-primary">Weekly Biometrics</CardTitle>
-                  <CardDescription>7-day accumulated macros</CardDescription>
+                  <CardTitle className="font-headline text-xl text-primary">Biometric Progress</CardTitle>
+                  <CardDescription>Accumulated macros for this period</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
                       <span>Protein</span>
-                      <span className="text-secondary-foreground">{weeklyTotalProtein}g / 1050g</span>
+                      <span className="text-secondary-foreground">{weeklyTotalProtein}g / {150 * dynamicWeeklyData.length}g</span>
                     </div>
                     <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-secondary-foreground/70 transition-all duration-500" 
-                        style={{ width: `${Math.min((weeklyTotalProtein / 1050) * 100, 100)}%` }} 
+                        className="h-full bg-secondary-foreground transition-all duration-500" 
+                        style={{ width: `${Math.min((weeklyTotalProtein / (150 * dynamicWeeklyData.length)) * 100, 100)}%` }} 
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
                       <span>Carbs</span>
-                      <span className="text-secondary-foreground">{weeklyTotalCarbs}g / 1540g</span>
+                      <span className="text-secondary-foreground">{weeklyTotalCarbs}g / {220 * dynamicWeeklyData.length}g</span>
                     </div>
                     <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-secondary-foreground/70 transition-all duration-500" 
-                        style={{ width: `${Math.min((weeklyTotalCarbs / 1540) * 100, 100)}%` }} 
+                        className="h-full bg-secondary-foreground transition-all duration-500" 
+                        style={{ width: `${Math.min((weeklyTotalCarbs / (220 * dynamicWeeklyData.length)) * 100, 100)}%` }} 
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
                       <span>Fats</span>
-                      <span className="text-secondary-foreground">{weeklyTotalFats}g / 455g</span>
+                      <span className="text-secondary-foreground">{weeklyTotalFats}g / {65 * dynamicWeeklyData.length}g</span>
                     </div>
                     <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-secondary-foreground/70 transition-all duration-500" 
-                        style={{ width: `${Math.min((weeklyTotalFats / 455) * 100, 100)}%` }} 
+                        className="h-full bg-secondary-foreground transition-all duration-500" 
+                        style={{ width: `${Math.min((weeklyTotalFats / (65 * dynamicWeeklyData.length)) * 100, 100)}%` }} 
                       />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-secondary/20 border-secondary/40">
+              <Card className="bg-secondary/20 border-secondary/20">
                 <CardHeader className="pb-2">
                   <CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground">
-                    <BrainCircuit className="h-4 w-4" /> Weekly Insight
+                    <BrainCircuit className="h-4 w-4" /> Period Insight
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-secondary-foreground/90 font-body leading-relaxed">
-                  Consistent tracking! Your highest protein intake was on Tuesday. You are on track to meet your weekly metabolic goals, maintaining a healthy caloric average of {weeklyAvgCalories} kcal.
+                  Historical tracking active! Based on the selected range from {format(activeWeeklyRange.from, 'MMM d')} to {format(activeWeeklyRange.to, 'MMM d')}, you are maintaining a consistent metabolic rate. Your average caloric intake is {weeklyAvgCalories} kcal/day.
                 </CardContent>
               </Card>
             </aside>
