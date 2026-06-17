@@ -63,7 +63,7 @@ import {
   Edit2,
   Check
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid, parseISO } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid, parseISO, differenceInDays, startOfDay, endOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
@@ -103,10 +103,7 @@ export default function DashboardPage() {
   const [editingGrams, setEditingGrams] = useState<{ logId: string, itemId: string, value: string } | null>(null);
 
   const [weeklyPivotDate, setWeeklyPivotDate] = useState<Date>(new Date());
-  const [customRange, setCustomRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 6),
-    to: new Date(),
-  });
+  const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
 
   useEffect(() => {
     setIsMounted(true);
@@ -327,9 +324,9 @@ export default function DashboardPage() {
 
   const activeWeeklyRange = useMemo(() => {
     if (customRange?.from && customRange?.to) {
-      return { from: customRange.from, to: customRange.to };
+      return { from: startOfDay(customRange.from), to: endOfDay(customRange.to) };
     }
-    return { from: subDays(weeklyPivotDate, 6), to: weeklyPivotDate };
+    return { from: startOfDay(subDays(weeklyPivotDate, 6)), to: endOfDay(weeklyPivotDate) };
   }, [weeklyPivotDate, customRange]);
 
   const dynamicWeeklyData = useMemo(() => {
@@ -337,7 +334,8 @@ export default function DashboardPage() {
     return days.map(date => {
       const dayLogs = logs.filter(log => {
         try {
-          return isSameDay(parseISO(log.timestamp), date);
+          const logDate = typeof log.timestamp === 'string' ? parseISO(log.timestamp) : new Date(log.timestamp);
+          return isSameDay(logDate, date);
         } catch (e) {
           return false;
         }
@@ -376,11 +374,10 @@ export default function DashboardPage() {
   const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
 
   const weeklyAvgCalories = useMemo(() => {
-    const trackedDays = dynamicWeeklyData.filter(d => d.calories > 0).length;
-    if (trackedDays === 0) return 0;
+    const totalDaysInRange = differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1;
     const totalCalsInRange = dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0);
-    return Math.round(totalCalsInRange / trackedDays);
-  }, [dynamicWeeklyData]);
+    return Math.round(totalCalsInRange / totalDaysInRange);
+  }, [dynamicWeeklyData, activeWeeklyRange]);
 
   if (!isMounted) return null;
 
@@ -420,10 +417,34 @@ export default function DashboardPage() {
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="glass-card flex items-center gap-2 p-1 rounded-xl border-white/60">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeeklyPivotDate(subDays(weeklyPivotDate, 7))}><ChevronLeft className="h-4 w-4" /></Button>
-                      <span className="text-xs font-bold px-2 min-w-[140px] text-center">{format(activeWeeklyRange.from, 'MMM d')} - {format(activeWeeklyRange.to, 'MMM d')}</span>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeeklyPivotDate(addDays(weeklyPivotDate, 7))}><ChevronRight className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                        setCustomRange(undefined);
+                        setWeeklyPivotDate(subDays(weeklyPivotDate, 7));
+                      }}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className="text-xs font-bold px-2 min-w-[140px] text-center hover:text-primary transition-colors">
+                            {format(activeWeeklyRange.from, 'MMM d')} - {format(activeWeeklyRange.to, 'MMM d')}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 rounded-2xl border-none shadow-2xl" align="center">
+                          <Calendar 
+                            mode="range" 
+                            selected={customRange} 
+                            onSelect={setCustomRange} 
+                            initialFocus 
+                            numberOfMonths={2}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                        setCustomRange(undefined);
+                        setWeeklyPivotDate(addDays(weeklyPivotDate, 7));
+                      }}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
+                    {customRange && (
+                      <Button variant="ghost" size="sm" onClick={() => setCustomRange(undefined)} className="text-[10px] font-bold uppercase tracking-widest h-8 px-3 rounded-lg bg-white/40 dark:bg-black/40 border border-white/60">Reset Range</Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -509,9 +530,21 @@ export default function DashboardPage() {
                                       <span className="text-[10px] ml-1 text-muted-foreground font-bold uppercase">kcal</span>
                                     </div>
                                     <AlertDialog>
-                                      <AlertDialogAction onClick={() => handleDeleteLog(log.id)} className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
-                                        <Trash2 className="h-4 w-4" />
-                                      </AlertDialogAction>
+                                      <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent className="glass-card border-none rounded-3xl">
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Delete Log?</AlertDialogTitle>
+                                          <AlertDialogDescription>This will permanently remove this meal entry from your local history.</AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleDeleteLog(log.id)} className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
                                     </AlertDialog>
                                   </div>
                                 </div>
@@ -713,9 +746,9 @@ export default function DashboardPage() {
                 <CardHeader><CardTitle className="text-xl font-bold text-foreground">Range Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * (dynamicWeeklyData.filter(d => d.calories > 0).length || 1) }, 
-                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * (dynamicWeeklyData.filter(d => d.calories > 0).length || 1) }, 
-                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * (dynamicWeeklyData.filter(d => d.calories > 0).length || 1) }
+                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
+                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
+                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
                   ].map(m => {
                     const percentage = Math.min((m.val / m.max) * 100, 100);
                     return (
