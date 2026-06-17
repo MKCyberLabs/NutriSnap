@@ -49,7 +49,8 @@ import {
   Flame,
   Filter,
   Trash2,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -240,20 +241,22 @@ export default function DashboardPage() {
     return generateMockDataForRange(activeWeeklyRange.from, activeWeeklyRange.to);
   }, [activeWeeklyRange]);
 
-  // Robust summation logic with numeric parsing
-  const getDailyTotals = () => {
-    let totalCals = 0, totalP = 0, totalC = 0, totalF = 0, totalS = 0;
+  // Reactive aggregate totals for the Daily view
+  const dailyTotals = useMemo(() => {
+    let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
     filteredLogs.forEach(log => {
-      totalCals += Number(log.totalNutrients.calories || 0);
-      totalP += Number(log.totalNutrients.protein || 0);
-      totalC += Number(log.totalNutrients.carbs || 0);
-      totalF += Number(log.totalNutrients.fat || 0);
-      totalS += Number(log.totalNutrients.sugar || 0);
+      log.items.forEach(item => {
+        protein += Number(item.protein || 0);
+        carbs += Number(item.carbs || 0);
+        fat += Number(item.fat || 0);
+        sugar += Number(item.sugar || 0);
+        calories += Number(item.calories || 0);
+      });
     });
-    return { totalCals, totalP, totalC, totalF, totalS };
-  };
+    return { protein, carbs, fat, sugar, calories };
+  }, [filteredLogs]);
 
-  const { totalCals, totalP, totalC, totalF, totalS } = getDailyTotals();
+  const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
 
   const weeklyAvgCalories = Math.round(dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0) / dynamicWeeklyData.length);
   const weeklyTotalProtein = dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0);
@@ -444,24 +447,48 @@ export default function DashboardPage() {
 
             <aside className="space-y-6">
               <Card className="border-primary/10 shadow-sm bg-card">
-                <CardHeader><CardTitle className="font-headline text-xl text-primary">Biometric Targets</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="font-headline text-xl text-primary">Biometric Targets</CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
                     { label: 'Protein', val: Number(totalP || 0), max: 150 }, 
                     { label: 'Carbs', val: Number(totalC || 0), max: 220 }, 
                     { label: 'Fats', val: Number(totalF || 0), max: 65 },
-                    { label: 'Sugar', val: Number(totalS || 0), max: 50 }
-                  ].map(m => (
-                    <div key={m.label} className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
-                        <span>{m.label}</span>
-                        <span className="text-primary">{m.val.toFixed(1)}g / {m.max}g</span>
+                    { label: 'Sugar', val: Number(totalS || 0), max: 50, isLimit: true }
+                  ].map(m => {
+                    const isOver = m.val > m.max;
+                    const percentage = Math.min((m.val / m.max) * 100, 100);
+                    const overage = isOver ? m.val - m.max : 0;
+
+                    return (
+                      <div key={m.label} className="space-y-2">
+                        <div className="flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span>{m.label}</span>
+                            {m.isLimit && isOver && (
+                              <Badge variant="destructive" className="h-4 text-[8px] px-1 bg-primary text-primary-foreground animate-pulse">
+                                <AlertCircle className="h-2.5 w-2.5 mr-0.5" /> Limit Exceeded
+                              </Badge>
+                            )}
+                          </div>
+                          <span className={cn("text-primary", isOver && !m.isLimit && "text-emerald-600 dark:text-emerald-400")}>
+                            {m.val.toFixed(1)}g / {m.max}g
+                            {isOver && !m.isLimit && <span className="ml-1 text-[8px]">(+{overage.toFixed(1)}g)</span>}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full transition-all duration-500 ease-out",
+                              m.isLimit && isOver ? "bg-primary" : "bg-primary"
+                            )} 
+                            style={{ width: `${percentage}%` }} 
+                          />
+                        </div>
                       </div>
-                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                        <div className="h-full bg-primary" style={{ width: `${Math.min((m.val / m.max) * 100, 100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </CardContent>
               </Card>
               <Card className="bg-secondary/20 border-secondary/20"><CardHeader className="pb-2"><CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground"><Info className="h-4 w-4" /> Insight</CardTitle></CardHeader>
@@ -507,13 +534,37 @@ export default function DashboardPage() {
                     { label: 'Protein', val: Number(weeklyTotalProtein || 0), max: 150 }, 
                     { label: 'Carbs', val: Number(weeklyTotalCarbs || 0), max: 220 }, 
                     { label: 'Fats', val: Number(weeklyTotalFats || 0), max: 65 },
-                    { label: 'Sugar', val: Number(weeklyTotalSugar || 0), max: 50 }
-                  ].map(m => (
-                    <div key={m.label} className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground"><span>{m.label}</span><span className="text-secondary-foreground">{m.val.toFixed(1)}g / {(m.max * dynamicWeeklyData.length).toFixed(1)}g</span></div>
-                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden"><div className="h-full bg-secondary-foreground" style={{ width: `${Math.min((m.val / (m.max * dynamicWeeklyData.length)) * 100, 100)}%` }} /></div>
-                    </div>
-                  ))}
+                    { label: 'Sugar', val: Number(weeklyTotalSugar || 0), max: 50, isLimit: true }
+                  ].map(m => {
+                    const totalMax = m.max * dynamicWeeklyData.length;
+                    const isOver = m.val > totalMax;
+                    const percentage = Math.min((m.val / totalMax) * 100, 100);
+
+                    return (
+                      <div key={m.label} className="space-y-2">
+                        <div className="flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span>{m.label}</span>
+                            {m.isLimit && isOver && (
+                              <Badge variant="destructive" className="h-4 text-[8px] px-1 bg-primary text-primary-foreground">
+                                Limit Over
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-secondary-foreground">{m.val.toFixed(1)}g / {totalMax.toFixed(1)}g</span>
+                        </div>
+                        <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full transition-all duration-500 ease-out",
+                              m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground"
+                            )} 
+                            style={{ width: `${percentage}%` }} 
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </CardContent>
               </Card>
               <Card className="bg-secondary/20 border-secondary/20"><CardHeader className="pb-2"><CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground"><BrainCircuit className="h-4 w-4" /> Period Insight</CardTitle></CardHeader>
