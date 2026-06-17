@@ -110,13 +110,14 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         }),
       });
 
+      const resultData = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'API Analysis Failed');
+        // Surface specific error details if provided by the backend
+        throw new Error(resultData.details || resultData.error || 'Health Matrix Analysis Failed');
       }
 
-      const result: MealNutritionalAnalysisOutput = await res.json();
-      onAnalysisComplete(result, mealTime, uploadedPath);
+      onAnalysisComplete(resultData, mealTime, uploadedPath);
     } catch (error: any) {
       console.error("Health Matrix API Error:", error);
       toast({

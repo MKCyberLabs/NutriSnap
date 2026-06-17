@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       stack: error.stack,
     });
 
+    // Surface the actual error message to the frontend for better debugging (e.g., "API Key not found")
     return NextResponse.json(
       { 
         error: 'Health Matrix Analysis Failed', 

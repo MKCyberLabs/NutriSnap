@@ -72,11 +72,17 @@ const mealPrompt = ai.definePrompt({
       { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
       { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
       { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' },
     ],
   },
-  prompt: `You are an expert nutritional analyst specializing in visual and textual food analysis. 
+  system: `You are an expert nutritional analyst specializing in visual and textual food analysis. 
 
-Analyze the provided meal information. Calculate the macro-nutrients as accurately as possible based on standard portion sizes.
+Requirements:
+1. Break the meal down into individual food items in the 'foodItems' array.
+2. The root level macros (calories, protein, carbs, fat, sugar, fiber, saturatedFat) must be the EXACT sum of the individual items.
+3. Provide a concise, professional, and encouraging nutritional insight.
+4. Output your analysis ONLY as a raw, valid JSON object. Do not include markdown formatting or backticks.`,
+  prompt: `Analyze the following meal information. Calculate the macro-nutrients as accurately as possible based on standard portion sizes.
 
 {{#if mealDescription}}
 User Description: {{{mealDescription}}}
@@ -84,13 +90,7 @@ User Description: {{{mealDescription}}}
 
 {{#if mealPhotoDataUri}}
 Visual Evidence: {{media url=mealPhotoDataUri}}
-{{/if}}
-
-Requirements:
-1. Break the meal down into individual food items in the 'foodItems' array.
-2. The root level macros (calories, protein, carbs, fat, sugar, fiber, saturatedFat) must be the EXACT sum of the individual items.
-3. Provide a concise, professional, and encouraging nutritional insight.
-4. Output your analysis ONLY as a raw, valid JSON object.`,
+{{/if}}`,
 });
 
 export async function mealNutritionalAnalysis(
@@ -121,7 +121,7 @@ export async function mealNutritionalAnalysis(
     const { output } = await mealPrompt(finalInput);
     
     if (!output) {
-      throw new Error('AI analysis produced an empty response.');
+      throw new Error('AI analysis produced an empty response. Check if your GEMINI_API_KEY is valid and not restricted.');
     }
 
     return output;
