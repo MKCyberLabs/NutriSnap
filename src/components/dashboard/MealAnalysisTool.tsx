@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Camera, FileText, Loader2, Sparkles, Clock, X } from 'lucide-react';
+import { Camera, FileText, Loader2, Sparkles, Clock, X, Trash2 } from 'lucide-react';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { MealCategory } from '@/lib/types';
@@ -25,7 +25,7 @@ interface MealAnalysisToolProps {
 
 export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: MealAnalysisToolProps) {
   const [description, setDescription] = useState('');
-  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
@@ -35,6 +35,15 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
   const [minutes, setMinutes] = useState(() => format(new Date(), 'mm'));
   const [period, setPeriod] = useState(() => format(new Date(), 'a'));
   const [mealTime, setMealTime] = useState(() => format(new Date(), 'HH:mm'));
+
+  // Cleanup object URL to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   useEffect(() => {
     const timeString = `${hour12}:${minutes} ${period}`;
@@ -49,12 +58,15 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewUri(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      const objectUrl = URL.createObjectURL(file);
+      setPreviewUrl(objectUrl);
     }
+  };
+
+  const clearSelection = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setSelectedFile(null);
   };
 
   const handleAnalyze = async () => {
@@ -70,9 +82,18 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
     setIsAnalyzing(true);
     try {
       let uploadedPath: string | undefined;
+      let photoDataUri: string | undefined;
 
-      // 1. Upload the image if present
+      // 1. Prepare photo for AI (convert to Data URI) and Upload to storage
       if (selectedFile) {
+        // Prepare Data URI for Genkit
+        photoDataUri = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(selectedFile);
+        });
+
+        // Upload to local /public/uploads/ folder
         const formData = new FormData();
         formData.append('file', selectedFile);
         const uploadRes = await fetch('/api/upload', {
@@ -90,7 +111,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
       // 2. Perform AI analysis
       const result = await mealNutritionalAnalysis({
         mealDescription: description,
-        mealPhotoDataUri: previewUri || undefined,
+        mealPhotoDataUri: photoDataUri,
         mealTime: mealTime,
       });
 
@@ -189,22 +210,15 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-4">
-          {previewUri ? (
-            <div className="relative w-full aspect-video rounded-2xl overflow-hidden border-2 border-primary/10 group shadow-inner bg-muted">
-              <img src={previewUri} alt="Meal preview" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button variant="secondary" size="sm" onClick={() => { setPreviewUri(null); setSelectedFile(null); }} className="rounded-full">
-                  Change Photo
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="w-full">
-              <label 
-                htmlFor="photo-upload" 
-                className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-primary/20 rounded-2xl cursor-pointer hover:bg-primary/5 hover:border-primary/40 transition-all group"
-              >
+        <div className="w-full">
+          <div className="relative group">
+            <label 
+              htmlFor="photo-upload" 
+              className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-primary/20 rounded-2xl cursor-pointer hover:bg-primary/5 hover:border-primary/40 transition-all overflow-hidden ${previewUrl ? 'border-primary/40 bg-primary/5' : ''}`}
+            >
+              {previewUrl ? (
+                <img src={previewUrl} alt="Meal preview" className="w-full h-full object-cover" />
+              ) : (
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <div className="p-4 rounded-full bg-primary/5 group-hover:bg-primary/10 transition-colors mb-3">
                     <Camera className="w-8 h-8 text-primary" />
@@ -212,10 +226,24 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                   <p className="text-sm font-medium text-foreground/70">Upload meal photo</p>
                   <p className="text-xs text-muted-foreground mt-1">PNG, JPG up to 10MB</p>
                 </div>
-                <input id="photo-upload" type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
-              </label>
-            </div>
-          )}
+              )}
+              <input id="photo-upload" type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+            </label>
+
+            {previewUrl && (
+              <Button 
+                variant="destructive" 
+                size="icon" 
+                className="absolute top-2 right-2 h-8 w-8 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.preventDefault();
+                  clearSelection();
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
