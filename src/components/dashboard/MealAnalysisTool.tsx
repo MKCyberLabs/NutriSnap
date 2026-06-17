@@ -82,18 +82,9 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
     setIsAnalyzing(true);
     try {
       let uploadedPath: string | undefined;
-      let photoDataUri: string | undefined;
 
-      // 1. Prepare photo for AI (convert to Data URI) and Upload to storage
+      // 1. Upload photo to local storage first (Disk IO optimization)
       if (selectedFile) {
-        // Prepare Data URI for Genkit
-        photoDataUri = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(selectedFile);
-        });
-
-        // Upload to local /public/uploads/ folder
         const formData = new FormData();
         formData.append('file', selectedFile);
         const uploadRes = await fetch('/api/upload', {
@@ -108,10 +99,10 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         }
       }
 
-      // 2. Perform AI analysis
+      // 2. Perform AI analysis sending only the path (lightweight payload)
       const result = await mealNutritionalAnalysis({
         mealDescription: description,
-        mealPhotoDataUri: photoDataUri,
+        imagePath: uploadedPath,
         mealTime: mealTime,
       });
 

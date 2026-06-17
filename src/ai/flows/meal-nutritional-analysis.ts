@@ -9,17 +9,23 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import fs from 'fs';
+import path from 'path';
 
 const MealNutritionalAnalysisInputSchema = z.object({
   mealDescription: z
     .string()
     .optional()
     .describe('A text description of the meal.'),
+  imagePath: z
+    .string()
+    .optional()
+    .describe('The path to the meal photo stored in the public/uploads volume.'),
   mealPhotoDataUri: z
     .string()
     .optional()
     .describe(
-      "A photo of a meal, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A photo of a meal, as a data URI. This is populated internally if imagePath is provided."
     ),
   mealTime: z
     .string()
@@ -80,7 +86,27 @@ Return ONLY the JSON object.`,
 export async function mealNutritionalAnalysis(
   input: MealNutritionalAnalysisInput
 ): Promise<MealNutritionalAnalysisOutput> {
-  const { output } = await mealPrompt(input);
+  const finalInput = { ...input };
+
+  // If a local image path is provided, read it from disk to avoid sending Base64 over network
+  if (input.imagePath && !input.mealPhotoDataUri) {
+    try {
+      // Resolve path relative to public directory
+      const cleanPath = input.imagePath.startsWith('/') ? input.imagePath.substring(1) : input.imagePath;
+      const fullFilePath = path.join(process.cwd(), 'public', cleanPath);
+      
+      if (fs.existsSync(fullFilePath)) {
+        const imageBuffer = fs.readFileSync(fullFilePath);
+        const ext = path.extname(fullFilePath).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+        finalInput.mealPhotoDataUri = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
+      }
+    } catch (error) {
+      console.error("Health Matrix: Failed to read local image:", error);
+    }
+  }
+
+  const { output } = await mealPrompt(finalInput);
   
   if (!output) {
     throw new Error('AI failed to generate nutritional analysis.');
