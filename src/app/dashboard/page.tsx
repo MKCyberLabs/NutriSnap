@@ -48,7 +48,8 @@ import {
   BarChart3,
   Flame,
   Filter,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -151,9 +152,9 @@ export default function DashboardPage() {
           protein: Number((item.protein * ratio).toFixed(1)),
           carbs: Number((item.carbs * ratio).toFixed(1)),
           fat: Number((item.fat * ratio).toFixed(1)),
-          fiber: Number((item.fiber * ratio).toFixed(1)),
-          saturatedFat: Number((item.saturatedFat * ratio).toFixed(1)),
-          sugar: Number((item.sugar * ratio).toFixed(1)),
+          fiber: Number(((item.fiber || 0) * ratio).toFixed(1)),
+          saturatedFat: Number(((item.saturatedFat || 0) * ratio).toFixed(1)),
+          sugar: Number(((item.sugar || 0) * ratio).toFixed(1)),
         };
       });
 
@@ -181,6 +182,39 @@ export default function DashboardPage() {
     });
 
     saveLogsToStorage(updatedLogs);
+  };
+
+  const handleDeleteItem = (logId: string, itemId: string) => {
+    const updatedLogs = logs.map(log => {
+      if (log.id !== logId) return log;
+
+      const updatedItems = log.items.filter(item => item.id !== itemId);
+      
+      const totalCalories = updatedItems.reduce((sum, i) => sum + i.calories, 0);
+      const totalProtein = updatedItems.reduce((sum, i) => sum + i.protein, 0);
+      const totalCarbs = updatedItems.reduce((sum, i) => sum + i.carbs, 0);
+      const totalFat = updatedItems.reduce((sum, i) => sum + i.fat, 0);
+      const totalFiber = updatedItems.reduce((sum, i) => sum + (i.fiber || 0), 0);
+      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (i.saturatedFat || 0), 0);
+      const totalSugar = updatedItems.reduce((sum, i) => sum + (i.sugar || 0), 0);
+
+      return {
+        ...log,
+        items: updatedItems,
+        totalNutrients: {
+          calories: totalCalories,
+          protein: Number(totalProtein.toFixed(1)),
+          carbs: Number(totalCarbs.toFixed(1)),
+          fat: Number(totalFat.toFixed(1)),
+          fiber: Number(totalFiber.toFixed(1)),
+          saturatedFat: Number(totalSaturatedFat.toFixed(1)),
+          sugar: Number(totalSugar.toFixed(1)),
+        }
+      };
+    });
+
+    saveLogsToStorage(updatedLogs);
+    toast({ title: "Item Removed", description: "Food item has been removed from the log." });
   };
 
   const handleDeleteLog = (logId: string) => {
@@ -347,11 +381,22 @@ export default function DashboardPage() {
                                           <span className="text-[10px] font-bold text-muted-foreground">g</span>
                                         </div>
                                       </div>
-                                      <div className="flex flex-wrap gap-1.5">
-                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">{item.calories} kcal</Badge>
-                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">P: {item.protein}g</Badge>
-                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">C: {item.carbs}g</Badge>
-                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">F: {item.fat}g</Badge>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap gap-1.5">
+                                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">{item.calories} kcal</Badge>
+                                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">P: {item.protein}g</Badge>
+                                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">C: {item.carbs}g</Badge>
+                                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold">F: {item.fat}g</Badge>
+                                        </div>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-5 w-5 text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"
+                                          onClick={() => handleDeleteItem(log.id, item.id)}
+                                          title="Remove item"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
                                       </div>
                                     </div>
                                     
