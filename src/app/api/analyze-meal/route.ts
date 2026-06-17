@@ -28,9 +28,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Health Matrix API Error:', error);
+    // Log the specific error to the server console for debugging
+    console.error('Health Matrix API Logic Failure:', {
+      message: error.message,
+      stack: error.stack,
+    });
+
     return NextResponse.json(
-      { error: 'Internal AI Logic Failure', details: error.message },
+      { 
+        error: 'Health Matrix Analysis Failed', 
+        details: error.message || 'An unexpected error occurred during AI processing.' 
+      },
       { status: 500 }
     );
   }

@@ -65,22 +65,32 @@ const mealPrompt = ai.definePrompt({
   name: 'mealNutritionalAnalysisPrompt',
   input: { schema: MealNutritionalAnalysisInputSchema },
   output: { schema: MealNutritionalAnalysisOutputSchema },
-  prompt: `You are an expert nutritional analyst. 
-Analyze the following meal information and/or image. 
+  config: {
+    // Relax safety filters to prevent blocking food image analysis
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+    ],
+  },
+  prompt: `You are an expert nutritional analyst specializing in visual and textual food analysis. 
+
+Analyze the provided meal information. Calculate the macro-nutrients as accurately as possible based on standard portion sizes.
 
 {{#if mealDescription}}
-Description: {{{mealDescription}}}
+User Description: {{{mealDescription}}}
 {{/if}}
 
 {{#if mealPhotoDataUri}}
-Photo: {{media url=mealPhotoDataUri}}
+Visual Evidence: {{media url=mealPhotoDataUri}}
 {{/if}}
 
-You must calculate the macro-nutrients as accurately as possible based on standard portion sizes.
-Break the meal down into individual food items in the 'foodItems' array.
-The total macros (calories, protein, carbs, fat, sugar, fiber, saturatedFat) must equal the sum of the individual items.
-Provide a concise, encouraging nutritional insight in 'healthInsight'.
-Return ONLY the JSON object.`,
+Requirements:
+1. Break the meal down into individual food items in the 'foodItems' array.
+2. The root level macros (calories, protein, carbs, fat, sugar, fiber, saturatedFat) must be the EXACT sum of the individual items.
+3. Provide a concise, professional, and encouraging nutritional insight.
+4. Output your analysis ONLY as a raw, valid JSON object.`,
 });
 
 export async function mealNutritionalAnalysis(
@@ -88,10 +98,9 @@ export async function mealNutritionalAnalysis(
 ): Promise<MealNutritionalAnalysisOutput> {
   const finalInput = { ...input };
 
-  // If a local image path is provided, read it from disk to avoid sending Base64 over network
+  // If a local image path is provided, read it from disk
   if (input.imagePath && !input.mealPhotoDataUri) {
     try {
-      // Resolve path relative to public directory
       const cleanPath = input.imagePath.startsWith('/') ? input.imagePath.substring(1) : input.imagePath;
       const fullFilePath = path.join(process.cwd(), 'public', cleanPath);
       
@@ -100,17 +109,24 @@ export async function mealNutritionalAnalysis(
         const ext = path.extname(fullFilePath).toLowerCase();
         const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
         finalInput.mealPhotoDataUri = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
+      } else {
+        console.warn(`Health Matrix: Local image not found at ${fullFilePath}`);
       }
-    } catch (error) {
-      console.error("Health Matrix: Failed to read local image:", error);
+    } catch (error: any) {
+      console.error("Health Matrix: Failed to read local image:", error.message);
     }
   }
 
-  const { output } = await mealPrompt(finalInput);
-  
-  if (!output) {
-    throw new Error('AI failed to generate nutritional analysis.');
-  }
+  try {
+    const { output } = await mealPrompt(finalInput);
+    
+    if (!output) {
+      throw new Error('AI analysis produced an empty response.');
+    }
 
-  return output;
+    return output;
+  } catch (error: any) {
+    console.error("Health Matrix: AI Prompt Failure:", error.message);
+    throw new Error(`AI Analysis Error: ${error.message}`);
+  }
 }
