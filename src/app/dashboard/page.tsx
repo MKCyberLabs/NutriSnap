@@ -89,19 +89,16 @@ function generateMockDataForRange(from: Date, to: Date) {
 }
 
 function calculateNutrientTargets(metrics?: UserMetrics) {
-  // Default values if metrics are missing
   if (!metrics || !metrics.age || !metrics.height || !metrics.weight) {
     return { protein: 150, carbs: 220, fat: 65, sugar: 35, calories: 2000 };
   }
 
   const { weight, height, age, gender } = metrics;
   
-  // Mifflin-St Jeor Equation
   const bmr = gender === 'male'
     ? (10 * weight) + (6.25 * height) - (5 * age) + 5
     : (10 * weight) + (6.25 * height) - (5 * age) - 161;
 
-  // Sedentary activity multiplier
   const tdee = bmr * 1.2;
 
   return {
@@ -109,13 +106,21 @@ function calculateNutrientTargets(metrics?: UserMetrics) {
     protein: Math.round((tdee * 0.30) / 4),
     carbs: Math.round((tdee * 0.40) / 4),
     fat: Math.round((tdee * 0.30) / 9),
-    sugar: 35 // Strict health-conscious cap
+    sugar: 35
   };
 }
 
+/**
+ * Resilient image component to handle local paths and prevent noisy 404s
+ */
 function MealImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
   const [error, setError] = useState(false);
-  if (error) return null;
+  
+  // Basic validation: must start with /, http, or data:
+  const isValidSrc = src && (src.startsWith('/') || src.startsWith('http') || src.startsWith('data:'));
+
+  if (error || !isValidSrc) return null;
+
   return (
     <img 
       src={src} 
@@ -155,7 +160,15 @@ export default function DashboardPage() {
     const savedLogs = localStorage.getItem('nutrisnap_logs');
     if (savedLogs) {
       try {
-        setLogs(JSON.parse(savedLogs));
+        const parsed = JSON.parse(savedLogs);
+        // Data Sanitizer: Clean up corrupted image paths from previous dev sessions
+        const cleanedLogs = parsed.map((log: any) => {
+          if (log.imagePath && !log.imagePath.startsWith('/') && !log.imagePath.startsWith('http') && !log.imagePath.startsWith('data:')) {
+            return { ...log, imagePath: undefined };
+          }
+          return log;
+        });
+        setLogs(cleanedLogs);
       } catch (e) {
         setLogs([]);
       }
@@ -171,7 +184,7 @@ export default function DashboardPage() {
 
   const handleMealCardComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const logTimestamp = new Date(selectedDate);
-    if (mealTime) {
+    if (mealTime && typeof mealTime === 'string' && mealTime.includes(':')) {
       const [hours, minutes] = mealTime.split(':').map(Number);
       if (!isNaN(hours) && !isNaN(minutes)) {
         logTimestamp.setHours(hours, minutes, 0, 0);
@@ -179,6 +192,9 @@ export default function DashboardPage() {
     }
 
     const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
+    
+    // Final check for imagePath sanity
+    const validImagePath = imagePath && (imagePath.startsWith('/') || imagePath.startsWith('http') || imagePath.startsWith('data:')) ? imagePath : undefined;
 
     const newLog: MealLog = {
       id: Math.random().toString(36).substr(2, 9),
@@ -198,7 +214,7 @@ export default function DashboardPage() {
         sugar: Number(data.sugar || 0),
       },
       healthInsight: data.healthInsight,
-      imagePath: imagePath
+      imagePath: validImagePath
     };
 
     saveLogsToStorage([newLog, ...logs]);
