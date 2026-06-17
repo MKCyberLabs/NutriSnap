@@ -63,11 +63,10 @@ import {
   Sparkles,
   Image as ImageIcon
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid, parseISO } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
-import Image from 'next/image';
 
 function generateMockDataForRange(from: Date, to: Date) {
   const days = eachDayOfInterval({ start: from, end: to });
@@ -84,6 +83,24 @@ function generateMockDataForRange(from: Date, to: Date) {
       sugar: Math.round(baseCals * 0.02),
     };
   });
+}
+
+/**
+ * Helper component to handle local image loading with a fallback
+ */
+function MealImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [error, setError] = useState(false);
+  
+  if (error) return null;
+
+  return (
+    <img 
+      src={src} 
+      alt={alt} 
+      className={className}
+      onError={() => setError(true)}
+    />
+  );
 }
 
 export default function DashboardPage() {
@@ -442,12 +459,10 @@ export default function DashboardPage() {
                                     <Dialog>
                                       <DialogTrigger asChild>
                                         <div className="relative h-10 w-10 rounded-md overflow-hidden border border-primary/20 cursor-pointer hover:opacity-80 transition-opacity">
-                                          <Image 
+                                          <MealImage 
                                             src={log.imagePath} 
                                             alt={log.category} 
-                                            fill 
-                                            unoptimized={true}
-                                            className="object-cover"
+                                            className="w-full h-full object-cover"
                                           />
                                         </div>
                                       </DialogTrigger>
@@ -457,13 +472,11 @@ export default function DashboardPage() {
                                             {log.category} Photo
                                           </DialogTitle>
                                         </DialogHeader>
-                                        <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl">
-                                          <Image 
+                                        <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-secondary/10 flex items-center justify-center">
+                                          <MealImage 
                                             src={log.imagePath} 
                                             alt={log.category} 
-                                            fill 
-                                            unoptimized={true}
-                                            className="object-contain bg-secondary/10"
+                                            className="max-w-full max-h-full object-contain"
                                           />
                                         </div>
                                         <div className="mt-4 text-center text-sm font-medium text-muted-foreground">
