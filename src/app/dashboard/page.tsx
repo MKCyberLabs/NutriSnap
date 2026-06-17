@@ -160,6 +160,7 @@ export default function DashboardPage() {
     if (savedLogs) {
       try {
         const parsed = JSON.parse(savedLogs);
+        // Data Sanitizer: Clean up relative paths if needed
         const cleanedLogs = parsed.map((log: any) => {
           if (log.imagePath && !log.imagePath.startsWith('/') && !log.imagePath.startsWith('http') && !log.imagePath.startsWith('data:')) {
             return { ...log, imagePath: undefined };
@@ -474,11 +475,19 @@ export default function DashboardPage() {
                                   <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-primary/10 bg-white/60 shrink-0 flex items-center justify-center shadow-sm">
-                                    {log.imagePath ? (
+                                  {/* Meal Identity Container (Photo or Icon Placeholder) */}
+                                  <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-primary/10 bg-white/60 shrink-0 flex items-center justify-center shadow-sm">
+                                    {/* Fallback Icon Layer (Always present behind potential image) */}
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      {log.category === 'Breakfast' && <Coffee className="w-6 h-6 text-muted-foreground/40" />}
+                                      {(log.category === 'Lunch' || log.category === 'Dinner') && <Utensils className="w-6 h-6 text-muted-foreground/40" />}
+                                      {log.category === 'Snacks' && <Apple className="w-6 h-6 text-muted-foreground/40" />}
+                                    </div>
+
+                                    {log.imagePath && (
                                       <Dialog>
                                         <DialogTrigger asChild>
-                                          <div className="w-full h-full cursor-pointer hover:opacity-80 transition-opacity">
+                                          <div className="absolute inset-0 z-10 w-full h-full cursor-pointer hover:opacity-90 transition-opacity">
                                             <MealImage src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
                                           </div>
                                         </DialogTrigger>
@@ -490,14 +499,9 @@ export default function DashboardPage() {
                                           <div className="mt-4 text-center text-sm font-medium text-muted-foreground">Logged at {format(new Date(log.timestamp), 'h:mm a')}</div>
                                         </DialogContent>
                                       </Dialog>
-                                    ) : (
-                                      <div className="flex items-center justify-center w-full h-full">
-                                        {log.category === 'Breakfast' && <Coffee className="w-5 h-5 text-muted-foreground/60" />}
-                                        {(log.category === 'Lunch' || log.category === 'Dinner') && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
-                                        {log.category === 'Snacks' && <Apple className="w-5 h-5 text-muted-foreground/60" />}
-                                      </div>
                                     )}
                                   </div>
+                                  
                                   <span className="font-bold text-primary text-sm">{log.totalNutrients.calories} kcal</span>
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
@@ -721,4 +725,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
