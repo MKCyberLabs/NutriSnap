@@ -32,7 +32,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { 
   BarChart, 
@@ -62,30 +61,12 @@ import {
   Utensils,
   Apple,
   Edit2,
-  Check,
-  ImageIcon
+  Check
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
-
-function generateMockDataForRange(from: Date, to: Date) {
-  const days = eachDayOfInterval({ start: from, end: to });
-  return days.map(date => {
-    const seed = date.getTime() % 1000;
-    const baseCals = 1600 + (seed % 600);
-    return {
-      day: format(date, 'EEE'),
-      fullDate: date,
-      calories: baseCals,
-      protein: Math.round(baseCals * 0.08),
-      carbs: Math.round(baseCals * 0.12),
-      fat: Math.round(baseCals * 0.03),
-      sugar: Math.round(baseCals * 0.02),
-    };
-  });
-}
 
 function calculateNutrientTargets(metrics?: UserMetrics) {
   if (!metrics || !metrics.age || !metrics.height || !metrics.weight) {
@@ -98,7 +79,7 @@ function calculateNutrientTargets(metrics?: UserMetrics) {
     ? (10 * weight) + (6.25 * height) - (5 * age) + 5
     : (10 * weight) + (6.25 * height) - (5 * age) - 161;
 
-  const tdee = bmr * 1.2;
+  const tdee = bmr * 1.5; // Activity factor for demo
 
   return {
     calories: Math.round(tdee),
@@ -352,8 +333,33 @@ export default function DashboardPage() {
   }, [weeklyPivotDate, customRange]);
 
   const dynamicWeeklyData = useMemo(() => {
-    return generateMockDataForRange(activeWeeklyRange.from, activeWeeklyRange.to);
-  }, [activeWeeklyRange]);
+    const days = eachDayOfInterval({ start: activeWeeklyRange.from, end: activeWeeklyRange.to });
+    return days.map(date => {
+      const dayLogs = logs.filter(log => {
+        try {
+          return isSameDay(parseISO(log.timestamp), date);
+        } catch (e) {
+          return false;
+        }
+      });
+
+      const calories = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.calories) || 0), 0);
+      const protein = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.protein) || 0), 0);
+      const carbs = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.carbs) || 0), 0);
+      const fat = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.fat) || 0), 0);
+      const sugar = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.sugar) || 0), 0);
+
+      return {
+        day: format(date, 'EEE'),
+        fullDate: date,
+        calories,
+        protein,
+        carbs,
+        fat,
+        sugar,
+      };
+    });
+  }, [logs, activeWeeklyRange]);
 
   const dailyTotals = useMemo(() => {
     let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
@@ -369,7 +375,12 @@ export default function DashboardPage() {
 
   const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
 
-  const weeklyAvgCalories = Math.round(dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0) / dynamicWeeklyData.length);
+  const weeklyAvgCalories = useMemo(() => {
+    const trackedDays = dynamicWeeklyData.filter(d => d.calories > 0).length;
+    if (trackedDays === 0) return 0;
+    const totalCalsInRange = dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0);
+    return Math.round(totalCalsInRange / trackedDays);
+  }, [dynamicWeeklyData]);
 
   if (!isMounted) return null;
 
@@ -498,16 +509,9 @@ export default function DashboardPage() {
                                       <span className="text-[10px] ml-1 text-muted-foreground font-bold uppercase">kcal</span>
                                     </div>
                                     <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"><Trash2 className="h-4 w-4" /></Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent className="glass-card rounded-3xl border-none">
-                                        <AlertDialogHeader><AlertDialogTitle>Delete entry?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
-                                          <AlertDialogAction onClick={() => handleDeleteLog(log.id)} className="bg-primary text-primary-foreground rounded-xl">Delete</AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
+                                      <AlertDialogAction onClick={() => handleDeleteLog(log.id)} className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
+                                        <Trash2 className="h-4 w-4" />
+                                      </AlertDialogAction>
                                     </AlertDialog>
                                   </div>
                                 </div>
@@ -695,19 +699,23 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[ { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, { icon: BarChart3, val: Math.max(...dynamicWeeklyData.map(d => d.calories)), label: 'Peak Day' }, { icon: History, val: dynamicWeeklyData.length, label: 'Tracked Days' } ].map((s, i) => (
+                {[ 
+                  { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, 
+                  { icon: BarChart3, val: Math.max(...dynamicWeeklyData.map(d => d.calories)), label: 'Peak Day' }, 
+                  { icon: History, val: dynamicWeeklyData.filter(d => d.calories > 0).length, label: 'Tracked Days' } 
+                ].map((s, i) => (
                   <Card key={i} className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>
                 ))}
               </div>
             </div>
             <aside className="space-y-6">
               <Card className="glass-card border-white/60 rounded-3xl">
-                <CardHeader><CardTitle className="text-xl font-bold text-foreground">Weekly Progress</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-xl font-bold text-foreground">Range Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * dynamicWeeklyData.length }, 
-                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * dynamicWeeklyData.length }, 
-                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * dynamicWeeklyData.length }
+                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * (dynamicWeeklyData.filter(d => d.calories > 0).length || 1) }, 
+                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * (dynamicWeeklyData.filter(d => d.calories > 0).length || 1) }, 
+                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * (dynamicWeeklyData.filter(d => d.calories > 0).length || 1) }
                   ].map(m => {
                     const percentage = Math.min((m.val / m.max) * 100, 100);
                     return (
@@ -725,7 +733,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
               <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30"><CardHeader className="pb-2"><CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground"><BrainCircuit className="h-4 w-4 text-primary" /> Period Insight</CardTitle></CardHeader>
-                <CardContent className="text-sm leading-relaxed text-foreground/80">Historical tracking analysis complete. Maintaining a consistent metabolic baseline across the period.</CardContent>
+                <CardContent className="text-sm leading-relaxed text-foreground/80">Historical tracking analysis complete. The weekly averages are derived from your actual logged entries for this period.</CardContent>
               </Card>
             </aside>
           </div>
