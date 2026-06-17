@@ -63,7 +63,8 @@ import {
   Sparkles,
   Coffee,
   Utensils,
-  Apple
+  Apple,
+  UtensilsCrossed
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -203,6 +204,9 @@ export default function DashboardPage() {
         const totalProtein = combinedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
         const totalCarbs = combinedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
         const totalFat = combinedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+        const totalFiber = combinedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
+        const totalSatFat = combinedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
+        const totalSugar = combinedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
 
         return {
           ...log,
@@ -213,6 +217,9 @@ export default function DashboardPage() {
             protein: Number(totalProtein.toFixed(1)),
             carbs: Number(totalCarbs.toFixed(1)),
             fat: Number(totalFat.toFixed(1)),
+            fiber: Number(totalFiber.toFixed(1)),
+            saturatedFat: Number(totalSatFat.toFixed(1)),
+            sugar: Number(totalSugar.toFixed(1)),
           }
         };
       });
@@ -234,6 +241,9 @@ export default function DashboardPage() {
       const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
       const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
       const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
+      const totalSatFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
+      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
 
       return {
         ...log,
@@ -244,6 +254,9 @@ export default function DashboardPage() {
           protein: Number(totalProtein.toFixed(1)),
           carbs: Number(totalCarbs.toFixed(1)),
           fat: Number(totalFat.toFixed(1)),
+          fiber: Number(totalFiber.toFixed(1)),
+          saturatedFat: Number(totalSatFat.toFixed(1)),
+          sugar: Number(totalSugar.toFixed(1)),
         }
       };
     });
@@ -359,13 +372,13 @@ export default function DashboardPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[600px] pr-4">
+                  <ScrollArea className="h-[650px] pr-4">
                     {filteredLogs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed border-white/40 rounded-3xl bg-white/20">
                         <p className="font-medium">No activity recorded for this day.</p>
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-6">
                         {filteredLogs.map((log) => (
                           <div key={log.id} className="relative pl-6 border-l-2 border-primary/20 pb-4 last:pb-0">
                             <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background" />
@@ -376,7 +389,7 @@ export default function DashboardPage() {
                                   <span className="text-xs text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                  <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/40 bg-white/40 shadow-sm flex items-center justify-center">
+                                  <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/40 bg-white/40 shadow-sm flex items-center justify-center group">
                                     <div className="absolute inset-0 flex items-center justify-center opacity-30">
                                       {log.category === 'Breakfast' && <Coffee className="w-6 h-6" />}
                                       {(log.category === 'Lunch' || log.category === 'Dinner') && <Utensils className="w-6 h-6" />}
@@ -455,6 +468,35 @@ export default function DashboardPage() {
                                   </Popover>
                                 </div>
                               </div>
+                              
+                              {/* Nutritional Summary Grid */}
+                              <div className="mt-4 pt-4 border-t border-primary/5 grid grid-cols-3 gap-y-3">
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold uppercase text-primary/60">Total P</span>
+                                  <span className="text-sm font-bold text-primary">{log.totalNutrients.protein}g</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold uppercase text-primary/60">Total C</span>
+                                  <span className="text-sm font-bold text-primary">{log.totalNutrients.carbs}g</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold uppercase text-primary/60">Total F</span>
+                                  <span className="text-sm font-bold text-primary">{log.totalNutrients.fat}g</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold uppercase text-primary/60">Total Fiber</span>
+                                  <span className="text-sm font-bold text-primary">{log.totalNutrients.fiber}g</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold uppercase text-primary/60">Total Sat. Fat</span>
+                                  <span className="text-sm font-bold text-primary">{log.totalNutrients.saturatedFat}g</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold uppercase text-primary/60">Total Sugar</span>
+                                  <span className="text-sm font-bold text-primary">{log.totalNutrients.sugar}g</span>
+                                </div>
+                              </div>
+
                               {log.healthInsight && (
                                 <div className="mt-4 p-4 bg-white/30 dark:bg-black/10 border border-white/40 rounded-2xl flex items-start gap-3">
                                   <BrainCircuit className="h-5 w-5 text-primary shrink-0 mt-0.5" />
