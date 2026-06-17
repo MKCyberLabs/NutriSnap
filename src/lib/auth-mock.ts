@@ -3,7 +3,9 @@
 
 import { User, UserRole } from './types';
 
-const INITIAL_MOCK_USERS: Record<string, User & { password?: string }> = {
+type ManagedUser = User & { password?: string };
+
+const INITIAL_MOCK_USERS: Record<string, ManagedUser> = {
   'user@nutrisnap.com': {
     id: '1',
     name: 'Alex Johnson',
@@ -24,7 +26,7 @@ const INITIAL_MOCK_USERS: Record<string, User & { password?: string }> = {
 
 const STORAGE_KEY = 'nutrisnap_managed_users';
 
-export function getManagedUsers(): User[] {
+export function getManagedUsers(): ManagedUser[] {
   if (typeof window === 'undefined') return [];
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
@@ -36,7 +38,7 @@ export function getManagedUsers(): User[] {
   return JSON.parse(stored);
 }
 
-export function saveManagedUsers(users: User[]) {
+export function saveManagedUsers(users: ManagedUser[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
   }
@@ -44,8 +46,12 @@ export function saveManagedUsers(users: User[]) {
 
 export function getMockUser(email: string, password?: string): User | null {
   const users = getManagedUsers();
-  // In a real mock, we'd check password, but for simplicity we match email
+  // We find the user by email
   const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  
+  // Optional: In a full implementation, we would check password here
+  // if (password && user?.password !== password) return null;
+  
   return user || null;
 }
 

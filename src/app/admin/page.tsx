@@ -22,7 +22,8 @@ import {
   Edit, 
   Trash2,
   Settings2,
-  Search
+  Search,
+  Lock
 } from 'lucide-react';
 import {
   Dialog,
@@ -45,7 +46,7 @@ export default function AdminPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [adminUser, setAdminUser] = useState<User | null>(null);
-  const [managedUsers, setManagedUsers] = useState<User[]>([]);
+  const [managedUsers, setManagedUsers] = useState<(User & { password?: string })[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modal states
@@ -67,12 +68,13 @@ export default function AdminPage() {
     e.preventDefault();
     if (!currentUser.email || !currentUser.name) return;
 
-    const newUser: User = {
+    const newUser: User & { password?: string } = {
       id: Math.random().toString(36).substr(2, 9),
       name: currentUser.name || '',
       email: currentUser.email || '',
       role: (currentUser.role as UserRole) || 'USER',
       onboarded: false,
+      password: currentUser.password || 'password123'
     };
 
     const updated = [...managedUsers, newUser];
@@ -87,12 +89,12 @@ export default function AdminPage() {
     e.preventDefault();
     if (!currentUser.id) return;
 
-    const updated = managedUsers.map(u => u.id === currentUser.id ? (currentUser as User) : u);
+    const updated = managedUsers.map(u => u.id === currentUser.id ? (currentUser as User & { password?: string }) : u);
     setManagedUsers(updated);
     saveManagedUsers(updated);
     setIsEditOpen(false);
     setCurrentUser({});
-    toast({ title: "User Updated", description: "The user profile has been modified successfully." });
+    toast({ title: "User Updated", description: "The user profile and credentials have been modified." });
   };
 
   const handleDeleteUser = (id: string) => {
@@ -277,6 +279,21 @@ export default function AdminPage() {
               <div className="space-y-2">
                 <Label htmlFor="edit-email">Email Address</Label>
                 <Input id="edit-email" type="email" value={currentUser.email || ''} onChange={e => setCurrentUser({...currentUser, email: e.target.value})} className="rounded-xl" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-password" title="Leave blank to keep current password">
+                  <span className="flex items-center gap-2">
+                    <Lock className="h-3 w-3" /> Update Password
+                  </span>
+                </Label>
+                <Input 
+                  id="edit-password" 
+                  type="password" 
+                  placeholder="New password (optional)" 
+                  value={currentUser.password || ''} 
+                  onChange={e => setCurrentUser({...currentUser, password: e.target.value})} 
+                  className="rounded-xl" 
+                />
               </div>
               <div className="space-y-2">
                 <Label>Identity Role</Label>
