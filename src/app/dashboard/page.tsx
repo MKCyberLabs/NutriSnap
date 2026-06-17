@@ -63,7 +63,7 @@ import {
   Sparkles,
   Image as ImageIcon
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
@@ -127,48 +127,14 @@ export default function DashboardPage() {
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
   };
 
-  const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput, mealTime: string, imagePath?: string) => {
-    const timeParts = (mealTime || '').split(':');
-    const hours = parseInt(timeParts[0], 10);
-    const minutes = parseInt(timeParts[1], 10);
-    
-    const logTimestamp = new Date(selectedDate);
-    if (!isNaN(hours) && !isNaN(minutes)) {
-      logTimestamp.setHours(hours, minutes, 0, 0);
-    }
-
-    const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
-
-    const newLog: MealLog = {
-      id: Math.random().toString(36).substr(2, 9),
-      category: data.calories > 0 ? (['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const).find(c => c === 'Breakfast') || 'Breakfast' : 'Breakfast',
-      timestamp: isoTimestamp,
-      items: (data.foodItems || []).map(item => ({
-        ...item,
-        id: Math.random().toString(36).substr(2, 9),
-      })),
-      totalNutrients: {
-        calories: Number(data.calories),
-        protein: Number(data.protein),
-        carbs: Number(data.carbs),
-        fat: Number(data.fat),
-        fiber: Number(data.fiber || 0),
-        saturatedFat: Number(data.saturatedFat || 0),
-        sugar: Number(data.sugar || 0),
-      },
-      healthInsight: data.healthInsight,
-      imagePath: imagePath
-    };
-  };
-
   const handleMealCardComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
-    const timeParts = (mealTime || '').split(':');
-    const hours = parseInt(timeParts[0], 10);
-    const minutes = parseInt(timeParts[1], 10);
-    
     const logTimestamp = new Date(selectedDate);
-    if (!isNaN(hours) && !isNaN(minutes)) {
-      logTimestamp.setHours(hours, minutes, 0, 0);
+    
+    if (mealTime) {
+      const [hours, minutes] = mealTime.split(':').map(Number);
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        logTimestamp.setHours(hours, minutes, 0, 0);
+      }
     }
 
     const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
@@ -480,6 +446,7 @@ export default function DashboardPage() {
                                             src={log.imagePath} 
                                             alt={log.category} 
                                             fill 
+                                            unoptimized={true}
                                             className="object-cover"
                                           />
                                         </div>
@@ -495,6 +462,7 @@ export default function DashboardPage() {
                                             src={log.imagePath} 
                                             alt={log.category} 
                                             fill 
+                                            unoptimized={true}
                                             className="object-contain bg-secondary/10"
                                           />
                                         </div>
