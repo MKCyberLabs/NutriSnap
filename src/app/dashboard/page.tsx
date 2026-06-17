@@ -478,7 +478,7 @@ export default function DashboardPage() {
                                   {log.imagePath ? (
                                     <Dialog>
                                       <DialogTrigger asChild>
-                                        <div className="relative h-10 w-10 rounded-md overflow-hidden border border-primary/20 cursor-pointer hover:opacity-80 transition-opacity shrink-0">
+                                        <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-primary/10 bg-muted/30 cursor-pointer hover:opacity-80 transition-opacity shrink-0 flex items-center justify-center">
                                           <MealImage src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
                                         </div>
                                       </DialogTrigger>
