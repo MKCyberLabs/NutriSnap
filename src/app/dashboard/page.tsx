@@ -7,7 +7,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
 import { User, MealCategory, MealLog, FoodItem } from '@/lib/types';
 import { MealCategoryCard } from '@/components/dashboard/MealCategoryCard';
-import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
+import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +51,10 @@ import {
   Filter,
   Trash2,
   X,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -82,6 +86,8 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState('daily');
   const [isMounted, setIsMounted] = useState(false);
+  const [isAddingItem, setIsAddingItem] = useState<string | null>(null);
+  const [newItemText, setNewItemText] = useState('');
 
   const [weeklyPivotDate, setWeeklyPivotDate] = useState<Date>(new Date());
   const [customRange, setCustomRange] = useState<DateRange | undefined>({
@@ -135,6 +141,58 @@ export default function DashboardPage() {
     };
 
     saveLogsToStorage([newLog, ...logs]);
+  };
+
+  const handleAddItemToLog = async (logId: string) => {
+    if (!newItemText.trim()) return;
+    
+    setIsAddingItem(logId);
+    try {
+      const result = await mealNutritionalAnalysis({
+        mealDescription: newItemText,
+      });
+
+      const updatedLogs = logs.map(log => {
+        if (log.id !== logId) return log;
+
+        const newItems: FoodItem[] = (result.foodItems || []).map(item => ({
+          ...item,
+          id: Math.random().toString(36).substr(2, 9),
+        }));
+
+        const combinedItems = [...log.items, ...newItems];
+
+        const totalCalories = combinedItems.reduce((sum, i) => sum + i.calories, 0);
+        const totalProtein = combinedItems.reduce((sum, i) => sum + i.protein, 0);
+        const totalCarbs = combinedItems.reduce((sum, i) => sum + i.carbs, 0);
+        const totalFat = combinedItems.reduce((sum, i) => sum + i.fat, 0);
+        const totalFiber = combinedItems.reduce((sum, i) => sum + (i.fiber || 0), 0);
+        const totalSaturatedFat = combinedItems.reduce((sum, i) => sum + (i.saturatedFat || 0), 0);
+        const totalSugar = combinedItems.reduce((sum, i) => sum + (i.sugar || 0), 0);
+
+        return {
+          ...log,
+          items: combinedItems,
+          totalNutrients: {
+            calories: totalCalories,
+            protein: Number(totalProtein.toFixed(1)),
+            carbs: Number(totalCarbs.toFixed(1)),
+            fat: Number(totalFat.toFixed(1)),
+            fiber: Number(totalFiber.toFixed(1)),
+            saturatedFat: Number(totalSaturatedFat.toFixed(1)),
+            sugar: Number(totalSugar.toFixed(1)),
+          }
+        };
+      });
+
+      saveLogsToStorage(updatedLogs);
+      setNewItemText('');
+      toast({ title: "Item Added", description: "The food item was successfully added to your log." });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Add failed", description: "Could not analyze and add item." });
+    } finally {
+      setIsAddingItem(null);
+    }
   };
 
   const handleUpdateGrams = (logId: string, itemId: string, newGrams: number) => {
@@ -418,6 +476,49 @@ export default function DashboardPage() {
                                     </div>
                                   </div>
                                 ))}
+
+                                <div className="pt-2 flex justify-end">
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button variant="outline" size="sm" className="h-8 text-[10px] gap-2 border-primary/20 hover:bg-primary/5 font-bold uppercase tracking-tighter">
+                                        <Plus className="h-3 w-3" /> Add Item
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80 p-4 rounded-xl" align="end">
+                                      <div className="space-y-4">
+                                        <div className="space-y-1">
+                                          <h4 className="font-headline font-bold text-sm text-primary">Add Item to {log.category}</h4>
+                                          <p className="text-[10px] text-muted-foreground">Type a single ingredient to append.</p>
+                                        </div>
+                                        <div className="space-y-3">
+                                          <div className="space-y-1">
+                                            <Label htmlFor="new-item" className="text-[10px] uppercase font-bold text-muted-foreground">Ingredient Name</Label>
+                                            <Input 
+                                              id="new-item" 
+                                              placeholder="e.g., Boiled Egg, Avocado..." 
+                                              className="h-9 text-sm"
+                                              value={newItemText}
+                                              onChange={(e) => setNewItemText(e.target.value)}
+                                              onKeyDown={(e) => { if(e.key === 'Enter') handleAddItemToLog(log.id) }}
+                                            />
+                                          </div>
+                                          <Button 
+                                            className="w-full h-9 gap-2 font-bold text-xs" 
+                                            disabled={isAddingItem === log.id || !newItemText.trim()}
+                                            onClick={() => handleAddItemToLog(log.id)}
+                                          >
+                                            {isAddingItem === log.id ? (
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                              <Sparkles className="h-3.5 w-3.5" />
+                                            )}
+                                            {isAddingItem === log.id ? 'Analyzing...' : 'Add to Matrix'}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                </div>
                               </div>
 
                               {log.healthInsight && (
@@ -427,7 +528,7 @@ export default function DashboardPage() {
                                 </div>
                               )}
 
-                              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] uppercase font-bold tracking-widest text-primary/70">
+                              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] uppercase font-bold tracking-widest text-primary/70 border-t border-primary/5 pt-3">
                                 <span>TOTAL P: {log.totalNutrients.protein}g</span>
                                 <span>TOTAL C: {log.totalNutrients.carbs}g</span>
                                 <span>TOTAL F: {log.totalNutrients.fat}g</span>
