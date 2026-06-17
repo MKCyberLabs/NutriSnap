@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { ShieldCheck, UserCheck, ArrowRight, Lock } from 'lucide-react';
-import { getMockUser, saveAuthSession } from '@/lib/auth-mock';
+import { authenticateUser, saveAuthSession } from '@/lib/auth-mock';
 import { useToast } from '@/hooks/use-toast';
 import { loginSchema } from '@/lib/validation';
 
@@ -36,6 +36,26 @@ export default function LoginPage() {
     }
 
     try {
+      // Prototype Auth: Check local managed users first
+      const localUser = authenticateUser(email, password);
+      
+      if (localUser) {
+        saveAuthSession(localUser);
+        toast({
+          title: "Authenticated Successfully",
+          description: `Access granted as ${localUser.role}`,
+        });
+        
+        // Navigation logic
+        if (localUser.role === 'ADMIN') {
+          router.push('/admin');
+        } else {
+          router.push('/dashboard');
+        }
+        return;
+      }
+
+      // Fallback/Legacy: Call API (for recovery keys or server-side checks)
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,27 +65,20 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed');
+        throw new Error(data.error || 'Access Denied: Invalid Credentials');
       }
 
       saveAuthSession(data);
       
       toast({
-        title: "Authenticated Successfully",
+        title: "Authenticated via Secure Route",
         description: `Access granted as ${data.role}`,
       });
 
       if (data.requiresPasswordReset) {
-        toast({
-          variant: "destructive",
-          title: "Security Action Required",
-          description: "Recovery key used. You must reset your password immediately.",
-        });
         router.push('/reset-password');
       } else if (data.role === 'ADMIN') {
         router.push('/admin');
-      } else if (!data.onboarded) {
-        router.push('/onboarding');
       } else {
         router.push('/dashboard');
       }
@@ -86,19 +99,19 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-svh flex items-center justify-center bg-slate-50/50 p-4">
+    <main className="min-h-svh flex items-center justify-center bg-slate-50/50 p-4 font-sans">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground font-headline font-bold text-3xl shadow-xl shadow-primary/20 rotate-3">
+          <div className="mx-auto h-16 w-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-3xl shadow-xl shadow-primary/20 rotate-3">
             N
           </div>
-          <h1 className="font-headline text-4xl font-bold tracking-tight text-primary mt-6">NutriSnap</h1>
-          <p className="text-muted-foreground font-body">Sophisticated nutrition tracking with Hardened Security.</p>
+          <h1 className="text-4xl font-bold tracking-tight text-primary mt-6">NutriSnap</h1>
+          <p className="text-muted-foreground">Sophisticated nutrition tracking with Hardened Security.</p>
         </div>
 
-        <Card className="border-none shadow-2xl shadow-primary/5 bg-white/80 backdrop-blur-sm">
+        <Card className="border-none shadow-2xl shadow-primary/5 bg-white/80 backdrop-blur-sm rounded-[2.5rem]">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-headline flex items-center gap-2">
+            <CardTitle className="text-2xl font-bold flex items-center gap-2">
               <Lock className="h-5 w-5 text-primary" /> Secure Access
             </CardTitle>
             <CardDescription>Enter your credentials to manage the ecosystem.</CardDescription>
@@ -113,7 +126,7 @@ export default function LoginPage() {
                   placeholder="admin@mkcyberlabs.in" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="bg-muted/30"
+                  className="bg-muted/30 rounded-xl"
                   required 
                 />
               </div>
@@ -125,11 +138,11 @@ export default function LoginPage() {
                   placeholder="••••••••••••" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-muted/30"
+                  className="bg-muted/30 rounded-xl"
                   required 
                 />
               </div>
-              <Button type="submit" className="w-full h-12 text-lg font-medium group" disabled={loading}>
+              <Button type="submit" className="w-full h-12 text-lg font-bold group rounded-xl" disabled={loading}>
                 {loading ? "Authenticating..." : (
                   <>
                     Establish Session <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
@@ -148,13 +161,13 @@ export default function LoginPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200" onClick={() => quickSelect('user@nutrisnap.com')}>
-                <UserCheck className="h-5 w-5 text-accent" />
-                <span className="text-xs font-semibold text-muted-foreground">Employee Access</span>
+              <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200 rounded-2xl" onClick={() => quickSelect('user@nutrisnap.com')}>
+                <UserCheck className="h-5 w-5 text-emerald-500" />
+                <span className="text-xs font-bold text-muted-foreground">Employee</span>
               </Button>
-              <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200" onClick={() => quickSelect('admin@mkcyberlabs.in')}>
+              <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200 rounded-2xl" onClick={() => quickSelect('admin@mkcyberlabs.in')}>
                 <ShieldCheck className="h-5 w-5 text-primary" />
-                <span className="text-xs font-semibold text-primary">Global Admin</span>
+                <span className="text-xs font-bold text-primary">Global Admin</span>
               </Button>
             </div>
           </CardContent>

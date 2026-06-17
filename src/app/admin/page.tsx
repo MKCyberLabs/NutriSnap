@@ -73,8 +73,8 @@ export default function AdminPage() {
       name: currentUser.name || '',
       email: currentUser.email || '',
       role: (currentUser.role as UserRole) || 'USER',
-      onboarded: false,
-      password: currentUser.password || 'password123'
+      onboarded: true, // Defaulting to true as requested
+      password: currentUser.password || 'ProductionPassword123!'
     };
 
     const updated = [...managedUsers, newUser];
@@ -82,19 +82,19 @@ export default function AdminPage() {
     saveManagedUsers(updated);
     setIsCreateOpen(false);
     setCurrentUser({});
-    toast({ title: "User Created", description: `${newUser.name} has been added to the system.` });
+    toast({ title: "User Created", description: `${newUser.name} has been added with auto-onboarding enabled.` });
   };
 
   const handleEditUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser.id) return;
 
-    const updated = managedUsers.map(u => u.id === currentUser.id ? (currentUser as User & { password?: string }) : u);
+    const updated = managedUsers.map(u => u.id === currentUser.id ? { ...currentUser, onboarded: true } as User & { password?: string } : u);
     setManagedUsers(updated);
     saveManagedUsers(updated);
     setIsEditOpen(false);
     setCurrentUser({});
-    toast({ title: "User Updated", description: "The user profile and credentials have been modified." });
+    toast({ title: "User Updated", description: "The profile has been successfully modified." });
   };
 
   const handleDeleteUser = (id: string) => {
@@ -132,7 +132,7 @@ export default function AdminPage() {
             <DialogContent className="sm:max-w-[425px] rounded-[2rem] border-none glass-card p-8">
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold">New Identity</DialogTitle>
-                <DialogDescription>Create a new user profile with specific system access.</DialogDescription>
+                <DialogDescription>Create a new user profile. Onboarding is enabled by default.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleCreateUser} className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -145,7 +145,7 @@ export default function AdminPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Initial Password</Label>
-                  <Input id="password" type="password" placeholder="••••••••" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="rounded-xl" />
+                  <Input id="password" type="password" placeholder="ProductionPassword123!" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="rounded-xl" />
                 </div>
                 <div className="space-y-2">
                   <Label>System Role</Label>
@@ -281,11 +281,7 @@ export default function AdminPage() {
                 <Input id="edit-email" type="email" value={currentUser.email || ''} onChange={e => setCurrentUser({...currentUser, email: e.target.value})} className="rounded-xl" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-password" title="Leave blank to keep current password">
-                  <span className="flex items-center gap-2">
-                    <Lock className="h-3 w-3" /> Update Password
-                  </span>
-                </Label>
+                <Label htmlFor="edit-password">Update Password</Label>
                 <Input 
                   id="edit-password" 
                   type="password" 

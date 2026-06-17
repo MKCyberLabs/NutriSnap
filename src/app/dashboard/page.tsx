@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -71,11 +72,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 function calculateNutrientTargets(metrics?: UserMetrics) {
-  if (!metrics || !metrics.age || !metrics.height || !metrics.weight) {
-    return { protein: 150, carbs: 220, fat: 65, sugar: 35, calories: 2000 };
-  }
-
-  const { weight, height, age, gender } = metrics;
+  // Use default metrics if none are provided to skip mandatory onboarding
+  const activeMetrics = metrics || { height: 175, weight: 70, age: 30, gender: 'male' };
+  
+  const { weight, height, age, gender } = activeMetrics;
   
   const bmr = gender === 'male'
     ? (10 * weight) + (6.25 * height) - (5 * age) + 5
