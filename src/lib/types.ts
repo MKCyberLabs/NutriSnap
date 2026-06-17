@@ -14,6 +14,7 @@ export interface UserMetrics {
   height: number;
   weight: number;
   age: number;
+  gender: 'male' | 'female';
 }
 
 export type MealCategory = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks';

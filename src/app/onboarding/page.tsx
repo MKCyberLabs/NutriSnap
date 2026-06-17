@@ -9,7 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Label } from '@/components/ui/label';
 import { getAuthSession, saveAuthSession } from '@/lib/auth-mock';
 import { useToast } from '@/hooks/use-toast';
-import { Ruler, Weight, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { Ruler, Weight, CalendarDays, CheckCircle2, User as UserIcon } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -18,6 +25,7 @@ export default function OnboardingPage() {
     height: '',
     weight: '',
     age: '',
+    gender: 'male' as 'male' | 'female',
   });
 
   useEffect(() => {
@@ -37,6 +45,7 @@ export default function OnboardingPage() {
           height: Number(metrics.height),
           weight: Number(metrics.weight),
           age: Number(metrics.age),
+          gender: metrics.gender,
         }
       };
       saveAuthSession(updatedUser);
@@ -64,34 +73,53 @@ export default function OnboardingPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="height" className="flex items-center gap-2">
-                  <Ruler className="h-4 w-4 text-accent" /> Height (cm)
+                <Label className="flex items-center gap-2">
+                  <UserIcon className="h-4 w-4 text-accent" /> Gender
                 </Label>
-                <Input 
-                  id="height" 
-                  type="number" 
-                  placeholder="175" 
-                  value={metrics.height}
-                  onChange={(e) => setMetrics({...metrics, height: e.target.value})}
-                  required 
-                  min="50"
-                  max="300"
-                />
+                <Select 
+                  value={metrics.gender} 
+                  onValueChange={(val: 'male' | 'female') => setMetrics({...metrics, gender: val})}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="weight" className="flex items-center gap-2">
-                  <Weight className="h-4 w-4 text-accent" /> Weight (kg)
-                </Label>
-                <Input 
-                  id="weight" 
-                  type="number" 
-                  placeholder="70" 
-                  value={metrics.weight}
-                  onChange={(e) => setMetrics({...metrics, weight: e.target.value})}
-                  required 
-                  min="20"
-                  max="500"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="height" className="flex items-center gap-2">
+                    <Ruler className="h-4 w-4 text-accent" /> Height (cm)
+                  </Label>
+                  <Input 
+                    id="height" 
+                    type="number" 
+                    placeholder="175" 
+                    value={metrics.height}
+                    onChange={(e) => setMetrics({...metrics, height: e.target.value})}
+                    required 
+                    min="50"
+                    max="300"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="weight" className="flex items-center gap-2">
+                    <Weight className="h-4 w-4 text-accent" /> Weight (kg)
+                  </Label>
+                  <Input 
+                    id="weight" 
+                    type="number" 
+                    placeholder="70" 
+                    value={metrics.weight}
+                    onChange={(e) => setMetrics({...metrics, weight: e.target.value})}
+                    required 
+                    min="20"
+                    max="500"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="age" className="flex items-center gap-2">

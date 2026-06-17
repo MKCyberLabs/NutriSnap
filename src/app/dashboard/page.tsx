@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
-import { User, MealCategory, MealLog, FoodItem } from '@/lib/types';
+import { User, MealCategory, MealLog, FoodItem, UserMetrics } from '@/lib/types';
 import { MealCategoryCard } from '@/components/dashboard/MealCategoryCard';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -87,14 +88,34 @@ function generateMockDataForRange(from: Date, to: Date) {
   });
 }
 
-/**
- * Helper component to handle local image loading with a fallback
- */
+function calculateNutrientTargets(metrics?: UserMetrics) {
+  // Default values if metrics are missing
+  if (!metrics || !metrics.age || !metrics.height || !metrics.weight) {
+    return { protein: 150, carbs: 220, fat: 65, sugar: 35, calories: 2000 };
+  }
+
+  const { weight, height, age, gender } = metrics;
+  
+  // Mifflin-St Jeor Equation
+  const bmr = gender === 'male'
+    ? (10 * weight) + (6.25 * height) - (5 * age) + 5
+    : (10 * weight) + (6.25 * height) - (5 * age) - 161;
+
+  // Sedentary activity multiplier
+  const tdee = bmr * 1.2;
+
+  return {
+    calories: Math.round(tdee),
+    protein: Math.round((tdee * 0.30) / 4),
+    carbs: Math.round((tdee * 0.40) / 4),
+    fat: Math.round((tdee * 0.30) / 9),
+    sugar: 35 // Strict health-conscious cap
+  };
+}
+
 function MealImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
   const [error, setError] = useState(false);
-  
   if (error) return null;
-
   return (
     <img 
       src={src} 
@@ -146,9 +167,10 @@ export default function DashboardPage() {
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
   };
 
+  const userTargets = useMemo(() => calculateNutrientTargets(user?.metrics), [user]);
+
   const handleMealCardComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const logTimestamp = new Date(selectedDate);
-    
     if (mealTime) {
       const [hours, minutes] = mealTime.split(':').map(Number);
       if (!isNaN(hours) && !isNaN(minutes)) {
@@ -184,23 +206,16 @@ export default function DashboardPage() {
 
   const handleAddItemToLog = async (logId: string) => {
     if (!newItemText.trim()) return;
-    
     setIsAddingItem(logId);
     try {
-      const result = await mealNutritionalAnalysis({
-        mealDescription: newItemText,
-      });
-
+      const result = await mealNutritionalAnalysis({ mealDescription: newItemText });
       const updatedLogs = logs.map(log => {
         if (log.id !== logId) return log;
-
         const newItems: FoodItem[] = (result.foodItems || []).map(item => ({
           ...item,
           id: Math.random().toString(36).substr(2, 9),
         }));
-
         const combinedItems = [...log.items, ...newItems];
-
         const totalCalories = combinedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
         const totalProtein = combinedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
         const totalCarbs = combinedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
@@ -223,7 +238,6 @@ export default function DashboardPage() {
           }
         };
       });
-
       saveLogsToStorage(updatedLogs);
       setNewItemText('');
       toast({ title: "Item Added", description: "The food item was successfully added to your log." });
@@ -236,13 +250,10 @@ export default function DashboardPage() {
 
   const handleUpdateGrams = (logId: string, itemId: string, newGrams: number) => {
     if (isNaN(newGrams) || newGrams < 0) return;
-
     const updatedLogs = logs.map(log => {
       if (log.id !== logId) return log;
-
       const updatedItems = log.items.map(item => {
         if (item.id !== itemId) return item;
-
         const ratio = newGrams / item.grams;
         return {
           ...item,
@@ -256,7 +267,6 @@ export default function DashboardPage() {
           sugar: Number(((item.sugar || 0) * ratio).toFixed(1)),
         };
       });
-
       const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
       const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
       const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
@@ -279,16 +289,13 @@ export default function DashboardPage() {
         }
       };
     });
-
     saveLogsToStorage(updatedLogs);
   };
 
   const handleDeleteItem = (logId: string, itemId: string) => {
     const updatedLogs = logs.map(log => {
       if (log.id !== logId) return log;
-
       const updatedItems = log.items.filter(item => item.id !== itemId);
-      
       const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
       const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
       const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
@@ -311,7 +318,6 @@ export default function DashboardPage() {
         }
       };
     });
-
     saveLogsToStorage(updatedLogs);
     toast({ title: "Item Removed", description: "Food item has been removed from the log." });
   };
@@ -330,10 +336,7 @@ export default function DashboardPage() {
     if (customRange?.from && customRange?.to) {
       return { from: customRange.from, to: customRange.to };
     }
-    return {
-      from: subDays(weeklyPivotDate, 6),
-      to: weeklyPivotDate
-    };
+    return { from: subDays(weeklyPivotDate, 6), to: weeklyPivotDate };
   }, [weeklyPivotDate, customRange]);
 
   const dynamicWeeklyData = useMemo(() => {
@@ -379,7 +382,6 @@ export default function DashboardPage() {
                     <TabsTrigger value="weekly" className="data-[state=active]:bg-background data-[state=active]:text-primary">Weekly Summary</TabsTrigger>
                   </TabsList>
                 </Tabs>
-                
                 {activeTab === 'daily' ? (
                   <div className="flex items-center gap-2">
                     <Popover>
@@ -461,33 +463,19 @@ export default function DashboardPage() {
                                     <Dialog>
                                       <DialogTrigger asChild>
                                         <div className="relative h-10 w-10 rounded-md overflow-hidden border border-primary/20 cursor-pointer hover:opacity-80 transition-opacity shrink-0">
-                                          <MealImage 
-                                            src={log.imagePath} 
-                                            alt={log.category} 
-                                            className="w-full h-full object-cover"
-                                          />
+                                          <MealImage src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
                                         </div>
                                       </DialogTrigger>
                                       <DialogContent className="sm:max-w-[600px] border-primary/20 bg-background rounded-3xl p-6">
-                                        <DialogHeader>
-                                          <DialogTitle className="text-2xl font-headline font-bold text-primary">
-                                            {log.category} Photo
-                                          </DialogTitle>
-                                        </DialogHeader>
+                                        <DialogHeader><DialogTitle className="text-2xl font-headline font-bold text-primary">{log.category} Photo</DialogTitle></DialogHeader>
                                         <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-secondary/10 flex items-center justify-center">
-                                          <MealImage 
-                                            src={log.imagePath} 
-                                            alt={log.category} 
-                                            className="max-w-full max-h-full object-contain"
-                                          />
+                                          <MealImage src={log.imagePath} alt={log.category} className="max-w-full max-h-full object-contain" />
                                         </div>
-                                        <div className="mt-4 text-center text-sm font-medium text-muted-foreground">
-                                          Logged at {format(new Date(log.timestamp), 'h:mm a')}
-                                        </div>
+                                        <div className="mt-4 text-center text-sm font-medium text-muted-foreground">Logged at {format(new Date(log.timestamp), 'h:mm a')}</div>
                                       </DialogContent>
                                     </Dialog>
                                   ) : (
-                                    <div className="w-10 h-10 rounded-lg bg-muted/50 border border-muted-foreground/10 flex items-center justify-center shrink-0" title={`${log.category} (No Photo)`}>
+                                    <div className="w-10 h-10 rounded-lg bg-muted/50 border border-muted-foreground/10 flex items-center justify-center shrink-0">
                                       {log.category === 'Breakfast' && <Coffee className="w-5 h-5 text-muted-foreground/60" />}
                                       {log.category === 'Lunch' && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
                                       {log.category === 'Dinner' && <Utensils className="w-5 h-5 text-muted-foreground/60" />}
@@ -515,7 +503,6 @@ export default function DashboardPage() {
                                   </AlertDialog>
                                 </div>
                               </div>
-                              
                               <div className="mt-4 mb-4 space-y-4">
                                 {log.items.map((item) => (
                                   <div key={item.id} className="p-3 rounded-lg bg-white/50 border border-primary/5 space-y-1.5">
@@ -533,7 +520,6 @@ export default function DashboardPage() {
                                           <span className="text-[10px] font-bold text-muted-foreground">g</span>
                                         </div>
                                       </div>
-                                      
                                       <div className="flex items-center gap-2 flex-shrink-0">
                                         <span className="text-[10px] font-bold text-primary shrink-0">{item.calories} kcal</span>
                                         <div className="flex items-center gap-1.5 text-[9px] font-mono">
@@ -544,20 +530,10 @@ export default function DashboardPage() {
                                         </div>
                                         <AlertDialog>
                                           <AlertDialogTrigger asChild>
-                                            <Button 
-                                              variant="ghost" 
-                                              size="icon" 
-                                              className="h-6 w-6 text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"
-                                              title="Remove item"
-                                            >
-                                              <X className="h-3 w-3" />
-                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"><X className="h-3 w-3" /></Button>
                                           </AlertDialogTrigger>
                                           <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                              <AlertDialogTitle>Remove {item.name}?</AlertDialogTitle>
-                                              <AlertDialogDescription>This ingredient will be deleted from your {log.category.toLowerCase()} record.</AlertDialogDescription>
-                                            </AlertDialogHeader>
+                                            <AlertDialogHeader><AlertDialogTitle>Remove {item.name}?</AlertDialogTitle><AlertDialogDescription>This ingredient will be deleted from your {log.category.toLowerCase()} record.</AlertDialogDescription></AlertDialogHeader>
                                             <AlertDialogFooter>
                                               <AlertDialogCancel>Cancel</AlertDialogCancel>
                                               <AlertDialogAction onClick={() => handleDeleteItem(log.id, item.id)} className="bg-primary text-primary-foreground">Remove</AlertDialogAction>
@@ -568,7 +544,6 @@ export default function DashboardPage() {
                                     </div>
                                   </div>
                                 ))}
-
                                 <div className="pt-2 flex justify-end">
                                   <Popover>
                                     <PopoverTrigger asChild>
@@ -585,25 +560,10 @@ export default function DashboardPage() {
                                         <div className="space-y-3">
                                           <div className="space-y-1">
                                             <Label htmlFor="new-item" className="text-[10px] uppercase font-bold text-muted-foreground">Ingredient Name</Label>
-                                            <Input 
-                                              id="new-item" 
-                                              placeholder="e.g., Boiled Egg, Avocado..." 
-                                              className="h-9 text-sm"
-                                              value={newItemText}
-                                              onChange={(e) => setNewItemText(e.target.value)}
-                                              onKeyDown={(e) => { if(e.key === 'Enter') handleAddItemToLog(log.id) }}
-                                            />
+                                            <Input id="new-item" placeholder="e.g., Boiled Egg, Avocado..." className="h-9 text-sm" value={newItemText} onChange={(e) => setNewItemText(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') handleAddItemToLog(log.id) }} />
                                           </div>
-                                          <Button 
-                                            className="w-full h-9 gap-2 font-bold text-xs" 
-                                            disabled={isAddingItem === log.id || !newItemText.trim()}
-                                            onClick={() => handleAddItemToLog(log.id)}
-                                          >
-                                            {isAddingItem === log.id ? (
-                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                              <Sparkles className="h-3.5 w-3.5" />
-                                            )}
+                                          <Button className="w-full h-9 gap-2 font-bold text-xs" disabled={isAddingItem === log.id || !newItemText.trim()} onClick={() => handleAddItemToLog(log.id)}>
+                                            {isAddingItem === log.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                                             {isAddingItem === log.id ? 'Analyzing...' : 'Add to Matrix'}
                                           </Button>
                                         </div>
@@ -612,14 +572,12 @@ export default function DashboardPage() {
                                   </Popover>
                                 </div>
                               </div>
-
                               {log.healthInsight && (
                                 <div className="mb-3 p-3 bg-white/40 border border-primary/5 rounded-lg flex items-start gap-2">
                                   <BrainCircuit className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                                   <p className="text-xs italic text-foreground/80">{log.healthInsight}</p>
                                 </div>
                               )}
-
                               <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] uppercase font-bold tracking-widest text-primary/70 border-t border-primary/5 pt-3">
                                 <span>TOTAL P: {log.totalNutrients.protein}g</span>
                                 <span>TOTAL C: {log.totalNutrients.carbs}g</span>
@@ -645,15 +603,14 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: Number(totalP || 0), max: 150 }, 
-                    { label: 'Carbs', val: Number(totalC || 0), max: 220 }, 
-                    { label: 'Fats', val: Number(totalF || 0), max: 65 },
-                    { label: 'Sugar', val: Number(totalS || 0), max: 50, isLimit: true }
+                    { label: 'Protein', val: totalP, max: userTargets.protein }, 
+                    { label: 'Carbs', val: totalC, max: userTargets.carbs }, 
+                    { label: 'Fats', val: totalF, max: userTargets.fat },
+                    { label: 'Sugar', val: totalS, max: userTargets.sugar, isLimit: true }
                   ].map(m => {
                     const isOver = m.val > m.max;
                     const percentage = Math.min((m.val / m.max) * 100, 100);
                     const overage = isOver ? m.val - m.max : 0;
-
                     return (
                       <div key={m.label} className="space-y-2">
                         <div className="flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
@@ -671,13 +628,7 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                          <div 
-                            className={cn(
-                              "h-full transition-all duration-500 ease-out",
-                              m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground"
-                            )} 
-                            style={{ width: `${percentage}%` }} 
-                          />
+                          <div className={cn("h-full transition-all duration-500 ease-out", m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground")} style={{ width: `${percentage}%` }} />
                         </div>
                       </div>
                     );
@@ -685,14 +636,10 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
               <Card className="bg-secondary/20 border-secondary/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground">
-                    <Info className="h-4 w-4" /> Insight
-                  </CardTitle>
-                </CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground"><Info className="h-4 w-4" /> Insight</CardTitle></CardHeader>
                 <CardContent className="text-sm text-secondary-foreground/90 leading-relaxed">
                   {filteredLogs.length === 0 ? "Log a meal to unlock analytics." : 
-                    `Metabolic tracking active. Achieving ${150 > 0 ? Math.round((totalP / 150) * 100) : 0}% of protein target.`}
+                    `Metabolic tracking active. Achieving ${userTargets.protein > 0 ? Math.round((totalP / userTargets.protein) * 100) : 0}% of protein target.`}
                 </CardContent>
               </Card>
             </aside>
@@ -711,7 +658,7 @@ export default function DashboardPage() {
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                         <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                         <Bar dataKey="calories" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                          {dynamicWeeklyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.calories > 2000 ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.7)'} />)}
+                          {dynamicWeeklyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.calories > userTargets.calories ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.7)'} />)}
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
@@ -729,36 +676,25 @@ export default function DashboardPage() {
                 <CardHeader><CardTitle className="font-headline text-xl text-primary">Biometric Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: Number(weeklyTotalProtein || 0), max: 150 }, 
-                    { label: 'Carbs', val: Number(weeklyTotalCarbs || 0), max: 220 }, 
-                    { label: 'Fats', val: Number(weeklyTotalFats || 0), max: 65 },
-                    { label: 'Sugar', val: Number(weeklyTotalSugar || 0), max: 50, isLimit: true }
+                    { label: 'Protein', val: weeklyTotalProtein, max: userTargets.protein }, 
+                    { label: 'Carbs', val: weeklyTotalCarbs, max: userTargets.carbs }, 
+                    { label: 'Fats', val: weeklyTotalFats, max: userTargets.fat },
+                    { label: 'Sugar', val: weeklyTotalSugar, max: userTargets.sugar, isLimit: true }
                   ].map(m => {
                     const totalMax = m.max * dynamicWeeklyData.length;
                     const isOver = m.val > totalMax;
                     const percentage = Math.min((m.val / totalMax) * 100, 100);
-
                     return (
                       <div key={m.label} className="space-y-2">
                         <div className="flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
                           <div className="flex items-center gap-2">
                             <span>{m.label}</span>
-                            {m.isLimit && isOver && (
-                              <Badge variant="destructive" className="h-4 text-[8px] px-1 bg-primary text-primary-foreground">
-                                Limit Over
-                              </Badge>
-                            )}
+                            {m.isLimit && isOver && <Badge variant="destructive" className="h-4 text-[8px] px-1 bg-primary text-primary-foreground">Limit Over</Badge>}
                           </div>
                           <span className="text-secondary-foreground">{m.val.toFixed(1)}g / {totalMax.toFixed(1)}g</span>
                         </div>
                         <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                          <div 
-                            className={cn(
-                              "h-full transition-all duration-500 ease-out",
-                              m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground"
-                            )} 
-                            style={{ width: `${percentage}%` }} 
-                          />
+                          <div className={cn("h-full transition-all duration-500 ease-out", m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground")} style={{ width: `${percentage}%` }} />
                         </div>
                       </div>
                     );
