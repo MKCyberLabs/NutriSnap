@@ -21,7 +21,7 @@ const CATEGORY_ICONS = {
 
 interface MealCategoryCardProps {
   category: MealCategory;
-  onAnalysisComplete: (data: MealNutritionalAnalysisOutput, category: MealCategory) => void;
+  onAnalysisComplete: (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string) => void;
   totalCalories: number;
 }
 
@@ -30,8 +30,8 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
   const isMobile = useIsMobile();
   const Icon = CATEGORY_ICONS[category];
 
-  const handleComplete = (data: MealNutritionalAnalysisOutput) => {
-    onAnalysisComplete(data, category);
+  const handleComplete = (data: MealNutritionalAnalysisOutput, mealTime: string) => {
+    onAnalysisComplete(data, category, mealTime);
     setOpen(false);
   };
 

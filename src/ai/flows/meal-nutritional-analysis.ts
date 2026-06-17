@@ -22,6 +22,10 @@ const MealNutritionalAnalysisInputSchema = z.object({
     .describe(
       "A photo of a meal, as a data URI."
     ),
+  mealTime: z
+    .string()
+    .optional()
+    .describe('The time the meal was consumed (HH:mm format).'),
 });
 export type MealNutritionalAnalysisInput = z.infer<
   typeof MealNutritionalAnalysisInputSchema

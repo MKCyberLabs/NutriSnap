@@ -56,7 +56,7 @@ import {
   Loader2,
   Sparkles
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval, parse } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
@@ -119,10 +119,10 @@ export default function DashboardPage() {
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
   };
 
-  const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory) => {
-    const now = new Date();
+  const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string) => {
+    const [hours, minutes] = mealTime.split(':').map(Number);
     const logTimestamp = new Date(selectedDate);
-    logTimestamp.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+    logTimestamp.setHours(hours, minutes, 0, 0);
 
     const newLog: MealLog = {
       id: Math.random().toString(36).substr(2, 9),

@@ -4,21 +4,24 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, FileText, Loader2, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Camera, FileText, Loader2, Sparkles, Clock } from 'lucide-react';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { MealCategory } from '@/lib/types';
-import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 interface MealAnalysisToolProps {
   category: MealCategory;
-  onAnalysisComplete: (data: MealNutritionalAnalysisOutput) => void;
+  onAnalysisComplete: (data: MealNutritionalAnalysisOutput, mealTime: string) => void;
   onCancel: () => void;
 }
 
 export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: MealAnalysisToolProps) {
   const [description, setDescription] = useState('');
   const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
+  const [mealTime, setMealTime] = useState(() => format(new Date(), 'HH:mm'));
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
 
@@ -48,8 +51,9 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
       const result = await mealNutritionalAnalysis({
         mealDescription: description,
         mealPhotoDataUri: photoDataUri || undefined,
+        mealTime: mealTime,
       });
-      onAnalysisComplete(result);
+      onAnalysisComplete(result, mealTime);
     } catch (error) {
       console.error("Health Matrix Bot Error:", error);
       toast({
@@ -66,9 +70,22 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto py-4 space-y-6">
         <div className="space-y-2">
-          <label className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
+          <Label htmlFor="meal-time" className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
+            <Clock className="h-4 w-4 text-primary" /> Time of Intake
+          </Label>
+          <Input
+            id="meal-time"
+            type="time"
+            value={mealTime}
+            onChange={(e) => setMealTime(e.target.value)}
+            className="border-primary/20 focus-visible:ring-primary rounded-xl h-10"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
             <FileText className="h-4 w-4 text-primary" /> Describe your meal
-          </label>
+          </Label>
           <Textarea 
             placeholder="E.g., Grilled chicken with quinoa and steamed broccoli..."
             value={description}
