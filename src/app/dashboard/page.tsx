@@ -68,6 +68,7 @@ function generateMockDataForRange(from: Date, to: Date) {
       protein: Math.round(baseCals * 0.08),
       carbs: Math.round(baseCals * 0.12),
       fat: Math.round(baseCals * 0.03),
+      sugar: Math.round(baseCals * 0.02),
     };
   });
 }
@@ -239,15 +240,26 @@ export default function DashboardPage() {
     return generateMockDataForRange(activeWeeklyRange.from, activeWeeklyRange.to);
   }, [activeWeeklyRange]);
 
-  const totalCaloriesForDay = filteredLogs.reduce((sum, l) => sum + Number(l.totalNutrients.calories || 0), 0);
-  const totalProtein = filteredLogs.reduce((acc, log) => acc + Number(log.totalNutrients.protein || 0), 0);
-  const totalCarbs = filteredLogs.reduce((acc, log) => acc + Number(log.totalNutrients.carbs || 0), 0);
-  const totalFats = filteredLogs.reduce((acc, log) => acc + Number(log.totalNutrients.fat || 0), 0);
+  // Robust summation logic with numeric parsing
+  const getDailyTotals = () => {
+    let totalCals = 0, totalP = 0, totalC = 0, totalF = 0, totalS = 0;
+    filteredLogs.forEach(log => {
+      totalCals += Number(log.totalNutrients.calories || 0);
+      totalP += Number(log.totalNutrients.protein || 0);
+      totalC += Number(log.totalNutrients.carbs || 0);
+      totalF += Number(log.totalNutrients.fat || 0);
+      totalS += Number(log.totalNutrients.sugar || 0);
+    });
+    return { totalCals, totalP, totalC, totalF, totalS };
+  };
+
+  const { totalCals, totalP, totalC, totalF, totalS } = getDailyTotals();
 
   const weeklyAvgCalories = Math.round(dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0) / dynamicWeeklyData.length);
   const weeklyTotalProtein = dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0);
   const weeklyTotalCarbs = dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0);
   const weeklyTotalFats = dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0);
+  const weeklyTotalSugar = dynamicWeeklyData.reduce((acc, d) => acc + d.sugar, 0);
 
   if (!isMounted) return null;
 
@@ -309,7 +321,7 @@ export default function DashboardPage() {
             <div className="p-2 bg-white/10 rounded-lg"><TrendingUp className="h-6 w-6" /></div>
             <div>
               <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest">{activeTab === 'daily' ? 'Intake' : 'Range Avg'}</p>
-              <p className="text-2xl font-bold">{activeTab === 'daily' ? totalCaloriesForDay : weeklyAvgCalories} <span className="text-sm font-normal opacity-70"> kcal</span></p>
+              <p className="text-2xl font-bold">{activeTab === 'daily' ? totalCals : weeklyAvgCalories} <span className="text-sm font-normal opacity-70"> kcal</span></p>
             </div>
           </Card>
         </header>
@@ -319,7 +331,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 space-y-6">
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as MealCategory[]).map((cat) => (
-                  <MealCategoryCard key={cat} category={cat} totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + log.totalNutrients.calories, 0)} onAnalysisComplete={handleAnalysisComplete} />
+                  <MealCategoryCard key={cat} category={cat} totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + Number(log.totalNutrients.calories || 0), 0)} onAnalysisComplete={handleAnalysisComplete} />
                 ))}
               </section>
 
@@ -401,12 +413,6 @@ export default function DashboardPage() {
                                         </Button>
                                       </div>
                                     </div>
-                                    
-                                    <div className="text-[10px] text-muted-foreground/60 ml-1 flex flex-wrap gap-3">
-                                      <span>Fiber: {item.fiber}g</span>
-                                      <span>•</span>
-                                      <span>Sat. Fat: {item.saturatedFat}g</span>
-                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -441,9 +447,10 @@ export default function DashboardPage() {
                 <CardHeader><CardTitle className="font-headline text-xl text-primary">Biometric Targets</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: Number(totalProtein || 0), max: 150 }, 
-                    { label: 'Carbs', val: Number(totalCarbs || 0), max: 220 }, 
-                    { label: 'Fats', val: Number(totalFats || 0), max: 65 } 
+                    { label: 'Protein', val: Number(totalP || 0), max: 150 }, 
+                    { label: 'Carbs', val: Number(totalC || 0), max: 220 }, 
+                    { label: 'Fats', val: Number(totalF || 0), max: 65 },
+                    { label: 'Sugar', val: Number(totalS || 0), max: 50 }
                   ].map(m => (
                     <div key={m.label} className="space-y-2">
                       <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
@@ -458,7 +465,10 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
               <Card className="bg-secondary/20 border-secondary/20"><CardHeader className="pb-2"><CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground"><Info className="h-4 w-4" /> Insight</CardTitle></CardHeader>
-                <CardContent className="text-sm text-secondary-foreground/90 leading-relaxed">{filteredLogs.length === 0 ? "Log a meal to unlock analytics." : `Metabolic tracking active. Achieving ${Math.round((Number(totalProtein) / 150) * 100)}% of protein target.`}</CardContent>
+                <CardContent className="text-sm text-secondary-foreground/90 leading-relaxed">
+                  {filteredLogs.length === 0 ? "Log a meal to unlock analytics." : 
+                    `Metabolic tracking active. Achieving ${150 > 0 ? Math.round((Number(totalP) / 150) * 100) : 0}% of protein target.`}
+                </CardContent>
               </Card>
             </aside>
           </div>
@@ -493,7 +503,12 @@ export default function DashboardPage() {
               <Card className="border-primary/10 shadow-sm bg-card">
                 <CardHeader><CardTitle className="font-headline text-xl text-primary">Biometric Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
-                  {[ { label: 'Protein', val: Number(weeklyTotalProtein || 0), max: 150 }, { label: 'Carbs', val: Number(weeklyTotalCarbs || 0), max: 220 }, { label: 'Fats', val: Number(weeklyTotalFats || 0), max: 65 } ].map(m => (
+                  {[ 
+                    { label: 'Protein', val: Number(weeklyTotalProtein || 0), max: 150 }, 
+                    { label: 'Carbs', val: Number(weeklyTotalCarbs || 0), max: 220 }, 
+                    { label: 'Fats', val: Number(weeklyTotalFats || 0), max: 65 },
+                    { label: 'Sugar', val: Number(weeklyTotalSugar || 0), max: 50 }
+                  ].map(m => (
                     <div key={m.label} className="space-y-2">
                       <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground"><span>{m.label}</span><span className="text-secondary-foreground">{m.val.toFixed(1)}g / {(m.max * dynamicWeeklyData.length).toFixed(1)}g</span></div>
                       <div className="h-2 w-full bg-secondary rounded-full overflow-hidden"><div className="h-full bg-secondary-foreground" style={{ width: `${Math.min((m.val / (m.max * dynamicWeeklyData.length)) * 100, 100)}%` }} /></div>
