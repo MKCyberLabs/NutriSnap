@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -44,16 +43,16 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
   );
 
   return (
-    <Card className="overflow-hidden group hover:border-primary/40 transition-all duration-300 shadow-sm hover:shadow-md bg-card border-primary/10 border-[0.5px]">
+    <Card className="glass-card border-white/60 rounded-3xl overflow-hidden group hover:scale-[1.02]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-secondary text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300">
-              <Icon className="h-5 w-5" />
+          <div className="flex items-center gap-4">
+            <div className="p-2.5 rounded-2xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300 shadow-sm">
+              <Icon className="h-6 w-6" />
             </div>
             <div>
-              <CardTitle className="text-lg font-headline">{category}</CardTitle>
-              <p className="text-xs text-muted-foreground font-body">Nutritional Slot</p>
+              <CardTitle className="text-xl font-bold">{category}</CardTitle>
+              <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Nutrition Slot</p>
             </div>
           </div>
 
@@ -63,16 +62,16 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-8 w-8"
+                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="bottom" className="h-[90svh] sm:h-auto rounded-t-[2.5rem] border-t-0 p-6 flex flex-col bg-background">
-                <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-6" />
-                <SheetHeader className="mb-2">
-                  <SheetTitle className="text-2xl font-headline font-bold text-primary text-left">
-                    Log your {category}
+              <SheetContent side="bottom" className="h-[90svh] rounded-t-[3rem] border-none glass-card p-8 flex flex-col">
+                <div className="w-12 h-1.5 bg-foreground/10 rounded-full mx-auto mb-8" />
+                <SheetHeader className="mb-4">
+                  <SheetTitle className="text-3xl font-bold text-primary text-left">
+                    Log {category}
                   </SheetTitle>
                 </SheetHeader>
                 <div className="flex-1 overflow-hidden">
@@ -86,15 +85,15 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-8 w-8"
+                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px] rounded-3xl p-8">
-                <DialogHeader className="mb-4">
-                  <DialogTitle className="text-2xl font-headline font-bold text-primary">
-                    Log your {category}
+              <DialogContent className="sm:max-w-[500px] glass-card border-none rounded-[2.5rem] p-10">
+                <DialogHeader className="mb-6">
+                  <DialogTitle className="text-3xl font-bold text-primary">
+                    Log {category}
                   </DialogTitle>
                 </DialogHeader>
                 {FormContent}
@@ -104,13 +103,13 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex items-baseline gap-1">
-          <span className="text-3xl font-bold text-primary">{totalCalories}</span>
-          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">kcal</span>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-4xl font-bold text-primary">{totalCalories}</span>
+          <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest">kcal</span>
         </div>
-        <div className="mt-4 w-full bg-secondary rounded-full h-1.5 overflow-hidden">
+        <div className="mt-5 w-full bg-black/5 dark:bg-white/5 rounded-full h-2 overflow-hidden">
           <div 
-            className="bg-primary h-full transition-all duration-500 ease-out" 
+            className="bg-primary h-full transition-all duration-700 ease-out shadow-[0_0_10px_rgba(var(--primary),0.3)]" 
             style={{ width: `${Math.min((totalCalories / 600) * 100, 100)}%` }}
           />
         </div>

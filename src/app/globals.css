@@ -3,51 +3,49 @@
 @tailwind utilities;
 
 @layer base {
-  /* Day Mode (Light, soft lotus petal theme) */
   :root {
-    --background: 345 40% 98%;      /* Softest whisper-pink lotus leaf background (#FDF8F9) */
-    --foreground: 345 60% 12%;      /* Deep dark berry-charcoal for crisp text readability */
-    --card: 0 0% 100%;              /* Crisp white cards for visual separation */
+    --background: 0 0% 100%;
+    --foreground: 345 60% 12%;
+    --card: 0 0% 100%;
     --card-foreground: 345 60% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 345 60% 12%;
     
-    --primary: 345 65% 52%;         /* Rich, vibrant Lotus Blossom Pink (#DF4B72) - Main actions & buttons */
-    --primary-foreground: 0 0% 100%;/* Clean white text on primary actions */
+    --primary: 345 65% 52%;
+    --primary-foreground: 0 0% 100%;
     
-    --secondary: 145 35% 92%;       /* Soft Leaf Green background (#E1F2E8) - For sub-navigation & badges */
-    --secondary-foreground: 150 50% 22%; /* Deep forest green text for high-contrast secondary elements */
+    --secondary: 145 35% 92%;
+    --secondary-foreground: 150 50% 22%;
     
-    --muted: 345 20% 94%;           /* Pale pink-tinted grey for muted areas */
-    --muted-foreground: 345 15% 45%;/* Soft contrast label text */
+    --muted: 345 20% 94%;
+    --muted-foreground: 345 15% 45%;
     --accent: 145 35% 92%;
     --accent-foreground: 150 50% 22%;
-    --border: 345 20% 90%;          /* Delicate soft pink-grey borders */
-    --input: 345 20% 90%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
     --ring: 345 65% 52%;
-    --radius: 0.75rem;
+    --radius: 1.25rem;
   }
 
-  /* Night Mode (Dark, rich midnight-plum theme) */
   .dark {
-    --background: 345 35% 7%;       /* Deep, luxury nocturnal plum-black (#160B0E) */
-    --foreground: 345 25% 95%;      /* Pale, glowing rose-white text */
-    --card: 345 30% 11%;            /* Velvet plum cards (#251318) */
+    --background: 345 35% 7%;
+    --foreground: 345 25% 95%;
+    --card: 345 30% 11%;
     --card-foreground: 345 25% 95%;
     --popover: 345 30% 11%;
     --popover-foreground: 345 25% 95%;
     
-    --primary: 345 75% 64%;         /* Brilliant glowing Lotus Pink (#EC5C84) */
-    --primary-foreground: 345 35% 7%;/* Deep dark text inside glowing primary containers */
+    --primary: 345 75% 64%;
+    --primary-foreground: 345 35% 7%;
     
-    --secondary: 150 30% 15%;       /* Deep, atmospheric pine green for dark mode accents */
-    --secondary-foreground: 145 40% 85%; /* Soft mint green text */
+    --secondary: 150 30% 15%;
+    --secondary-foreground: 145 40% 85%;
     
     --muted: 345 25% 14%;
     --muted-foreground: 345 15% 65%;
     --accent: 345 25% 14%;
     --accent-foreground: 345 25% 95%;
-    --border: 345 20% 18%;          /* Deep structural borders */
+    --border: 345 20% 18%;
     --input: 345 20% 18%;
     --ring: 345 75% 64%;
   }
@@ -58,9 +56,19 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-body;
+    @apply bg-background text-foreground font-body antialiased;
   }
   h1, h2, h3, h4, h5, h6 {
-    @apply font-headline;
+    @apply font-body font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-sm transition-all duration-300;
+  }
+  
+  .glass-nav {
+    @apply bg-white/50 dark:bg-black/50 backdrop-blur-lg border-b border-white/40 dark:border-white/10;
   }
 }

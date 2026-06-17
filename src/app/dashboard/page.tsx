@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -139,15 +138,7 @@ export default function DashboardPage() {
     const savedLogs = localStorage.getItem('nutrisnap_logs');
     if (savedLogs) {
       try {
-        const parsed = JSON.parse(savedLogs);
-        // Data Sanitizer: Clean up relative paths if needed
-        const cleanedLogs = parsed.map((log: any) => {
-          if (log.imagePath && !log.imagePath.startsWith('/') && !log.imagePath.startsWith('http') && !log.imagePath.startsWith('data:')) {
-            return { ...log, imagePath: undefined };
-          }
-          return log;
-        });
-        setLogs(cleanedLogs);
+        setLogs(JSON.parse(savedLogs));
       } catch (e) {
         setLogs([]);
       }
@@ -163,7 +154,7 @@ export default function DashboardPage() {
 
   const handleMealCardComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const logTimestamp = new Date(selectedDate);
-    if (mealTime && typeof mealTime === 'string' && mealTime.includes(':')) {
+    if (mealTime && mealTime.includes(':')) {
       const [hours, minutes] = mealTime.split(':').map(Number);
       if (!isNaN(hours) && !isNaN(minutes)) {
         logTimestamp.setHours(hours, minutes, 0, 0);
@@ -171,7 +162,6 @@ export default function DashboardPage() {
     }
 
     const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
-    const validImagePath = imagePath && (imagePath.startsWith('/') || imagePath.startsWith('http') || imagePath.startsWith('data:')) ? imagePath : undefined;
 
     const newLog: MealLog = {
       id: Math.random().toString(36).substr(2, 9),
@@ -191,7 +181,7 @@ export default function DashboardPage() {
         sugar: Number(data.sugar || 0),
       },
       healthInsight: data.healthInsight,
-      imagePath: validImagePath
+      imagePath: imagePath
     };
 
     saveLogsToStorage([newLog, ...logs]);
@@ -213,76 +203,27 @@ export default function DashboardPage() {
         const totalProtein = combinedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
         const totalCarbs = combinedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
         const totalFat = combinedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-        const totalFiber = combinedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-        const totalSaturatedFat = combinedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-        const totalSugar = combinedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
 
         return {
           ...log,
           items: combinedItems,
           totalNutrients: {
+            ...log.totalNutrients,
             calories: totalCalories,
             protein: Number(totalProtein.toFixed(1)),
             carbs: Number(totalCarbs.toFixed(1)),
             fat: Number(totalFat.toFixed(1)),
-            fiber: Number(totalFiber.toFixed(1)),
-            saturatedFat: Number(totalSaturatedFat.toFixed(1)),
-            sugar: Number(totalSugar.toFixed(1)),
           }
         };
       });
       saveLogsToStorage(updatedLogs);
       setNewItemText('');
-      toast({ title: "Item Added", description: "The food item was successfully added to your log." });
+      toast({ title: "Item Added", description: "Successfully updated your meal record." });
     } catch (error) {
-      toast({ variant: "destructive", title: "Add failed", description: "Could not analyze and add item." });
+      toast({ variant: "destructive", title: "Update failed", description: "Could not analyze item." });
     } finally {
       setIsAddingItem(null);
     }
-  };
-
-  const handleUpdateGrams = (logId: string, itemId: string, newGrams: number) => {
-    if (isNaN(newGrams) || newGrams < 0) return;
-    const updatedLogs = logs.map(log => {
-      if (log.id !== logId) return log;
-      const updatedItems = log.items.map(item => {
-        if (item.id !== itemId) return item;
-        const ratio = newGrams / item.grams;
-        return {
-          ...item,
-          grams: newGrams,
-          calories: Math.round(item.calories * ratio),
-          protein: Number((item.protein * ratio).toFixed(1)),
-          carbs: Number((item.carbs * ratio).toFixed(1)),
-          fat: Number((item.fat * ratio).toFixed(1)),
-          fiber: Number(((item.fiber || 0) * ratio).toFixed(1)),
-          saturatedFat: Number(((item.saturatedFat || 0) * ratio).toFixed(1)),
-          sugar: Number(((item.sugar || 0) * ratio).toFixed(1)),
-        };
-      });
-      const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
-      const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
-      const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
-      const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
-
-      return {
-        ...log,
-        items: updatedItems,
-        totalNutrients: {
-          calories: totalCalories,
-          protein: Number(totalProtein.toFixed(1)),
-          carbs: Number(totalCarbs.toFixed(1)),
-          fat: Number(totalFat.toFixed(1)),
-          fiber: Number(totalFiber.toFixed(1)),
-          saturatedFat: Number(totalSaturatedFat.toFixed(1)),
-          sugar: Number(totalSugar.toFixed(1)),
-        }
-      };
-    });
-    saveLogsToStorage(updatedLogs);
   };
 
   const handleDeleteItem = (logId: string, itemId: string) => {
@@ -293,32 +234,25 @@ export default function DashboardPage() {
       const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
       const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
       const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
 
       return {
         ...log,
         items: updatedItems,
         totalNutrients: {
+          ...log.totalNutrients,
           calories: totalCalories,
           protein: Number(totalProtein.toFixed(1)),
           carbs: Number(totalCarbs.toFixed(1)),
           fat: Number(totalFat.toFixed(1)),
-          fiber: Number(totalFiber.toFixed(1)),
-          saturatedFat: Number(totalSaturatedFat.toFixed(1)),
-          sugar: Number(totalSugar.toFixed(1)),
         }
       };
     });
     saveLogsToStorage(updatedLogs);
-    toast({ title: "Item Removed", description: "Food item has been removed from the log." });
   };
 
   const handleDeleteLog = (logId: string) => {
-    const updatedLogs = logs.filter(l => l.id !== logId);
-    saveLogsToStorage(updatedLogs);
-    toast({ title: "Log Removed", description: "The meal record has been deleted." });
+    saveLogsToStorage(logs.filter(l => l.id !== logId));
+    toast({ title: "Log Removed", description: "The record has been deleted." });
   };
 
   const filteredLogs = useMemo(() => {
@@ -351,68 +285,56 @@ export default function DashboardPage() {
   const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
 
   const weeklyAvgCalories = Math.round(dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0) / dynamicWeeklyData.length);
-  const weeklyTotalProtein = dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0);
-  const weeklyTotalCarbs = dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0);
-  const weeklyTotalFats = dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0);
-  const weeklyTotalSugar = dynamicWeeklyData.reduce((acc, d) => acc + d.sugar, 0);
 
   if (!isMounted) return null;
 
   return (
-    <div className="min-h-svh bg-background">
+    <div className="min-h-svh bg-gradient-to-br from-rose-50 via-slate-100 to-emerald-50 dark:from-slate-950 dark:via-rose-950/20 dark:to-emerald-950/20">
       <Navbar />
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
+      <main className="container mx-auto px-4 py-8 max-w-7xl relative z-10">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
           <div className="space-y-4">
             <div>
-              <h1 className="text-4xl font-headline font-bold text-primary">Wellness Hub</h1>
+              <h1 className="text-4xl font-bold tracking-tight text-foreground">Wellness Hub</h1>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
-                  <TabsList className="bg-secondary/50 p-1">
-                    <TabsTrigger value="daily" className="data-[state=active]:bg-background data-[state=active]:text-primary">Daily Tracker</TabsTrigger>
-                    <TabsTrigger value="weekly" className="data-[state=active]:bg-background data-[state=active]:text-primary">Weekly Summary</TabsTrigger>
+                  <TabsList className="bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/60 dark:border-white/10 p-1 rounded-xl">
+                    <TabsTrigger value="daily" className="data-[state=active]:bg-white/80 dark:data-[state=active]:bg-white/20 rounded-lg">Daily</TabsTrigger>
+                    <TabsTrigger value="weekly" className="data-[state=active]:bg-white/80 dark:data-[state=active]:bg-white/20 rounded-lg">Weekly</TabsTrigger>
                   </TabsList>
                 </Tabs>
                 {activeTab === 'daily' ? (
                   <div className="flex items-center gap-2">
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="justify-start text-left font-normal border-primary/20 hover:bg-secondary min-w-[200px]">
+                        <Button variant="outline" className="glass-card justify-start text-left font-normal min-w-[200px] rounded-xl border-white/60">
                           <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
-                          {format(selectedDate, 'EEEE, MMMM do')}
+                          {format(selectedDate, 'EEEE, MMM do')}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
+                      <PopoverContent className="w-auto p-0 rounded-2xl border-none shadow-2xl" align="start">
                         <Calendar mode="single" selected={selectedDate} onSelect={(date) => date && setSelectedDate(date)} initialFocus />
                       </PopoverContent>
                     </Popover>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-9 w-9 text-primary" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 text-primary" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-2 bg-secondary/30 p-1 rounded-lg border border-primary/10">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setWeeklyPivotDate(subDays(weeklyPivotDate, 7))}><ChevronLeft className="h-4 w-4" /></Button>
-                      <span className="text-xs font-bold text-primary/80 px-2 min-w-[160px] text-center">{format(activeWeeklyRange.from, 'MMM d')} - {format(activeWeeklyRange.to, 'MMM d, yyyy')}</span>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setWeeklyPivotDate(addDays(weeklyPivotDate, 7))}><ChevronRight className="h-4 w-4" /></Button>
+                    <div className="glass-card flex items-center gap-2 p-1 rounded-xl border-white/60">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeeklyPivotDate(subDays(weeklyPivotDate, 7))}><ChevronLeft className="h-4 w-4" /></Button>
+                      <span className="text-xs font-bold px-2 min-w-[140px] text-center">{format(activeWeeklyRange.from, 'MMM d')} - {format(activeWeeklyRange.to, 'MMM d')}</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWeeklyPivotDate(addDays(weeklyPivotDate, 7))}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="border-primary/20 hover:bg-secondary gap-2"><Filter className="h-3.5 w-3.5" />Custom Range</Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="end">
-                        <Calendar mode="range" selected={customRange} onSelect={setCustomRange} numberOfMonths={2} />
-                      </PopoverContent>
-                    </Popover>
                   </div>
                 )}
               </div>
             </div>
           </div>
-          <Card className="bg-primary text-primary-foreground border-none shadow-lg px-6 py-4 flex items-center gap-4">
-            <div className="p-2 bg-white/10 rounded-lg"><TrendingUp className="h-6 w-6" /></div>
+          <Card className="glass-card bg-primary text-primary-foreground border-none px-6 py-4 flex items-center gap-4 rounded-2xl">
+            <div className="p-2 bg-white/20 rounded-xl"><TrendingUp className="h-6 w-6" /></div>
             <div>
               <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest">{activeTab === 'daily' ? 'Intake' : 'Range Avg'}</p>
               <p className="text-2xl font-bold">{activeTab === 'daily' ? totalCals : weeklyAvgCalories} <span className="text-sm font-normal opacity-70"> kcal</span></p>
@@ -429,135 +351,103 @@ export default function DashboardPage() {
                 ))}
               </section>
 
-              <Card className="border-primary/10 shadow-sm bg-card">
+              <Card className="glass-card border-white/60 rounded-3xl overflow-hidden">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div>
-                    <CardTitle className="font-headline text-2xl flex items-center gap-2 text-primary"><History className="h-5 w-5" /> Daily Activity</CardTitle>
-                    <CardDescription>{isSameDay(selectedDate, new Date()) ? 'Real-time intake' : `Nutritional history for ${format(selectedDate, 'MMM do')}`}</CardDescription>
+                    <CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground"><History className="h-5 w-5 text-primary" /> Daily Activity</CardTitle>
+                    <CardDescription>Visual timeline of your metabolic intake.</CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[600px] pr-4">
                     {filteredLogs.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border border-dashed border-primary/20 rounded-xl bg-muted/30">
-                        <p className="font-medium">No activity recorded yet.</p>
+                      <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed border-white/40 rounded-3xl bg-white/20">
+                        <p className="font-medium">No activity recorded for this day.</p>
                       </div>
                     ) : (
                       <div className="space-y-4">
                         {filteredLogs.map((log) => (
-                          <div key={log.id} className="relative pl-6 border-l-2 border-secondary pb-4 last:pb-0">
+                          <div key={log.id} className="relative pl-6 border-l-2 border-primary/20 pb-4 last:pb-0">
                             <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background" />
-                            <div className="bg-secondary/30 rounded-xl p-4 border border-primary/5">
-                              <div className="flex justify-between items-center mb-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary" className="bg-primary/10 text-primary h-5 px-1.5 text-[10px] font-bold">{log.category}</Badge>
-                                  <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
-                                </div>
+                            <div className="glass-card rounded-2xl p-5 border-white/60">
+                              <div className="flex justify-between items-center mb-4">
                                 <div className="flex items-center gap-3">
-                                  {/* Meal Identity Container (Photo or Icon Placeholder) */}
-                                  <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-primary/10 bg-white/60 shrink-0 flex items-center justify-center shadow-sm">
-                                    {/* Fallback Icon Layer (Always present behind potential image) */}
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      {log.category === 'Breakfast' && <Coffee className="w-6 h-6 text-muted-foreground/40" />}
-                                      {(log.category === 'Lunch' || log.category === 'Dinner') && <Utensils className="w-6 h-6 text-muted-foreground/40" />}
-                                      {log.category === 'Snacks' && <Apple className="w-6 h-6 text-muted-foreground/40" />}
+                                  <Badge variant="secondary" className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold">{log.category}</Badge>
+                                  <span className="text-xs text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/40 bg-white/40 shadow-sm flex items-center justify-center">
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-30">
+                                      {log.category === 'Breakfast' && <Coffee className="w-6 h-6" />}
+                                      {(log.category === 'Lunch' || log.category === 'Dinner') && <Utensils className="w-6 h-6" />}
+                                      {log.category === 'Snacks' && <Apple className="w-6 h-6" />}
                                     </div>
-
                                     {log.imagePath && (
                                       <Dialog>
                                         <DialogTrigger asChild>
-                                          <div className="absolute inset-0 z-10 w-full h-full cursor-pointer hover:opacity-90 transition-opacity">
+                                          <div className="absolute inset-0 z-10 cursor-pointer hover:scale-105 transition-transform">
                                             <img src={log.imagePath} alt={log.category} className="w-full h-full object-cover" />
                                           </div>
                                         </DialogTrigger>
-                                        <DialogContent className="sm:max-w-[600px] border-primary/20 bg-background rounded-3xl p-6">
-                                          <DialogHeader><DialogTitle className="text-2xl font-headline font-bold text-primary">{log.category} Photo</DialogTitle></DialogHeader>
-                                          <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-secondary/10 flex items-center justify-center">
+                                        <DialogContent className="sm:max-w-[600px] glass-card border-none rounded-3xl overflow-hidden">
+                                          <DialogHeader><DialogTitle className="text-2xl font-bold">{log.category} Details</DialogTitle></DialogHeader>
+                                          <div className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-black/5 flex items-center justify-center">
                                             <img src={log.imagePath} alt={log.category} className="max-w-full max-h-full object-contain" />
                                           </div>
-                                          <div className="mt-4 text-center text-sm font-medium text-muted-foreground">Logged at {format(new Date(log.timestamp), 'h:mm a')}</div>
                                         </DialogContent>
                                       </Dialog>
                                     )}
                                   </div>
-                                  
-                                  <span className="font-bold text-primary text-sm">{log.totalNutrients.calories} kcal</span>
+                                  <div className="text-right">
+                                    <span className="font-bold text-lg text-primary">{log.totalNutrients.calories}</span>
+                                    <span className="text-[10px] ml-1 text-muted-foreground font-bold uppercase">kcal</span>
+                                  </div>
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground/60 hover:text-primary"><Trash2 className="h-3.5 w-3.5" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"><Trash2 className="h-4 w-4" /></Button>
                                     </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader><AlertDialogTitle>Delete entry?</AlertDialogTitle><AlertDialogDescription>Permanently remove this {log.category.toLowerCase()} log.</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogContent className="glass-card rounded-3xl border-none">
+                                      <AlertDialogHeader><AlertDialogTitle>Delete entry?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
                                       <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteLog(log.id)} className="bg-primary text-primary-foreground">Delete</AlertDialogAction>
+                                        <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDeleteLog(log.id)} className="bg-primary text-primary-foreground rounded-xl">Delete</AlertDialogAction>
                                       </AlertDialogFooter>
                                     </AlertDialogContent>
                                   </AlertDialog>
                                 </div>
                               </div>
-                              <div className="mt-4 mb-4 space-y-4">
+                              <div className="space-y-3">
                                 {log.items.map((item) => (
-                                  <div key={item.id} className="p-3 rounded-lg bg-white/50 border border-primary/5 space-y-1.5">
-                                    <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-4">
-                                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <span className="text-sm font-bold text-foreground/90 truncate">{item.name}</span>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                          <Input 
-                                            type="number" 
-                                            className="w-14 h-6 text-[10px] text-center p-0 border-primary/10 focus:ring-primary/20 bg-background"
-                                            defaultValue={item.grams}
-                                            onBlur={(e) => handleUpdateGrams(log.id, item.id, parseInt(e.target.value))}
-                                            onKeyDown={(e) => { if(e.key === 'Enter') handleUpdateGrams(log.id, item.id, parseInt((e.target as HTMLInputElement).value)) }}
-                                          />
-                                          <span className="text-[10px] font-bold text-muted-foreground">g</span>
-                                        </div>
+                                  <div key={item.id} className="p-3 rounded-xl bg-white/30 dark:bg-black/20 border border-white/40 flex items-center justify-between group">
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-bold text-foreground">{item.name}</span>
+                                      <span className="text-[10px] text-muted-foreground font-medium">{item.grams}g • {item.calories} kcal</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex gap-1.5">
+                                        <Badge variant="outline" className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md">P: {item.protein}g</Badge>
+                                        <Badge variant="outline" className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md">C: {item.carbs}g</Badge>
+                                        <Badge variant="outline" className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md">F: {item.fat}g</Badge>
                                       </div>
-                                      <div className="flex items-center gap-2 flex-shrink-0">
-                                        <span className="text-[10px] font-bold text-primary shrink-0">{item.calories} kcal</span>
-                                        <div className="flex items-center gap-1.5 text-[9px] font-mono">
-                                          <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold border border-emerald-100 dark:border-emerald-800">P: {item.protein}g</span>
-                                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-bold border border-amber-100 dark:border-amber-800">C: {item.carbs}g</span>
-                                          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-bold border border-blue-100 dark:border-blue-800">F: {item.fat}g</span>
-                                          <span className="px-1.5 py-0.5 rounded bg-secondary/40 text-secondary-foreground font-bold border border-secondary/20">S: {item.sugar}g</span>
-                                        </div>
-                                        <AlertDialog>
-                                          <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"><X className="h-3 w-3" /></Button>
-                                          </AlertDialogTrigger>
-                                          <AlertDialogContent>
-                                            <AlertDialogHeader><AlertDialogTitle>Remove {item.name}?</AlertDialogTitle><AlertDialogDescription>This ingredient will be deleted from your {log.category.toLowerCase()} record.</AlertDialogDescription></AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                              <AlertDialogAction onClick={() => handleDeleteItem(log.id, item.id)} className="bg-primary text-primary-foreground">Remove</AlertDialogAction>
-                                            </AlertDialogFooter>
-                                          </AlertDialogContent>
-                                        </AlertDialog>
-                                      </div>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteItem(log.id, item.id)}><X className="h-3 w-3" /></Button>
                                     </div>
                                   </div>
                                 ))}
                                 <div className="pt-2 flex justify-end">
                                   <Popover>
                                     <PopoverTrigger asChild>
-                                      <Button variant="outline" size="sm" className="h-8 text-[10px] gap-2 border-primary/20 hover:bg-primary/5 font-bold uppercase tracking-tighter rounded-lg">
-                                        <Plus className="h-3 w-3" /> Add Item
+                                      <Button variant="ghost" size="sm" className="h-8 text-[10px] gap-2 font-bold uppercase tracking-wider text-primary hover:bg-primary/5 rounded-lg">
+                                        <Plus className="h-3.5 w-3.5" /> Append Item
                                       </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-80 p-4 rounded-xl" align="end">
+                                    <PopoverContent className="glass-card w-80 p-5 rounded-2xl border-none shadow-2xl" align="end">
                                       <div className="space-y-4">
-                                        <div className="space-y-1">
-                                          <h4 className="font-headline font-bold text-sm text-primary">Add Item to {log.category}</h4>
-                                          <p className="text-[10px] text-muted-foreground">Type a single ingredient to append.</p>
-                                        </div>
+                                        <h4 className="font-bold text-sm text-foreground">Add to {log.category}</h4>
                                         <div className="space-y-3">
-                                          <div className="space-y-1">
-                                            <Label htmlFor="new-item" className="text-[10px] uppercase font-bold text-muted-foreground">Ingredient Name</Label>
-                                            <Input id="new-item" placeholder="e.g., Boiled Egg, Avocado..." className="h-9 text-sm" value={newItemText} onChange={(e) => setNewItemText(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') handleAddItemToLog(log.id) }} />
-                                          </div>
-                                          <Button className="w-full h-9 gap-2 font-bold text-xs" disabled={isAddingItem === log.id || !newItemText.trim()} onClick={() => handleAddItemToLog(log.id)}>
-                                            {isAddingItem === log.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                                            {isAddingItem === log.id ? 'Analyzing...' : 'Add to Matrix'}
+                                          <Input placeholder="e.g., 2 Large Eggs" className="h-10 text-sm bg-white/20 border-white/40 rounded-xl" value={newItemText} onChange={(e) => setNewItemText(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') handleAddItemToLog(log.id) }} />
+                                          <Button className="w-full h-10 gap-2 font-bold rounded-xl" disabled={isAddingItem === log.id || !newItemText.trim()} onClick={() => handleAddItemToLog(log.id)}>
+                                            {isAddingItem === log.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                                            {isAddingItem === log.id ? 'Analyzing...' : 'Add Item'}
                                           </Button>
                                         </div>
                                       </div>
@@ -566,19 +456,11 @@ export default function DashboardPage() {
                                 </div>
                               </div>
                               {log.healthInsight && (
-                                <div className="mb-3 p-3 bg-white/40 border border-primary/5 rounded-lg flex items-start gap-2">
-                                  <BrainCircuit className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                                  <p className="text-xs italic text-foreground/80">{log.healthInsight}</p>
+                                <div className="mt-4 p-4 bg-white/30 dark:bg-black/10 border border-white/40 rounded-2xl flex items-start gap-3">
+                                  <BrainCircuit className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                  <p className="text-xs italic leading-relaxed text-foreground/80">{log.healthInsight}</p>
                                 </div>
                               )}
-                              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] uppercase font-bold tracking-widest text-primary/70 border-t border-primary/5 pt-3">
-                                <span>TOTAL P: {log.totalNutrients.protein}g</span>
-                                <span>TOTAL C: {log.totalNutrients.carbs}g</span>
-                                <span>TOTAL F: {log.totalNutrients.fat}g</span>
-                                <span>TOTAL FIBER: {log.totalNutrients.fiber}g</span>
-                                <span>TOTAL SAT. FAT: {log.totalNutrients.saturatedFat}g</span>
-                                <span>TOTAL SUGAR: {log.totalNutrients.sugar}g</span>
-                              </div>
                             </div>
                           </div>
                         ))}
@@ -590,9 +472,9 @@ export default function DashboardPage() {
             </div>
 
             <aside className="space-y-6">
-              <Card className="border-primary/10 shadow-sm bg-card">
+              <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader>
-                  <CardTitle className="font-headline text-xl text-primary">Biometric Targets</CardTitle>
+                  <CardTitle className="text-xl font-bold text-foreground">Biometric Targets</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
@@ -603,36 +485,30 @@ export default function DashboardPage() {
                   ].map(m => {
                     const isOver = m.val > m.max;
                     const percentage = Math.min((m.val / m.max) * 100, 100);
-                    const overage = isOver ? m.val - m.max : 0;
                     return (
                       <div key={m.label} className="space-y-2">
-                        <div className="flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
+                        <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           <div className="flex items-center gap-2">
                             <span>{m.label}</span>
-                            {m.isLimit && isOver && (
-                              <Badge variant="destructive" className="h-4 text-[8px] px-1 bg-primary text-primary-foreground animate-pulse">
-                                <AlertCircle className="h-2.5 w-2.5 mr-0.5" /> Limit Exceeded
-                              </Badge>
-                            )}
+                            {m.isLimit && isOver && <Badge variant="destructive" className="h-4 text-[8px] px-1 animate-pulse">Limit Reached</Badge>}
                           </div>
-                          <span className={cn("text-primary", isOver && !m.isLimit && "text-emerald-600 dark:text-emerald-400")}>
-                            {m.val.toFixed(1)}g / {m.max}g
-                            {isOver && !m.isLimit && <span className="ml-1 text-[8px]">(+{overage.toFixed(1)}g)</span>}
+                          <span className={cn("text-foreground", isOver && !m.isLimit && "text-emerald-500 font-bold")}>
+                            {m.val.toFixed(0)}g / {m.max}g
                           </span>
                         </div>
-                        <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                          <div className={cn("h-full transition-all duration-500 ease-out", m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground")} style={{ width: `${percentage}%` }} />
+                        <div className="h-2.5 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
+                          <div className={cn("h-full transition-all duration-700 ease-out", m.isLimit && isOver ? "bg-primary" : "bg-primary/80")} style={{ width: `${percentage}%` }} />
                         </div>
                       </div>
                     );
                   })}
                 </CardContent>
               </Card>
-              <Card className="bg-secondary/20 border-secondary/20">
-                <CardHeader className="pb-2"><CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground"><Info className="h-4 w-4" /> Insight</CardTitle></CardHeader>
-                <CardContent className="text-sm text-secondary-foreground/90 leading-relaxed">
-                  {filteredLogs.length === 0 ? "Log a meal to unlock analytics." : 
-                    `Metabolic tracking active. Achieving ${userTargets.protein > 0 ? Math.round((totalP / userTargets.protein) * 100) : 0}% of protein target.`}
+              <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30">
+                <CardHeader className="pb-2"><CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground"><Info className="h-4 w-4 text-primary" /> Daily Insight</CardTitle></CardHeader>
+                <CardContent className="text-sm leading-relaxed text-foreground/80">
+                  {filteredLogs.length === 0 ? "Log your first meal to generate metabolic insights." : 
+                    `Precision tracking active. You have achieved ${Math.round((totalP / userTargets.protein) * 100)}% of your daily protein target.`}
                 </CardContent>
               </Card>
             </aside>
@@ -640,18 +516,18 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
-              <Card className="border-primary/10 shadow-sm bg-card">
-                <CardHeader><CardTitle className="font-headline text-2xl flex items-center gap-2 text-primary"><BarChart3 className="h-5 w-5" /> Calorie Trends</CardTitle></CardHeader>
+              <Card className="glass-card border-white/60 rounded-3xl">
+                <CardHeader><CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground"><BarChart3 className="h-5 w-5 text-primary" /> Calorie Trends</CardTitle></CardHeader>
                 <CardContent className="pt-6">
                   <ChartContainer config={{ calories: { label: "Calories", color: "hsl(var(--primary))" } }} className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={dynamicWeeklyData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted-foreground))" opacity={0.1} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.1)" />
                         <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                         <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                        <Bar dataKey="calories" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                          {dynamicWeeklyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.calories > userTargets.calories ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.7)'} />)}
+                        <Bar dataKey="calories" radius={[8, 8, 8, 8]} maxBarSize={32}>
+                          {dynamicWeeklyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.calories > userTargets.calories ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.6)'} />)}
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
@@ -659,43 +535,37 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[ { icon: Flame, val: weeklyAvgCalories, label: 'Avg Daily Kcal' }, { icon: BarChart3, val: Math.max(...dynamicWeeklyData.map(d => d.calories)), label: 'Peak Day Kcal' }, { icon: History, val: `${dynamicWeeklyData.length} / ${dynamicWeeklyData.length}`, label: 'Days Tracked' } ].map((s, i) => (
-                  <Card key={i} className="bg-secondary/30 border-primary/5"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-primary">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold">{s.label}</p></CardContent></Card>
+                {[ { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, { icon: BarChart3, val: Math.max(...dynamicWeeklyData.map(d => d.calories)), label: 'Peak Day' }, { icon: History, val: dynamicWeeklyData.length, label: 'Tracked Days' } ].map((s, i) => (
+                  <Card key={i} className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>
                 ))}
               </div>
             </div>
             <aside className="space-y-6">
-              <Card className="border-primary/10 shadow-sm bg-card">
-                <CardHeader><CardTitle className="font-headline text-xl text-primary">Biometric Progress</CardTitle></CardHeader>
+              <Card className="glass-card border-white/60 rounded-3xl">
+                <CardHeader><CardTitle className="text-xl font-bold text-foreground">Weekly Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: weeklyTotalProtein, max: userTargets.protein }, 
-                    { label: 'Carbs', val: weeklyTotalCarbs, max: userTargets.carbs }, 
-                    { label: 'Fats', val: weeklyTotalFats, max: userTargets.fat },
-                    { label: 'Sugar', val: weeklyTotalSugar, max: userTargets.sugar, isLimit: true }
+                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * dynamicWeeklyData.length }, 
+                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * dynamicWeeklyData.length }, 
+                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * dynamicWeeklyData.length }
                   ].map(m => {
-                    const totalMax = m.max * dynamicWeeklyData.length;
-                    const isOver = m.val > totalMax;
-                    const percentage = Math.min((m.val / totalMax) * 100, 100);
+                    const percentage = Math.min((m.val / m.max) * 100, 100);
                     return (
                       <div key={m.label} className="space-y-2">
-                        <div className="flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
-                          <div className="flex items-center gap-2">
-                            <span>{m.label}</span>
-                            {m.isLimit && isOver && <Badge variant="destructive" className="h-4 text-[8px] px-1 bg-primary text-primary-foreground">Limit Over</Badge>}
-                          </div>
-                          <span className="text-secondary-foreground">{m.val.toFixed(1)}g / {totalMax.toFixed(1)}g</span>
+                        <div className="flex justify-between items-center text-[10px] font-bold uppercase text-muted-foreground">
+                          <span>{m.label}</span>
+                          <span className="text-foreground">{m.val.toFixed(0)}g / {m.max.toFixed(0)}g</span>
                         </div>
-                        <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                          <div className={cn("h-full transition-all duration-500 ease-out", m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground")} style={{ width: `${percentage}%` }} />
+                        <div className="h-2.5 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary/80 transition-all duration-700 ease-out" style={{ width: `${percentage}%` }} />
                         </div>
                       </div>
                     );
                   })}
                 </CardContent>
               </Card>
-              <Card className="bg-secondary/20 border-secondary/20"><CardHeader className="pb-2"><CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground"><BrainCircuit className="h-4 w-4" /> Period Insight</CardTitle></CardHeader>
-                <CardContent className="text-sm text-secondary-foreground/90 leading-relaxed">Historical tracking active. Maintaining a consistent metabolic rate with an average of {weeklyAvgCalories} kcal/day.</CardContent>
+              <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30"><CardHeader className="pb-2"><CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground"><BrainCircuit className="h-4 w-4 text-primary" /> Period Insight</CardTitle></CardHeader>
+                <CardContent className="text-sm leading-relaxed text-foreground/80">Historical tracking analysis complete. Maintaining a consistent metabolic baseline across the period.</CardContent>
               </Card>
             </aside>
           </div>
