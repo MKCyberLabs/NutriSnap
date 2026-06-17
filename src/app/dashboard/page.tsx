@@ -19,6 +19,13 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { 
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -54,12 +61,14 @@ import {
   AlertCircle,
   Plus,
   Loader2,
-  Sparkles
+  Sparkles,
+  Image as ImageIcon
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, eachDayOfInterval, parse } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
 
 function generateMockDataForRange(from: Date, to: Date) {
   const days = eachDayOfInterval({ start: from, end: to });
@@ -119,7 +128,38 @@ export default function DashboardPage() {
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
   };
 
-  const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string) => {
+  const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput, mealTime: string, imagePath?: string) => {
+    const [hours, minutes] = mealTime.split(':').map(Number);
+    const logTimestamp = new Date(selectedDate);
+    logTimestamp.setHours(hours, minutes, 0, 0);
+
+    const newLog: MealLog = {
+      id: Math.random().toString(36).substr(2, 9),
+      category: data.calories > 0 ? (['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const).find(c => c === 'Breakfast') || 'Breakfast' : 'Breakfast', // This is just a placeholder logic, category comes from card
+      timestamp: logTimestamp.toISOString(),
+      items: (data.foodItems || []).map(item => ({
+        ...item,
+        id: Math.random().toString(36).substr(2, 9),
+      })),
+      totalNutrients: {
+        calories: Number(data.calories),
+        protein: Number(data.protein),
+        carbs: Number(data.carbs),
+        fat: Number(data.fat),
+        fiber: Number(data.fiber || 0),
+        saturatedFat: Number(data.saturatedFat || 0),
+        sugar: Number(data.sugar || 0),
+      },
+      healthInsight: data.healthInsight,
+      imagePath: imagePath
+    };
+
+    // Note: The specific category logic is actually handled by the MealCategoryCard's handleComplete which wraps this.
+    // For local logic in this file, we expect the category to be passed or derived.
+  };
+
+  // Wrapper for MealCategoryCard because it needs to pass the category back
+  const handleMealCardComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const [hours, minutes] = mealTime.split(':').map(Number);
     const logTimestamp = new Date(selectedDate);
     logTimestamp.setHours(hours, minutes, 0, 0);
@@ -141,7 +181,8 @@ export default function DashboardPage() {
         saturatedFat: Number(data.saturatedFat || 0),
         sugar: Number(data.sugar || 0),
       },
-      healthInsight: data.healthInsight
+      healthInsight: data.healthInsight,
+      imagePath: imagePath
     };
 
     saveLogsToStorage([newLog, ...logs]);
@@ -309,11 +350,11 @@ export default function DashboardPage() {
     let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
     filteredLogs.forEach(log => {
       (log.items || []).forEach(item => {
-        protein += parseFloat(String(item.protein || 0));
-        carbs += parseFloat(String(item.carbs || 0));
-        fat += parseFloat(String(item.fat || 0));
-        sugar += parseFloat(String(item.sugar || 0));
-        calories += parseFloat(String(item.calories || 0));
+        protein += Number(item.protein || 0);
+        carbs += Number(item.carbs || 0);
+        fat += Number(item.fat || 0);
+        sugar += Number(item.sugar || 0);
+        calories += Number(item.calories || 0);
       });
     });
     return { protein, carbs, fat, sugar, calories };
@@ -397,7 +438,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 space-y-6">
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as MealCategory[]).map((cat) => (
-                  <MealCategoryCard key={cat} category={cat} totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + Number(log.totalNutrients.calories || 0), 0)} onAnalysisComplete={handleAnalysisComplete} />
+                  <MealCategoryCard key={cat} category={cat} totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + Number(log.totalNutrients.calories || 0), 0)} onAnalysisComplete={(data, mealTime, path) => handleMealCardComplete(data, cat, mealTime, path)} />
                 ))}
               </section>
 
@@ -422,6 +463,38 @@ export default function DashboardPage() {
                             <div className="bg-secondary/30 rounded-xl p-4 border border-primary/5">
                               <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-2">
+                                  {log.imagePath && (
+                                    <Dialog>
+                                      <DialogTrigger asChild>
+                                        <div className="relative h-10 w-10 rounded-md overflow-hidden border border-primary/20 cursor-pointer hover:opacity-80 transition-opacity">
+                                          <Image 
+                                            src={log.imagePath} 
+                                            alt={log.category} 
+                                            fill 
+                                            className="object-cover"
+                                          />
+                                        </div>
+                                      </DialogTrigger>
+                                      <DialogContent className="sm:max-w-[600px] border-primary/20 bg-background rounded-3xl p-6">
+                                        <DialogHeader>
+                                          <DialogTitle className="text-2xl font-headline font-bold text-primary">
+                                            {log.category} Photo
+                                          </DialogTitle>
+                                        </DialogHeader>
+                                        <div className="relative aspect-square w-full rounded-2xl overflow-hidden shadow-2xl">
+                                          <Image 
+                                            src={log.imagePath} 
+                                            alt={log.category} 
+                                            fill 
+                                            className="object-contain bg-secondary/10"
+                                          />
+                                        </div>
+                                        <div className="mt-4 text-center text-sm font-medium text-muted-foreground">
+                                          Logged at {format(new Date(log.timestamp), 'h:mm a')}
+                                        </div>
+                                      </DialogContent>
+                                    </Dialog>
+                                  )}
                                   <Badge variant="secondary" className="bg-primary/10 text-primary">{log.category}</Badge>
                                   <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
                                 </div>
@@ -618,7 +691,7 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent className="text-sm text-secondary-foreground/90 leading-relaxed">
                   {filteredLogs.length === 0 ? "Log a meal to unlock analytics." : 
-                    `Metabolic tracking active. Achieving ${150 > 0 ? Math.round((parseFloat(String(totalP)) / 150) * 100) : 0}% of protein target.`}
+                    `Metabolic tracking active. Achieving ${150 > 0 ? Math.round((totalP / 150) * 100) : 0}% of protein target.`}
                 </CardContent>
               </Card>
             </aside>

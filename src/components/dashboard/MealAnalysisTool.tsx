@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Camera, FileText, Loader2, Sparkles, Clock } from 'lucide-react';
+import { Camera, FileText, Loader2, Sparkles, Clock, X } from 'lucide-react';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { MealCategory } from '@/lib/types';
@@ -20,13 +20,14 @@ import {
 
 interface MealAnalysisToolProps {
   category: MealCategory;
-  onAnalysisComplete: (data: MealNutritionalAnalysisOutput, mealTime: string) => void;
+  onAnalysisComplete: (data: MealNutritionalAnalysisOutput, mealTime: string, imagePath?: string) => void;
   onCancel: () => void;
 }
 
 export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: MealAnalysisToolProps) {
   const [description, setDescription] = useState('');
-  const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
 
@@ -34,8 +35,6 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
   const [hour12, setHour12] = useState(() => format(new Date(), 'hh'));
   const [minutes, setMinutes] = useState(() => format(new Date(), 'mm'));
   const [period, setPeriod] = useState(() => format(new Date(), 'a'));
-
-  // Derived 24h mealTime string for API
   const [mealTime, setMealTime] = useState(() => format(new Date(), 'HH:mm'));
 
   useEffect(() => {
@@ -50,16 +49,17 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhotoDataUri(reader.result as string);
+        setPreviewUri(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleAnalyze = async () => {
-    if (!description && !photoDataUri) {
+    if (!description && !selectedFile) {
       toast({
         variant: "destructive",
         title: "Missing input",
@@ -70,25 +70,44 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
 
     setIsAnalyzing(true);
     try {
+      let uploadedPath: string | undefined;
+
+      // 1. Upload the image if present
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        if (uploadRes.ok) {
+          const data = await uploadRes.json();
+          uploadedPath = data.url;
+        } else {
+          toast({ variant: "destructive", title: "Upload failed", description: "Could not save image to local storage." });
+        }
+      }
+
+      // 2. Perform AI analysis
       const result = await mealNutritionalAnalysis({
         mealDescription: description,
-        mealPhotoDataUri: photoDataUri || undefined,
+        mealPhotoDataUri: previewUri || undefined,
         mealTime: mealTime,
       });
-      onAnalysisComplete(result, mealTime);
+
+      onAnalysisComplete(result, mealTime, uploadedPath);
     } catch (error) {
       console.error("Health Matrix Bot Error:", error);
       toast({
         variant: "destructive",
         title: "Analysis issue",
-        description: "The analysis system encountered an error. Logging details to console.",
+        description: "The analysis system encountered an error.",
       });
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // Generate options for selectors
   const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
   const minuteOptions = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
 
@@ -172,11 +191,11 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         </div>
 
         <div className="flex flex-col items-center gap-4">
-          {photoDataUri ? (
+          {previewUri ? (
             <div className="relative w-full aspect-video rounded-2xl overflow-hidden border-2 border-primary/10 group shadow-inner bg-muted">
-              <img src={photoDataUri} alt="Meal preview" className="w-full h-full object-cover" />
+              <img src={previewUri} alt="Meal preview" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button variant="secondary" size="sm" onClick={() => setPhotoDataUri(null)} className="rounded-full">
+                <Button variant="secondary" size="sm" onClick={() => { setPreviewUri(null); setSelectedFile(null); }} className="rounded-full">
                   Change Photo
                 </Button>
               </div>

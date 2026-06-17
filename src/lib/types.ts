@@ -47,5 +47,6 @@ export interface MealLog {
   };
   healthInsight?: string;
   description?: string;
-  photoUrl?: string;
+  photoUrl?: string; // Legacy field
+  imagePath?: string; // New field for local storage path
 }
