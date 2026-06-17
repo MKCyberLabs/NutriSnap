@@ -1,16 +1,22 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Camera, FileText, Loader2, Sparkles, Clock } from 'lucide-react';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { MealCategory } from '@/lib/types';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface MealAnalysisToolProps {
   category: MealCategory;
@@ -21,9 +27,25 @@ interface MealAnalysisToolProps {
 export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: MealAnalysisToolProps) {
   const [description, setDescription] = useState('');
   const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
-  const [mealTime, setMealTime] = useState(() => format(new Date(), 'HH:mm'));
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
+
+  // Custom Time State
+  const [hour12, setHour12] = useState(() => format(new Date(), 'hh'));
+  const [minutes, setMinutes] = useState(() => format(new Date(), 'mm'));
+  const [period, setPeriod] = useState(() => format(new Date(), 'a'));
+
+  // Derived 24h mealTime string for API
+  const [mealTime, setMealTime] = useState(() => format(new Date(), 'HH:mm'));
+
+  useEffect(() => {
+    try {
+      const parsedDate = parse(`${hour12}:${minutes} ${period}`, 'hh:mm a', new Date());
+      setMealTime(format(parsedDate, 'HH:mm'));
+    } catch (e) {
+      console.error("Time parsing error", e);
+    }
+  }, [hour12, minutes, period]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,20 +88,66 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
     }
   };
 
+  // Generate options for selectors
+  const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  const minuteOptions = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto py-4 space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="meal-time" className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
+        <div className="space-y-3">
+          <Label className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
             <Clock className="h-4 w-4 text-primary" /> Time of Intake
           </Label>
-          <Input
-            id="meal-time"
-            type="time"
-            value={mealTime}
-            onChange={(e) => setMealTime(e.target.value)}
-            className="border-primary/20 focus-visible:ring-primary rounded-xl h-10"
-          />
+          
+          <div className="flex items-center gap-2">
+            <div className="flex-1 grid grid-cols-2 gap-2">
+              <Select value={hour12} onValueChange={setHour12}>
+                <SelectTrigger className="border-primary/20 focus:ring-primary h-10 rounded-xl bg-background">
+                  <SelectValue placeholder="Hour" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-primary/10">
+                  {hours.map((h) => (
+                    <SelectItem key={h} value={h} className="focus:bg-primary/10 focus:text-primary rounded-lg">
+                      {h}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={minutes} onValueChange={setMinutes}>
+                <SelectTrigger className="border-primary/20 focus:ring-primary h-10 rounded-xl bg-background">
+                  <SelectValue placeholder="Min" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-primary/10 max-h-[300px]">
+                  {minuteOptions.map((m) => (
+                    <SelectItem key={m} value={m} className="focus:bg-primary/10 focus:text-primary rounded-lg">
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/10">
+              {['AM', 'PM'].map((p) => (
+                <Button
+                  key={p}
+                  type="button"
+                  variant={period === p ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setPeriod(p)}
+                  className={`h-8 px-3 rounded-lg text-[10px] font-bold transition-all ${
+                    period === p 
+                      ? 'bg-primary text-primary-foreground shadow-sm' 
+                      : 'text-muted-foreground hover:bg-primary/5 hover:text-primary'
+                  }`}
+                >
+                  {p}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -90,7 +158,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
             placeholder="E.g., Grilled chicken with quinoa and steamed broccoli..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="min-h-[120px] border-primary/20 focus-visible:ring-primary rounded-xl resize-none"
+            className="min-h-[120px] border-primary/20 focus-visible:ring-primary rounded-xl resize-none bg-background"
           />
         </div>
 
@@ -134,13 +202,13 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
       </div>
 
       <div className="pt-6 border-t border-primary/5 flex flex-col sm:flex-row gap-3">
-        <Button variant="ghost" onClick={onCancel} disabled={isAnalyzing} className="order-2 sm:order-1">
+        <Button variant="ghost" onClick={onCancel} disabled={isAnalyzing} className="order-2 sm:order-1 rounded-xl">
           Cancel
         </Button>
         <Button onClick={handleAnalyze} disabled={isAnalyzing} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-md font-bold shadow-lg shadow-primary/20 rounded-xl order-1 sm:order-2">
           {isAnalyzing ? (
             <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Simulating AI Analysis...
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Analyzing...
             </>
           ) : (
             <>
