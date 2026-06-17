@@ -133,7 +133,7 @@ export default function DashboardPage() {
   }, [activeWeeklyRange]);
 
   const totalCaloriesForDay = filteredLogs.reduce((sum, l) => sum + l.totalNutrients.calories, 0);
-  const parseAmount = (str: string) => parseInt(str.replace(/[^0-9]/g, '')) || 0;
+  const parseAmount = (str: string) => parseFloat(str.replace(/[^0-9.]/g, '')) || 0;
   
   const totalProtein = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.protein), 0);
   const totalCarbs = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.carbs), 0);
@@ -313,7 +313,7 @@ export default function DashboardPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[400px] pr-4">
+                  <ScrollArea className="h-[500px] pr-4">
                     {filteredLogs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border border-dashed border-primary/20 rounded-xl bg-muted/30">
                         <p className="font-medium">No activity recorded yet.</p>
@@ -335,6 +335,31 @@ export default function DashboardPage() {
                                 <span className="font-bold text-primary">{log.totalNutrients.calories} kcal</span>
                               </div>
                               
+                              {/* Itemized breakdown */}
+                              {log.items && log.items.length > 0 && (
+                                <div className="mt-4 mb-4 space-y-2">
+                                  {log.items.map((item) => (
+                                    <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-2 px-3 rounded-lg bg-white/50 border border-primary/5">
+                                      <span className="text-xs font-bold text-foreground/90">{item.name}</span>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold tracking-tight">
+                                          {item.calories} kcal
+                                        </Badge>
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold tracking-tight">
+                                          P: {item.protein}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold tracking-tight">
+                                          C: {item.carbs}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-none bg-secondary/60 text-secondary-foreground font-bold tracking-tight">
+                                          F: {item.fat}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
                               {log.healthInsight && (
                                 <div className="mb-3 p-3 bg-white/40 border border-primary/5 rounded-lg flex items-start gap-2">
                                   <BrainCircuit className="h-4 w-4 text-primary shrink-0 mt-0.5" />
@@ -343,9 +368,9 @@ export default function DashboardPage() {
                               )}
 
                               <div className="mt-3 flex gap-4 text-[10px] uppercase font-bold tracking-widest text-primary/70">
-                                <span>P: {log.totalNutrients.protein}</span>
-                                <span>C: {log.totalNutrients.carbs}</span>
-                                <span>F: {log.totalNutrients.fat}</span>
+                                <span>Total P: {log.totalNutrients.protein}</span>
+                                <span>Total C: {log.totalNutrients.carbs}</span>
+                                <span>Total F: {log.totalNutrients.fat}</span>
                               </div>
                             </div>
                           </div>
@@ -367,7 +392,7 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
                       <span>Protein</span>
-                      <span className="text-primary">{totalProtein}g / 150g</span>
+                      <span className="text-primary">{totalProtein.toFixed(1)}g / 150g</span>
                     </div>
                     <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                       <div 
@@ -379,7 +404,7 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
                       <span>Carbs</span>
-                      <span className="text-primary">{totalCarbs}g / 220g</span>
+                      <span className="text-primary">{totalCarbs.toFixed(1)}g / 220g</span>
                     </div>
                     <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                       <div 
@@ -391,7 +416,7 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
                       <span>Fats</span>
-                      <span className="text-primary">{totalFats}g / 65g</span>
+                      <span className="text-primary">{totalFats.toFixed(1)}g / 65g</span>
                     </div>
                     <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                       <div 
