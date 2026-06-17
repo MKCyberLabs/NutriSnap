@@ -65,7 +65,7 @@ import {
   Check,
   ImageIcon
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
@@ -140,8 +140,17 @@ export default function DashboardPage() {
     if (savedLogs) {
       try {
         const parsedLogs = JSON.parse(savedLogs);
-        const validLogs = Array.isArray(parsedLogs) ? parsedLogs.filter(log => log && typeof log === 'object' && log.id) : [];
-        setLogs(validLogs);
+        // Sanitize logs to ensure they are valid and image paths are correctly resolved
+        const sanitizedLogs = (Array.isArray(parsedLogs) ? parsedLogs : [])
+          .filter(log => log && typeof log === 'object' && log.id)
+          .map(log => ({
+            ...log,
+            // Ensure timestamp is a valid string
+            timestamp: typeof log.timestamp === 'string' ? log.timestamp : new Date().toISOString(),
+            // Map photoUrl to imagePath if necessary for backward compatibility
+            imagePath: log.imagePath || log.photoUrl || undefined
+          }));
+        setLogs(sanitizedLogs);
       } catch (e) {
         setLogs([]);
       }
@@ -327,7 +336,15 @@ export default function DashboardPage() {
   };
 
   const filteredLogs = useMemo(() => {
-    return logs.filter(log => log && isSameDay(new Date(log.timestamp), selectedDate));
+    return logs.filter(log => {
+      if (!log || !log.timestamp) return false;
+      try {
+        const logDate = parseISO(log.timestamp);
+        return isSameDay(logDate, selectedDate);
+      } catch (e) {
+        return false;
+      }
+    });
   }, [logs, selectedDate]);
 
   const activeWeeklyRange = useMemo(() => {
@@ -449,7 +466,7 @@ export default function DashboardPage() {
                               <div className="flex justify-between items-center mb-4">
                                 <div className="flex items-center gap-3">
                                   <Badge variant="secondary" className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold">{log.category}</Badge>
-                                  <span className="text-xs text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
+                                  <span className="text-xs text-muted-foreground font-medium">{format(parseISO(log.timestamp), 'h:mm a')}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                   <div className="flex items-center gap-3 bg-white/30 dark:bg-black/20 px-3 py-1.5 rounded-xl border border-white/40">
@@ -467,7 +484,6 @@ export default function DashboardPage() {
                                                 src={log.imagePath} 
                                                 alt={log.category} 
                                                 className="w-full h-full object-cover" 
-                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
                                               />
                                             </div>
                                           </DialogTrigger>
@@ -558,9 +574,6 @@ export default function DashboardPage() {
                                       src={log.imagePath} 
                                       alt="Meal visual evidence" 
                                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).style.display = 'none';
-                                      }}
                                     />
                                     <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg flex items-center gap-1.5 text-[10px] text-white font-bold uppercase tracking-wider">
                                       <ImageIcon className="h-3 w-3" /> Visual Intake
