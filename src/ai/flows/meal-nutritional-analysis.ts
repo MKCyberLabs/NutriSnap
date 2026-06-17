@@ -52,8 +52,8 @@ const MealNutritionalAnalysisOutputSchema = z.object({
     protein: z.number(),
     carbs: z.number(),
     fat: z.number(),
-    fiber: z.number(),
-    saturatedFat: z.number(),
+    fiber: z.number().optional(),
+    saturatedFat: z.number().optional(),
     sugar: z.number()
   })).optional()
 });

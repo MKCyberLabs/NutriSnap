@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Camera, FileText, Loader2, Sparkles, Clock, X, Trash2 } from 'lucide-react';
-import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
+import { Camera, FileText, Loader2, Sparkles, Clock, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { MealCategory } from '@/lib/types';
 import { format, parse, isValid } from 'date-fns';
@@ -16,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 
 interface MealAnalysisToolProps {
   category: MealCategory;
@@ -99,20 +99,30 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         }
       }
 
-      // 2. Perform AI analysis sending only the path (lightweight payload)
-      const result = await mealNutritionalAnalysis({
-        mealDescription: description,
-        imagePath: uploadedPath,
-        mealTime: mealTime,
+      // 2. Perform AI analysis by calling the Health Matrix API endpoint
+      const res = await fetch('/api/analyze-meal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mealDescription: description,
+          imagePath: uploadedPath,
+          mealTime: mealTime,
+        }),
       });
 
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'API Analysis Failed');
+      }
+
+      const result: MealNutritionalAnalysisOutput = await res.json();
       onAnalysisComplete(result, mealTime, uploadedPath);
-    } catch (error) {
-      console.error("Health Matrix Bot Error:", error);
+    } catch (error: any) {
+      console.error("Health Matrix API Error:", error);
       toast({
         variant: "destructive",
         title: "Analysis issue",
-        description: "The analysis system encountered an error.",
+        description: error.message || "The Health Matrix API encountered an error.",
       });
     } finally {
       setIsAnalyzing(false);
