@@ -41,10 +41,10 @@ function Calendar({
           buttonVariants({ variant: "ghost" }),
           "h-9 w-9 p-0 font-normal aria-selected:opacity-100 transition-colors"
         ),
-        range_start: "bg-primary text-primary-foreground rounded-full hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        range_end: "bg-primary text-primary-foreground rounded-full hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        range_middle: "aria-selected:bg-secondary aria-selected:text-secondary-foreground aria-selected:rounded-none",
+        range_start: "day-range-start",
+        range_end: "day-range-end",
         selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+        range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
         today: "bg-accent text-accent-foreground font-bold border border-primary/20",
         outside: "day-outside text-muted-foreground opacity-30 aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
         disabled: "text-muted-foreground opacity-50",
@@ -55,18 +55,7 @@ function Calendar({
         Chevron: ({ orientation }) => {
           if (orientation === 'left') return <ChevronLeft className="h-4 w-4" />
           return <ChevronRight className="h-4 w-4" />
-        },
-        Weekdays: () => (
-          <thead>
-            <tr className="grid grid-cols-7 gap-1 w-full text-center mb-2">
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                <th key={day} className="text-center text-xs font-medium text-muted-foreground w-full uppercase tracking-tighter">
-                  {day}
-                </th>
-              ))}
-            </tr>
-          </thead>
-        )
+        }
       }}
       {...props}
     />

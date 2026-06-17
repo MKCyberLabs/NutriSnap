@@ -68,6 +68,7 @@ import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid, parseI
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 function calculateNutrientTargets(metrics?: UserMetrics) {
   if (!metrics || !metrics.age || !metrics.height || !metrics.weight) {
@@ -94,6 +95,7 @@ function calculateNutrientTargets(metrics?: UserMetrics) {
 export default function DashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [user, setUser] = useState<User | null>(null);
   const [logs, setLogs] = useState<MealLog[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -325,8 +327,6 @@ export default function DashboardPage() {
 
   const activeWeeklyRange = useMemo(() => {
     if (customRange?.from) {
-      // If only 'from' is selected, use it as start and end to show a single day
-      // until the user selects the 'to' date.
       return { 
         from: startOfDay(customRange.from), 
         to: endOfDay(customRange.to || customRange.from) 
@@ -434,9 +434,10 @@ export default function DashboardPage() {
                       }}><ChevronLeft className="h-4 w-4" /></Button>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <button className="text-xs font-bold px-2 min-w-[140px] text-center hover:text-primary transition-colors">
+                          <Button variant="ghost" className="text-xs font-bold px-4 h-8 rounded-lg hover:text-primary transition-colors">
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5" />
                             {format(activeWeeklyRange.from, 'MMM d')} - {format(activeWeeklyRange.to, 'MMM d')}
-                          </button>
+                          </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 rounded-2xl border-none shadow-2xl" align="center">
                           <Calendar 
@@ -444,7 +445,7 @@ export default function DashboardPage() {
                             selected={customRange} 
                             onSelect={setCustomRange} 
                             initialFocus 
-                            numberOfMonths={2}
+                            numberOfMonths={isMobile ? 1 : 2}
                           />
                         </PopoverContent>
                       </Popover>
