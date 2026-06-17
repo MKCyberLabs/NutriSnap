@@ -36,7 +36,7 @@ export default function LoginPage() {
     }
 
     try {
-      // Prototype Auth: Check local managed users first
+      // 1. Prototype Auth: Check local managed users first (source of truth for created users)
       const localUser = authenticateUser(email, password);
       
       if (localUser) {
@@ -46,7 +46,6 @@ export default function LoginPage() {
           description: `Access granted as ${localUser.role}`,
         });
         
-        // Navigation logic
         if (localUser.role === 'ADMIN') {
           router.push('/admin');
         } else {
@@ -55,7 +54,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Fallback/Legacy: Call API (for recovery keys or server-side checks)
+      // 2. Fallback: Call API (for hardcoded accounts or recovery keys)
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
