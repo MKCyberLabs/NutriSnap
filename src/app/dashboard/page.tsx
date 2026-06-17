@@ -359,13 +359,11 @@ export default function DashboardPage() {
   const dailyTotals = useMemo(() => {
     let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
     filteredLogs.forEach(log => {
-      (log.items || []).forEach(item => {
-        protein += Number(item.protein || 0);
-        carbs += Number(item.carbs || 0);
-        fat += Number(item.fat || 0);
-        sugar += Number(item.sugar || 0);
-        calories += Number(item.calories || 0);
-      });
+      protein += Number(log.totalNutrients.protein || 0);
+      carbs += Number(log.totalNutrients.carbs || 0);
+      fat += Number(log.totalNutrients.fat || 0);
+      sugar += Number(log.totalNutrients.sugar || 0);
+      calories += Number(log.totalNutrients.calories || 0);
     });
     return { protein, carbs, fat, sugar, calories };
   }, [filteredLogs]);
@@ -470,7 +468,11 @@ export default function DashboardPage() {
                           <div key={log.id} className="relative pl-6 border-l-2 border-secondary pb-4 last:pb-0">
                             <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background" />
                             <div className="bg-secondary/30 rounded-xl p-4 border border-primary/5">
-                              <div className="flex justify-between items-start mb-2">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="bg-primary/10 text-primary h-5 px-1.5 text-[10px] font-bold">{log.category}</Badge>
+                                  <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
+                                </div>
                                 <div className="flex items-center gap-3">
                                   <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-primary/10 bg-white/60 shrink-0 flex items-center justify-center shadow-sm">
                                     {log.imagePath ? (
@@ -496,14 +498,6 @@ export default function DashboardPage() {
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex flex-col">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="secondary" className="bg-primary/10 text-primary h-5 px-1.5 text-[10px] font-bold">{log.category}</Badge>
-                                      <span className="text-[10px] text-muted-foreground font-medium">{format(new Date(log.timestamp), 'h:mm a')}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
                                   <span className="font-bold text-primary text-sm">{log.totalNutrients.calories} kcal</span>
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
@@ -727,3 +721,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
