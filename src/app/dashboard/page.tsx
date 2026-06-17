@@ -106,7 +106,11 @@ export default function DashboardPage() {
     
     const savedLogs = localStorage.getItem('nutrisnap_logs');
     if (savedLogs) {
-      setLogs(JSON.parse(savedLogs));
+      try {
+        setLogs(JSON.parse(savedLogs));
+      } catch (e) {
+        setLogs([]);
+      }
     }
   }, [router]);
 
@@ -133,9 +137,9 @@ export default function DashboardPage() {
         protein: Number(data.protein),
         carbs: Number(data.carbs),
         fat: Number(data.fat),
-        fiber: Number(data.fiber),
-        saturatedFat: Number(data.saturatedFat),
-        sugar: Number(data.sugar),
+        fiber: Number(data.fiber || 0),
+        saturatedFat: Number(data.saturatedFat || 0),
+        sugar: Number(data.sugar || 0),
       },
       healthInsight: data.healthInsight
     };
@@ -162,13 +166,13 @@ export default function DashboardPage() {
 
         const combinedItems = [...log.items, ...newItems];
 
-        const totalCalories = combinedItems.reduce((sum, i) => sum + i.calories, 0);
-        const totalProtein = combinedItems.reduce((sum, i) => sum + i.protein, 0);
-        const totalCarbs = combinedItems.reduce((sum, i) => sum + i.carbs, 0);
-        const totalFat = combinedItems.reduce((sum, i) => sum + i.fat, 0);
-        const totalFiber = combinedItems.reduce((sum, i) => sum + (i.fiber || 0), 0);
-        const totalSaturatedFat = combinedItems.reduce((sum, i) => sum + (i.saturatedFat || 0), 0);
-        const totalSugar = combinedItems.reduce((sum, i) => sum + (i.sugar || 0), 0);
+        const totalCalories = combinedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+        const totalProtein = combinedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+        const totalCarbs = combinedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+        const totalFat = combinedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+        const totalFiber = combinedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
+        const totalSaturatedFat = combinedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
+        const totalSugar = combinedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
 
         return {
           ...log,
@@ -218,13 +222,13 @@ export default function DashboardPage() {
         };
       });
 
-      const totalCalories = updatedItems.reduce((sum, i) => sum + i.calories, 0);
-      const totalProtein = updatedItems.reduce((sum, i) => sum + i.protein, 0);
-      const totalCarbs = updatedItems.reduce((sum, i) => sum + i.carbs, 0);
-      const totalFat = updatedItems.reduce((sum, i) => sum + i.fat, 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (i.fiber || 0), 0);
-      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (i.saturatedFat || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (i.sugar || 0), 0);
+      const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+      const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+      const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+      const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
+      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
+      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
 
       return {
         ...log,
@@ -250,13 +254,13 @@ export default function DashboardPage() {
 
       const updatedItems = log.items.filter(item => item.id !== itemId);
       
-      const totalCalories = updatedItems.reduce((sum, i) => sum + i.calories, 0);
-      const totalProtein = updatedItems.reduce((sum, i) => sum + i.protein, 0);
-      const totalCarbs = updatedItems.reduce((sum, i) => sum + i.carbs, 0);
-      const totalFat = updatedItems.reduce((sum, i) => sum + i.fat, 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (i.fiber || 0), 0);
-      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (i.saturatedFat || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (i.sugar || 0), 0);
+      const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
+      const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
+      const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
+      const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
+      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
+      const totalSaturatedFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
+      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
 
       return {
         ...log,
@@ -283,7 +287,9 @@ export default function DashboardPage() {
     toast({ title: "Log Removed", description: "The meal record has been deleted." });
   };
 
-  const filteredLogs = logs.filter(log => isSameDay(new Date(log.timestamp), selectedDate));
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => isSameDay(new Date(log.timestamp), selectedDate));
+  }, [logs, selectedDate]);
 
   const activeWeeklyRange = useMemo(() => {
     if (customRange?.from && customRange?.to) {
@@ -299,16 +305,15 @@ export default function DashboardPage() {
     return generateMockDataForRange(activeWeeklyRange.from, activeWeeklyRange.to);
   }, [activeWeeklyRange]);
 
-  // Reactive aggregate totals for the Daily view
   const dailyTotals = useMemo(() => {
     let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
     filteredLogs.forEach(log => {
-      log.items.forEach(item => {
-        protein += Number(item.protein || 0);
-        carbs += Number(item.carbs || 0);
-        fat += Number(item.fat || 0);
-        sugar += Number(item.sugar || 0);
-        calories += Number(item.calories || 0);
+      (log.items || []).forEach(item => {
+        protein += parseFloat(String(item.protein || 0));
+        carbs += parseFloat(String(item.carbs || 0));
+        fat += parseFloat(String(item.fat || 0));
+        sugar += parseFloat(String(item.sugar || 0));
+        calories += parseFloat(String(item.calories || 0));
       });
     });
     return { protein, carbs, fat, sugar, calories };
@@ -463,15 +468,28 @@ export default function DashboardPage() {
                                           <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-bold border border-blue-100 dark:border-blue-800">F: {item.fat}g</span>
                                           <span className="px-1.5 py-0.5 rounded bg-secondary/40 text-secondary-foreground font-bold border border-secondary/20">S: {item.sugar}g</span>
                                         </div>
-                                        <Button 
-                                          variant="ghost" 
-                                          size="icon" 
-                                          className="h-6 w-6 text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"
-                                          onClick={() => handleDeleteItem(log.id, item.id)}
-                                          title="Remove item"
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon" 
+                                              className="h-6 w-6 text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"
+                                              title="Remove item"
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </Button>
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle>Remove {item.name}?</AlertDialogTitle>
+                                              <AlertDialogDescription>This ingredient will be deleted from your {log.category.toLowerCase()} record.</AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                              <AlertDialogAction onClick={() => handleDeleteItem(log.id, item.id)} className="bg-primary text-primary-foreground">Remove</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
                                       </div>
                                     </div>
                                   </div>
@@ -582,7 +600,7 @@ export default function DashboardPage() {
                           <div 
                             className={cn(
                               "h-full transition-all duration-500 ease-out",
-                              m.isLimit && isOver ? "bg-primary" : "bg-primary"
+                              m.isLimit && isOver ? "bg-primary" : "bg-secondary-foreground"
                             )} 
                             style={{ width: `${percentage}%` }} 
                           />
@@ -592,10 +610,15 @@ export default function DashboardPage() {
                   })}
                 </CardContent>
               </Card>
-              <Card className="bg-secondary/20 border-secondary/20"><CardHeader className="pb-2"><CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground"><Info className="h-4 w-4" /> Insight</CardTitle></CardHeader>
+              <Card className="bg-secondary/20 border-secondary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="font-headline text-lg flex items-center gap-2 text-secondary-foreground">
+                    <Info className="h-4 w-4" /> Insight
+                  </CardTitle>
+                </CardHeader>
                 <CardContent className="text-sm text-secondary-foreground/90 leading-relaxed">
                   {filteredLogs.length === 0 ? "Log a meal to unlock analytics." : 
-                    `Metabolic tracking active. Achieving ${150 > 0 ? Math.round((Number(totalP) / 150) * 100) : 0}% of protein target.`}
+                    `Metabolic tracking active. Achieving ${150 > 0 ? Math.round((parseFloat(String(totalP)) / 150) * 100) : 0}% of protein target.`}
                 </CardContent>
               </Card>
             </aside>
