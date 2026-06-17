@@ -17,6 +17,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { 
   BarChart, 
   Bar, 
   XAxis, 
@@ -35,11 +46,13 @@ import {
   BrainCircuit,
   BarChart3,
   Flame,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
+import { useToast } from '@/hooks/use-toast';
 
 /**
  * Generates dynamic mock data based on a date range to simulate historical logs.
@@ -62,6 +75,7 @@ function generateMockDataForRange(from: Date, to: Date) {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
   const [logs, setLogs] = useState<MealLog[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -114,6 +128,29 @@ export default function DashboardPage() {
     const updatedLogs = [newLog, ...logs];
     setLogs(updatedLogs);
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    try {
+      // Simulation of Backend/Prisma Delete Logic
+      // await prisma.foodLog.delete({ where: { id: logId } });
+      
+      const updatedLogs = logs.filter(l => l.id !== logId);
+      setLogs(updatedLogs);
+      localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
+      
+      toast({
+        title: "Log Removed",
+        description: "The meal record has been deleted from your history.",
+      });
+    } catch (error) {
+      console.error("Health Matrix Delete Error:", error);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: "The system could not remove this entry. Please try again.",
+      });
+    }
   };
 
   const filteredLogs = logs.filter(log => isSameDay(new Date(log.timestamp), selectedDate));
@@ -332,7 +369,33 @@ export default function DashboardPage() {
                                     {format(new Date(log.timestamp), 'h:mm a')}
                                   </span>
                                 </div>
-                                <span className="font-bold text-primary">{log.totalNutrients.calories} kcal</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-primary">{log.totalNutrients.calories} kcal</span>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground/60 hover:text-primary transition-colors">
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete entry?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This will permanently remove this {log.category.toLowerCase()} log. Are you sure?
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction 
+                                          onClick={() => handleDeleteLog(log.id)}
+                                          className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
                               </div>
                               
                               {/* Itemized breakdown */}
