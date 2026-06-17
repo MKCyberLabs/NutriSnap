@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,7 +8,7 @@ import { Camera, FileText, Loader2, Sparkles, Clock, X } from 'lucide-react';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { MealCategory } from '@/lib/types';
-import { format, parse } from 'date-fns';
+import { format, parse, isValid } from 'date-fns';
 import {
   Select,
   SelectContent,
@@ -38,11 +37,11 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
   const [mealTime, setMealTime] = useState(() => format(new Date(), 'HH:mm'));
 
   useEffect(() => {
-    try {
-      const parsedDate = parse(`${hour12}:${minutes} ${period}`, 'hh:mm a', new Date());
+    const timeString = `${hour12}:${minutes} ${period}`;
+    const parsedDate = parse(timeString, 'hh:mm a', new Date());
+    
+    if (isValid(parsedDate)) {
       setMealTime(format(parsedDate, 'HH:mm'));
-    } catch (e) {
-      console.error("Time parsing error", e);
     }
   }, [hour12, minutes, period]);
 

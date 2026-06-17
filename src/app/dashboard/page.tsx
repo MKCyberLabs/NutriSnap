@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -64,7 +63,7 @@ import {
   Sparkles,
   Image as ImageIcon
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
@@ -129,14 +128,21 @@ export default function DashboardPage() {
   };
 
   const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput, mealTime: string, imagePath?: string) => {
-    const [hours, minutes] = mealTime.split(':').map(Number);
+    const timeParts = (mealTime || '').split(':');
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
+    
     const logTimestamp = new Date(selectedDate);
-    logTimestamp.setHours(hours, minutes, 0, 0);
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      logTimestamp.setHours(hours, minutes, 0, 0);
+    }
+
+    const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
 
     const newLog: MealLog = {
       id: Math.random().toString(36).substr(2, 9),
-      category: data.calories > 0 ? (['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const).find(c => c === 'Breakfast') || 'Breakfast' : 'Breakfast', // This is just a placeholder logic, category comes from card
-      timestamp: logTimestamp.toISOString(),
+      category: data.calories > 0 ? (['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const).find(c => c === 'Breakfast') || 'Breakfast' : 'Breakfast',
+      timestamp: isoTimestamp,
       items: (data.foodItems || []).map(item => ({
         ...item,
         id: Math.random().toString(36).substr(2, 9),
@@ -153,21 +159,24 @@ export default function DashboardPage() {
       healthInsight: data.healthInsight,
       imagePath: imagePath
     };
-
-    // Note: The specific category logic is actually handled by the MealCategoryCard's handleComplete which wraps this.
-    // For local logic in this file, we expect the category to be passed or derived.
   };
 
-  // Wrapper for MealCategoryCard because it needs to pass the category back
   const handleMealCardComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
-    const [hours, minutes] = mealTime.split(':').map(Number);
+    const timeParts = (mealTime || '').split(':');
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
+    
     const logTimestamp = new Date(selectedDate);
-    logTimestamp.setHours(hours, minutes, 0, 0);
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      logTimestamp.setHours(hours, minutes, 0, 0);
+    }
+
+    const isoTimestamp = isValid(logTimestamp) ? logTimestamp.toISOString() : new Date().toISOString();
 
     const newLog: MealLog = {
       id: Math.random().toString(36).substr(2, 9),
       category: category,
-      timestamp: logTimestamp.toISOString(),
+      timestamp: isoTimestamp,
       items: (data.foodItems || []).map(item => ({
         ...item,
         id: Math.random().toString(36).substr(2, 9),
