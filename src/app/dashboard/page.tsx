@@ -306,6 +306,7 @@ export default function DashboardPage() {
       };
     });
     saveLogsToStorage(updatedLogs);
+    toast({ title: "Item Deleted", description: "The food item has been removed." });
   };
 
   const handleDeleteLog = (logId: string) => {
@@ -609,7 +610,30 @@ export default function DashboardPage() {
                                         <Badge variant="outline" className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap">F: {item.fat}g</Badge>
                                         <Badge variant="outline" className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap">S: {item.sugar}g</Badge>
                                       </div>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground/60" onClick={() => handleDeleteItem(log.id, item.id)}><X className="h-3 w-3" /></Button>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent className="glass-card border-none rounded-3xl">
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete Item?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Are you sure you want to remove "{item.name}" from this meal? This action cannot be undone.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                                            <AlertDialogAction 
+                                              onClick={() => handleDeleteItem(log.id, item.id)} 
+                                              className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            >
+                                              Delete
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
                                     </div>
                                   </div>
                                 ))}
