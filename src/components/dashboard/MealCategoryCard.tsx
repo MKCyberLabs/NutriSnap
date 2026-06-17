@@ -1,9 +1,16 @@
+
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MealCategory } from '@/lib/types';
 import { Plus, Coffee, Utensils, Moon, Apple } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MealAnalysisTool } from './MealAnalysisTool';
+import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 
 const CATEGORY_ICONS = {
   Breakfast: Coffee,
@@ -14,12 +21,27 @@ const CATEGORY_ICONS = {
 
 interface MealCategoryCardProps {
   category: MealCategory;
-  onAddClick: () => void;
+  onAnalysisComplete: (data: MealNutritionalAnalysisOutput, category: MealCategory) => void;
   totalCalories: number;
 }
 
-export function MealCategoryCard({ category, onAddClick, totalCalories }: MealCategoryCardProps) {
+export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }: MealCategoryCardProps) {
+  const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const Icon = CATEGORY_ICONS[category];
+
+  const handleComplete = (data: MealNutritionalAnalysisOutput) => {
+    onAnalysisComplete(data, category);
+    setOpen(false);
+  };
+
+  const FormContent = (
+    <MealAnalysisTool 
+      category={category} 
+      onAnalysisComplete={handleComplete} 
+      onCancel={() => setOpen(false)} 
+    />
+  );
 
   return (
     <Card className="overflow-hidden group hover:border-primary/40 transition-all duration-300 shadow-sm hover:shadow-md bg-card border-primary/10 border-[0.5px]">
@@ -34,14 +56,51 @@ export function MealCategoryCard({ category, onAddClick, totalCalories }: MealCa
               <p className="text-xs text-muted-foreground font-body">Nutritional Slot</p>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={onAddClick} 
-            className="rounded-full hover:bg-primary hover:text-primary-foreground h-8 w-8"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
+
+          {isMobile ? (
+            <Sheet open={open} onOpenChange={setOpen}>
+              <SheetTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-8 w-8"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="h-[90svh] sm:h-auto rounded-t-[2.5rem] border-t-0 p-6 flex flex-col bg-background">
+                <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-6" />
+                <SheetHeader className="mb-2">
+                  <SheetTitle className="text-2xl font-headline font-bold text-primary text-left">
+                    Log your {category}
+                  </SheetTitle>
+                </SheetHeader>
+                <div className="flex-1 overflow-hidden">
+                  {FormContent}
+                </div>
+              </SheetContent>
+            </Sheet>
+          ) : (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-8 w-8"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px] rounded-3xl p-8">
+                <DialogHeader className="mb-4">
+                  <DialogTitle className="text-2xl font-headline font-bold text-primary">
+                    Log your {category}
+                  </DialogTitle>
+                </DialogHeader>
+                {FormContent}
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </CardHeader>
       <CardContent>

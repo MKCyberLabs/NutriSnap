@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -6,7 +7,6 @@ import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
 import { User, MealCategory, MealLog } from '@/lib/types';
 import { MealCategoryCard } from '@/components/dashboard/MealCategoryCard';
-import { MealAnalysisTool } from '@/components/dashboard/MealAnalysisTool';
 import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +37,7 @@ import {
   Flame,
   Filter
 } from 'lucide-react';
-import { format, isSameDay, addDays, subDays, isWithinInterval, startOfDay, endOfDay, eachDayOfInterval } from 'date-fns';
+import { format, isSameDay, addDays, subDays, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 
@@ -47,7 +47,6 @@ import { DateRange } from 'react-day-picker';
 function generateMockDataForRange(from: Date, to: Date) {
   const days = eachDayOfInterval({ start: from, end: to });
   return days.map(date => {
-    // Use the date's time as a seed for consistent but varying mock data
     const seed = date.getTime() % 1000;
     const baseCals = 1600 + (seed % 600);
     return {
@@ -64,13 +63,11 @@ function generateMockDataForRange(from: Date, to: Date) {
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [activeAnalysis, setActiveAnalysis] = useState<MealCategory | null>(null);
   const [logs, setLogs] = useState<MealLog[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState('daily');
   const [isMounted, setIsMounted] = useState(false);
 
-  // Advanced Date Filtering State
   const [weeklyPivotDate, setWeeklyPivotDate] = useState<Date>(new Date());
   const [customRange, setCustomRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 6),
@@ -92,16 +89,14 @@ export default function DashboardPage() {
     }
   }, [router]);
 
-  const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput) => {
-    if (!activeAnalysis) return;
-
+  const handleAnalysisComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory) => {
     const now = new Date();
     const logTimestamp = new Date(selectedDate);
     logTimestamp.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
     const newLog: MealLog = {
       id: Math.random().toString(36).substr(2, 9),
-      category: activeAnalysis,
+      category: category,
       timestamp: logTimestamp.toISOString(),
       items: (data.foodItems || []).map(item => ({
         ...item,
@@ -119,13 +114,10 @@ export default function DashboardPage() {
     const updatedLogs = [newLog, ...logs];
     setLogs(updatedLogs);
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
-    setActiveAnalysis(null);
   };
 
-  // Filter real logs based on selected date (for daily view)
   const filteredLogs = logs.filter(log => isSameDay(new Date(log.timestamp), selectedDate));
 
-  // Determine the active range for weekly/summary view
   const activeWeeklyRange = useMemo(() => {
     if (customRange?.from && customRange?.to) {
       return { from: customRange.from, to: customRange.to };
@@ -136,7 +128,6 @@ export default function DashboardPage() {
     };
   }, [weeklyPivotDate, customRange]);
 
-  // Generate mock analytical data for the selected range
   const dynamicWeeklyData = useMemo(() => {
     return generateMockDataForRange(activeWeeklyRange.from, activeWeeklyRange.to);
   }, [activeWeeklyRange]);
@@ -148,7 +139,6 @@ export default function DashboardPage() {
   const totalCarbs = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.carbs), 0);
   const totalFats = filteredLogs.reduce((acc, log) => acc + parseAmount(log.totalNutrients.fat), 0);
 
-  // Weekly analytics based on dynamic mock data
   const weeklyAvgCalories = Math.round(dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0) / dynamicWeeklyData.length);
   const weeklyTotalProtein = dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0);
   const weeklyTotalCarbs = dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0);
@@ -180,7 +170,7 @@ export default function DashboardPage() {
                 </Tabs>
                 
                 {activeTab === 'daily' ? (
-                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                  <div className="flex items-center gap-2">
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button 
@@ -224,7 +214,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                  <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-2 bg-secondary/30 p-1 rounded-lg border border-primary/10">
                       <div className="flex items-center gap-1">
                         <Button 
@@ -298,7 +288,7 @@ export default function DashboardPage() {
         </header>
 
         {activeTab === 'daily' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as MealCategory[]).map((cat) => (
@@ -306,20 +296,10 @@ export default function DashboardPage() {
                     key={cat} 
                     category={cat} 
                     totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + log.totalNutrients.calories, 0)}
-                    onAddClick={() => setActiveAnalysis(cat)} 
+                    onAnalysisComplete={handleAnalysisComplete} 
                   />
                 ))}
               </section>
-
-              {activeAnalysis && (
-                <section className="animate-in slide-in-from-bottom-4 duration-300">
-                  <MealAnalysisTool 
-                    category={activeAnalysis} 
-                    onAnalysisComplete={handleAnalysisComplete}
-                    onCancel={() => setActiveAnalysis(null)}
-                  />
-                </section>
-              )}
 
               <Card className="border-primary/10 shadow-sm bg-card">
                 <CardHeader className="flex flex-row items-center justify-between">
@@ -439,7 +419,7 @@ export default function DashboardPage() {
             </aside>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <Card className="border-primary/10 shadow-sm bg-card">
                 <CardHeader>
