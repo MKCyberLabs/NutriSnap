@@ -1,0 +1,35 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "hero-healthy-food",
+      "description": "Healthy meal preparation with fresh vegetables",
+      "imageUrl": "https://picsum.photos/seed/health1/1200/800",
+      "imageHint": "healthy food"
+    },
+    {
+      "id": "breakfast-bg",
+      "description": "Healthy breakfast bowl",
+      "imageUrl": "https://picsum.photos/seed/breakfast/600/400",
+      "imageHint": "breakfast"
+    },
+    {
+      "id": "lunch-bg",
+      "description": "Nutritious lunch salad",
+      "imageUrl": "https://picsum.photos/seed/lunch/600/400",
+      "imageHint": "lunch"
+    },
+    {
+      "id": "dinner-bg",
+      "description": "Balanced dinner plate",
+      "imageUrl": "https://picsum.photos/seed/dinner/600/400",
+      "imageHint": "dinner"
+    },
+    {
+      "id": "snacks-bg",
+      "description": "Healthy snack options",
+      "imageUrl": "https://picsum.photos/seed/snacks/600/400",
+      "imageHint": "snacks"
+    }
+  ]
+}
