@@ -418,7 +418,12 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 space-y-6">
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as MealCategory[]).map((cat) => (
-                  <MealCategoryCard key={cat} category={cat} totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + Number(log.totalNutrients.calories || 0), 0)} onAnalysisComplete={(data, mealTime, path) => handleMealCardComplete(data, cat, mealTime, path)} />
+                  <MealCategoryCard 
+                    key={cat} 
+                    category={cat} 
+                    totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + Number(log.totalNutrients.calories || 0), 0)} 
+                    onAnalysisComplete={(data, category, mealTime, imagePath) => handleMealCardComplete(data, category, mealTime, imagePath)} 
+                  />
                 ))}
               </section>
 
@@ -553,6 +558,9 @@ export default function DashboardPage() {
                                       src={log.imagePath} 
                                       alt="Meal visual evidence" 
                                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                      }}
                                     />
                                     <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg flex items-center gap-1.5 text-[10px] text-white font-bold uppercase tracking-wider">
                                       <ImageIcon className="h-3 w-3" /> Visual Intake
