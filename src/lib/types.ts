@@ -21,10 +21,11 @@ export type MealCategory = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks';
 export interface FoodItem {
   id: string;
   name: string;
+  grams: number;
   calories: number;
-  protein: string;
-  carbs: string;
-  fat: string;
+  protein: number;
+  carbs: number;
+  fat: number;
 }
 
 export interface MealLog {
@@ -34,9 +35,9 @@ export interface MealLog {
   items: FoodItem[];
   totalNutrients: {
     calories: number;
-    protein: string;
-    carbs: string;
-    fat: string;
+    protein: number;
+    carbs: number;
+    fat: number;
   };
   healthInsight?: string;
   description?: string;

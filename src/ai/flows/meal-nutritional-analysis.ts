@@ -29,16 +29,17 @@ export type MealNutritionalAnalysisInput = z.infer<
 
 const MealNutritionalAnalysisOutputSchema = z.object({
   calories: z.number().describe('Total calories'),
-  protein: z.string().describe('Total protein'),
-  carbs: z.string().describe('Total carbs'),
-  fat: z.string().describe('Total fat'),
+  protein: z.number().describe('Total protein'),
+  carbs: z.number().describe('Total carbs'),
+  fat: z.number().describe('Total fat'),
   healthInsight: z.string().describe('Nutritional insight text'),
   foodItems: z.array(z.object({
     name: z.string(),
+    grams: z.number(),
     calories: z.number(),
-    protein: z.string(),
-    carbs: z.string(),
-    fat: z.string()
+    protein: z.number(),
+    carbs: z.number(),
+    fat: z.number()
   })).optional()
 });
 export type MealNutritionalAnalysisOutput = z.infer<
@@ -46,21 +47,21 @@ export type MealNutritionalAnalysisOutput = z.infer<
 >;
 
 /**
- * Mock database of nutritional items.
+ * Mock database of nutritional items (values per 100g base).
  */
-const ITEM_DB: Record<string, { name: string; calories: number; protein: string; carbs: string; fat: string }> = {
-  rice: { name: "Rice", calories: 200, protein: "4g", carbs: "45g", fat: "0.5g" },
-  dal: { name: "Dal", calories: 180, protein: "12g", carbs: "30g", fat: "2g" },
-  paneer: { name: "Paneer", calories: 250, protein: "14g", carbs: "4g", fat: "20g" },
-  lassi: { name: "Lassi", calories: 150, protein: "2g", carbs: "16g", fat: "5.5g" },
-  chicken: { name: "Grilled Chicken", calories: 220, protein: "35g", carbs: "0g", fat: "8g" },
-  egg: { name: "Boiled Egg", calories: 70, protein: "6g", carbs: "0.5g", fat: "5g" },
-  banana: { name: "Banana", calories: 105, protein: "1.3g", carbs: "27g", fat: "0.3g" },
-  oats: { name: "Oats", calories: 150, protein: "5g", carbs: "27g", fat: "2.5g" },
-  bread: { name: "Whole Wheat Bread", calories: 80, protein: "3g", carbs: "15g", fat: "1g" },
-  pasta: { name: "Pasta", calories: 220, protein: "8g", carbs: "43g", fat: "1.3g" },
-  meat: { name: "Red Meat", calories: 250, protein: "26g", carbs: "0g", fat: "15g" },
-  steak: { name: "Beef Steak", calories: 270, protein: "28g", carbs: "0g", fat: "17g" },
+const ITEM_DB: Record<string, { name: string; grams: number; calories: number; protein: number; carbs: number; fat: number }> = {
+  rice: { name: "Rice", grams: 150, calories: 195, protein: 4.1, carbs: 45.0, fat: 0.4 },
+  dal: { name: "Dal", grams: 200, calories: 230, protein: 14.5, carbs: 38.0, fat: 1.5 },
+  paneer: { name: "Paneer", grams: 100, calories: 265, protein: 18.2, carbs: 1.2, fat: 20.8 },
+  lassi: { name: "Lassi", grams: 250, calories: 160, protein: 3.5, carbs: 18.0, fat: 8.2 },
+  chicken: { name: "Grilled Chicken", grams: 150, calories: 247, protein: 31.0, carbs: 0.0, fat: 12.5 },
+  egg: { name: "Boiled Egg", grams: 50, calories: 78, protein: 6.3, carbs: 0.6, fat: 5.3 },
+  banana: { name: "Banana", grams: 120, calories: 105, protein: 1.3, carbs: 27.0, fat: 0.3 },
+  oats: { name: "Oats", grams: 100, calories: 389, protein: 16.9, carbs: 66.0, fat: 6.9 },
+  bread: { name: "Whole Wheat Bread", grams: 40, calories: 95, protein: 4.0, carbs: 18.0, fat: 1.1 },
+  pasta: { name: "Pasta", grams: 200, calories: 316, protein: 11.6, carbs: 61.2, fat: 1.8 },
+  meat: { name: "Red Meat", grams: 150, calories: 375, protein: 39.0, carbs: 0.0, fat: 22.5 },
+  steak: { name: "Beef Steak", grams: 200, calories: 540, protein: 56.0, carbs: 0.0, fat: 34.0 },
 };
 
 /**
@@ -73,28 +74,19 @@ function generateSampleMatrixData(userInput: string = ''): MealNutritionalAnalys
   // Find all matches
   for (const [key, data] of Object.entries(ITEM_DB)) {
     if (input.includes(key)) {
-      matchedItems.push(data);
+      matchedItems.push({ ...data });
     }
   }
 
   // Fallback if no keywords found
   if (matchedItems.length === 0) {
-    matchedItems.push({ name: "Mixed Balanced Meal", calories: 350, protein: "25g", carbs: "40g", fat: "10g" });
+    matchedItems.push({ name: "Mixed Balanced Meal", grams: 300, calories: 450, protein: 30, carbs: 50, fat: 15 });
   }
 
-  // Summation helper
-  const sumVal = (items: any[], key: 'protein' | 'carbs' | 'fat') => {
-    const total = items.reduce((acc, item) => {
-      const val = parseFloat(item[key].replace(/[^0-9.]/g, '')) || 0;
-      return acc + val;
-    }, 0);
-    return `${total.toFixed(1).replace(/\.0$/, '')}g`;
-  };
-
   const totalCalories = matchedItems.reduce((acc, item) => acc + item.calories, 0);
-  const totalProtein = sumVal(matchedItems, 'protein');
-  const totalCarbs = sumVal(matchedItems, 'carbs');
-  const totalFat = sumVal(matchedItems, 'fat');
+  const totalProtein = matchedItems.reduce((acc, item) => acc + item.protein, 0);
+  const totalCarbs = matchedItems.reduce((acc, item) => acc + item.carbs, 0);
+  const totalFat = matchedItems.reduce((acc, item) => acc + item.fat, 0);
 
   let insight = "Great choice! This meal provides a diverse range of nutrients.";
   if (input.includes('rice') && input.includes('dal')) {
@@ -104,10 +96,10 @@ function generateSampleMatrixData(userInput: string = ''): MealNutritionalAnalys
   }
 
   return {
-    calories: totalCalories,
-    protein: totalProtein,
-    carbs: totalCarbs,
-    fat: totalFat,
+    calories: Math.round(totalCalories),
+    protein: Number(totalProtein.toFixed(1)),
+    carbs: Number(totalCarbs.toFixed(1)),
+    fat: Number(totalFat.toFixed(1)),
     healthInsight: insight,
     foodItems: matchedItems
   };
