@@ -99,7 +99,8 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         }
       }
 
-      // 2. Perform AI analysis by calling the Health Matrix API endpoint
+      // 2. Perform AI analysis by calling the local Health Matrix API endpoint
+      // This is the source of truth for all nutritional analysis
       const res = await fetch('/api/analyze-meal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,6 +111,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         }),
       });
 
+      // Crucial: Call .json() only ONCE to prevent parsing errors
       const resultData = await res.json();
 
       if (!res.ok) {
@@ -117,7 +119,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         throw new Error(resultData.details || resultData.error || 'Health Matrix Analysis Failed');
       }
 
-      onAnalysisComplete(resultData, mealTime, uploadedPath);
+      onAnalysisComplete(resultData as MealNutritionalAnalysisOutput, mealTime, uploadedPath);
     } catch (error: any) {
       console.error("Health Matrix API Error:", error);
       toast({

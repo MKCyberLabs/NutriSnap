@@ -1,6 +1,7 @@
 'use server';
 /**
  * @fileOverview A GenAI flow for analyzing meals with an itemized breakdown.
+ * Strictly adheres to the NutriSnap Health Matrix API Specification.
  *
  * - mealNutritionalAnalysis - Handles analysis using Gemini 1.5 Flash.
  * - MealNutritionalAnalysisInput - The input type.
@@ -66,7 +67,6 @@ const mealPrompt = ai.definePrompt({
   input: { schema: MealNutritionalAnalysisInputSchema },
   output: { schema: MealNutritionalAnalysisOutputSchema },
   config: {
-    // Relax safety filters to prevent blocking food image analysis
     safetySettings: [
       { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
       { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
@@ -80,7 +80,7 @@ const mealPrompt = ai.definePrompt({
 Requirements:
 1. Break the meal down into individual food items in the 'foodItems' array.
 2. The root level macros (calories, protein, carbs, fat, sugar, fiber, saturatedFat) must be the EXACT sum of the individual items.
-3. Provide a concise, professional, and encouraging nutritional insight.
+3. Provide a concise, professional, and encouraging nutritional insight in the 'healthInsight' field.
 4. Output your analysis ONLY as a raw, valid JSON object. Do not include markdown formatting or backticks.`,
   prompt: `Analyze the following meal information. Calculate the macro-nutrients as accurately as possible based on standard portion sizes.
 
@@ -98,7 +98,7 @@ export async function mealNutritionalAnalysis(
 ): Promise<MealNutritionalAnalysisOutput> {
   const finalInput = { ...input };
 
-  // If a local image path is provided, read it from disk
+  // If a local image path is provided, read it from disk natively (Performance Optimization)
   if (input.imagePath && !input.mealPhotoDataUri) {
     try {
       const cleanPath = input.imagePath.startsWith('/') ? input.imagePath.substring(1) : input.imagePath;
@@ -107,7 +107,7 @@ export async function mealNutritionalAnalysis(
       if (fs.existsSync(fullFilePath)) {
         const imageBuffer = fs.readFileSync(fullFilePath);
         const ext = path.extname(fullFilePath).toLowerCase();
-        const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+        const mimeType = (ext === '.png' || ext === '.webp') ? `image/${ext.substring(1)}` : 'image/jpeg';
         finalInput.mealPhotoDataUri = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
       } else {
         console.warn(`Health Matrix: Local image not found at ${fullFilePath}`);
@@ -121,12 +121,12 @@ export async function mealNutritionalAnalysis(
     const { output } = await mealPrompt(finalInput);
     
     if (!output) {
-      throw new Error('AI analysis produced an empty response. Check if your GEMINI_API_KEY is valid and not restricted.');
+      throw new Error('AI analysis produced an empty response. Verify your API credentials and safety settings.');
     }
 
     return output;
   } catch (error: any) {
-    console.error("Health Matrix: AI Prompt Failure:", error.message);
-    throw new Error(`AI Analysis Error: ${error.message}`);
+    console.error("Health Matrix: AI Logic Failure:", error.message);
+    throw new Error(`Health Matrix Error: ${error.message}`);
   }
 }
