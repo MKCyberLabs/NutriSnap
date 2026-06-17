@@ -62,7 +62,8 @@ import {
   Utensils,
   Apple,
   Edit2,
-  Check
+  Check,
+  ImageIcon
 } from 'lucide-react';
 import { format, isSameDay, addDays, subDays, eachDayOfInterval, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -139,7 +140,6 @@ export default function DashboardPage() {
     if (savedLogs) {
       try {
         const parsedLogs = JSON.parse(savedLogs);
-        // Clean up invalid local data
         const validLogs = Array.isArray(parsedLogs) ? parsedLogs.filter(log => log && typeof log === 'object' && log.id) : [];
         setLogs(validLogs);
       } catch (e) {
@@ -203,7 +203,6 @@ export default function DashboardPage() {
       const updatedItems = log.items.map(item => {
         if (item.id !== itemId) return item;
         
-        // Scale nutrition based on grams
         const scale = newGrams / item.grams;
         return {
           ...item,
@@ -495,6 +494,7 @@ export default function DashboardPage() {
                                   </div>
                                 </div>
                               </div>
+
                               <div className="space-y-3">
                                 {log.items.map((item) => (
                                   <div key={item.id} className="p-3 rounded-xl bg-white/30 dark:bg-black/20 border border-white/40 flex items-center justify-between group">
@@ -546,6 +546,20 @@ export default function DashboardPage() {
                                     </div>
                                   </div>
                                 ))}
+
+                                {log.imagePath && (
+                                  <div className="relative rounded-2xl overflow-hidden border border-white/40 shadow-inner bg-black/5 aspect-video group">
+                                    <img 
+                                      src={log.imagePath} 
+                                      alt="Meal visual evidence" 
+                                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                                    />
+                                    <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg flex items-center gap-1.5 text-[10px] text-white font-bold uppercase tracking-wider">
+                                      <ImageIcon className="h-3 w-3" /> Visual Intake
+                                    </div>
+                                  </div>
+                                )}
+
                                 <div className="pt-2 flex justify-end">
                                   <Popover>
                                     <PopoverTrigger asChild>
