@@ -324,40 +324,49 @@ export default function DashboardPage() {
   }, [logs, selectedDate]);
 
   const activeWeeklyRange = useMemo(() => {
-    if (customRange?.from && customRange?.to) {
-      return { from: startOfDay(customRange.from), to: endOfDay(customRange.to) };
+    if (customRange?.from) {
+      // If only 'from' is selected, use it as start and end to show a single day
+      // until the user selects the 'to' date.
+      return { 
+        from: startOfDay(customRange.from), 
+        to: endOfDay(customRange.to || customRange.from) 
+      };
     }
     return { from: startOfDay(subDays(weeklyPivotDate, 6)), to: endOfDay(weeklyPivotDate) };
   }, [weeklyPivotDate, customRange]);
 
   const dynamicWeeklyData = useMemo(() => {
-    const days = eachDayOfInterval({ start: activeWeeklyRange.from, end: activeWeeklyRange.to });
-    return days.map(date => {
-      const dayLogs = logs.filter(log => {
-        try {
-          const logDate = typeof log.timestamp === 'string' ? parseISO(log.timestamp) : new Date(log.timestamp);
-          return isSameDay(logDate, date);
-        } catch (e) {
-          return false;
-        }
+    try {
+      const days = eachDayOfInterval({ start: activeWeeklyRange.from, end: activeWeeklyRange.to });
+      return days.map(date => {
+        const dayLogs = logs.filter(log => {
+          try {
+            const logDate = typeof log.timestamp === 'string' ? parseISO(log.timestamp) : new Date(log.timestamp);
+            return isSameDay(logDate, date);
+          } catch (e) {
+            return false;
+          }
+        });
+
+        const calories = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.calories) || 0), 0);
+        const protein = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.protein) || 0), 0);
+        const carbs = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.carbs) || 0), 0);
+        const fat = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.fat) || 0), 0);
+        const sugar = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.sugar) || 0), 0);
+
+        return {
+          day: format(date, 'EEE'),
+          fullDate: date,
+          calories,
+          protein,
+          carbs,
+          fat,
+          sugar,
+        };
       });
-
-      const calories = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.calories) || 0), 0);
-      const protein = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.protein) || 0), 0);
-      const carbs = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.carbs) || 0), 0);
-      const fat = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.fat) || 0), 0);
-      const sugar = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.sugar) || 0), 0);
-
-      return {
-        day: format(date, 'EEE'),
-        fullDate: date,
-        calories,
-        protein,
-        carbs,
-        fat,
-        sugar,
-      };
-    });
+    } catch (e) {
+      return [];
+    }
   }, [logs, activeWeeklyRange]);
 
   const dailyTotals = useMemo(() => {
@@ -375,6 +384,7 @@ export default function DashboardPage() {
   const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
 
   const weeklyAvgCalories = useMemo(() => {
+    if (dynamicWeeklyData.length === 0) return 0;
     const totalDaysInRange = differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1;
     const totalCalsInRange = dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0);
     return Math.round(totalCalsInRange / totalDaysInRange);
@@ -717,25 +727,31 @@ export default function DashboardPage() {
               <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader><CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground"><BarChart3 className="h-5 w-5 text-primary" /> Calorie Trends</CardTitle></CardHeader>
                 <CardContent className="pt-6">
-                  <ChartContainer config={{ calories: { label: "Calories", color: "hsl(var(--primary))" } }} className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={dynamicWeeklyData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.1)" />
-                        <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                        <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                        <Bar dataKey="calories" radius={[8, 8, 8, 8]} maxBarSize={32}>
-                          {dynamicWeeklyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.calories > userTargets.calories ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.6)'} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
+                  {dynamicWeeklyData.length > 0 ? (
+                    <ChartContainer config={{ calories: { label: "Calories", color: "hsl(var(--primary))" } }} className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={dynamicWeeklyData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.1)" />
+                          <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                          <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                          <Bar dataKey="calories" radius={[8, 8, 8, 8]} maxBarSize={32}>
+                            {dynamicWeeklyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.calories > userTargets.calories ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.6)'} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  ) : (
+                    <div className="h-[300px] flex items-center justify-center text-muted-foreground bg-white/5 rounded-2xl border border-dashed">
+                      Select a valid range to view trends
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[ 
                   { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, 
-                  { icon: BarChart3, val: Math.max(...dynamicWeeklyData.map(d => d.calories)), label: 'Peak Day' }, 
+                  { icon: BarChart3, val: dynamicWeeklyData.length > 0 ? Math.max(...dynamicWeeklyData.map(d => d.calories)) : 0, label: 'Peak Day' }, 
                   { icon: History, val: dynamicWeeklyData.filter(d => d.calories > 0).length, label: 'Tracked Days' } 
                 ].map((s, i) => (
                   <Card key={i} className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>
@@ -751,7 +767,7 @@ export default function DashboardPage() {
                     { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
                     { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
                   ].map(m => {
-                    const percentage = Math.min((m.val / m.max) * 100, 100);
+                    const percentage = Math.min((m.val / (m.max || 1)) * 100, 100);
                     return (
                       <div key={m.label} className="space-y-2">
                         <div className="flex justify-between items-center text-[10px] font-bold uppercase text-muted-foreground">
