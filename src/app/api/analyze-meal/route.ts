@@ -29,18 +29,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error: any) {
     // Log the specific error to the server console for debugging
-    console.error('Health Matrix API Logic Failure:', {
-      message: error.message,
-      stack: error.stack,
-    });
+    console.error('Health Matrix API Logic Failure:', error);
 
     // Surface the actual error message to the frontend for better debugging (e.g., "API Key not found")
-    return NextResponse.json(
-      { 
-        error: 'Health Matrix Analysis Failed', 
-        details: error.message || 'An unexpected error occurred during AI processing.' 
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Health Matrix Analysis Failed', details: error.message }, { status: 500 });
   }
 }

@@ -8,6 +8,7 @@ import { getAuthSession } from '@/lib/auth-mock';
 import { User, MealCategory, MealLog, FoodItem, UserMetrics } from '@/lib/types';
 import { MealCategoryCard } from '@/components/dashboard/MealCategoryCard';
 import { mealNutritionalAnalysis, MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
+import { fetchUserLogs, saveMealLog, deleteMealLog, updateMealLogItems } from '@/ai/actions/db-logs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -117,22 +118,30 @@ export default function DashboardPage() {
     }
     setUser(session);
     
-    const savedLogs = localStorage.getItem('nutrisnap_logs');
-    if (savedLogs) {
-      try {
-        const parsedLogs = JSON.parse(savedLogs);
-        const sanitizedLogs = (Array.isArray(parsedLogs) ? parsedLogs : [])
-          .filter(log => log && typeof log === 'object' && log.id)
-          .map(log => ({
-            ...log,
-            timestamp: typeof log.timestamp === 'string' ? log.timestamp : new Date().toISOString(),
-            imagePath: log.imagePath || log.photoUrl || undefined
-          }));
-        setLogs(sanitizedLogs);
-      } catch (e) {
-        setLogs([]);
+    // Fetch logs from the real database
+    fetchUserLogs(session.id).then(dbLogs => {
+      if (dbLogs && dbLogs.length > 0) {
+        setLogs(dbLogs as MealLog[]);
+      } else {
+        // Fallback to localStorage for migration or backward compatibility
+        const savedLogs = localStorage.getItem('nutrisnap_logs');
+        if (savedLogs) {
+          try {
+            const parsedLogs = JSON.parse(savedLogs);
+            const sanitizedLogs = (Array.isArray(parsedLogs) ? parsedLogs : [])
+               .filter(log => log && typeof log === 'object' && log.id)
+               .map(log => ({
+                 ...log,
+                 timestamp: typeof log.timestamp === 'string' ? log.timestamp : new Date().toISOString(),
+                 imagePath: log.imagePath || log.photoUrl || undefined
+               }));
+            setLogs(sanitizedLogs);
+          } catch (e) {
+            setLogs([]);
+          }
+        }
       }
-    }
+    });
   }, [router]);
 
   const saveLogsToStorage = (updatedLogs: MealLog[]) => {
@@ -309,9 +318,18 @@ export default function DashboardPage() {
     toast({ title: "Item Deleted", description: "The food item has been removed." });
   };
 
-  const handleDeleteLog = (logId: string) => {
+  const handleDeleteLog = async (logId: string) => {
     saveLogsToStorage(logs.filter(l => l.id !== logId));
-    toast({ title: "Log Removed", description: "The record has been deleted." });
+    try {
+      const res = await deleteMealLog(logId);
+      if (res.success) {
+        toast({ title: "Log Removed", description: "The record has been deleted from the database." });
+      } else {
+        toast({ variant: "destructive", title: "Error", description: "Failed to delete the record from the database." });
+      }
+    } catch (error) {
+      console.error("Failed to delete log:", error);
+    }
   };
 
   const filteredLogs = useMemo(() => {

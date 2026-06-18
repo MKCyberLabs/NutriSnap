@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
-import { getAuthSession, getManagedUsers, saveManagedUsers } from '@/lib/auth-mock';
+import { getAuthSession } from '@/lib/auth-mock';
+import { fetchAllUsers, createDbUser, updateDbUser, deleteDbUser } from '@/ai/actions/db-admin';
 import { User, UserRole } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -61,51 +62,61 @@ export default function AdminPage() {
       return;
     }
     setAdminUser(session);
-    setManagedUsers(getManagedUsers());
+    fetchAllUsers().then(users => setManagedUsers(users as any));
   }, [router]);
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser.email || !currentUser.name) return;
 
-    const newUser: User & { password?: string } = {
-      id: Math.random().toString(36).substr(2, 9),
+    const res = await createDbUser({
       name: currentUser.name || '',
       email: currentUser.email || '',
-      role: (currentUser.role as UserRole) || 'USER',
-      onboarded: true, // Defaulting to true as requested
+      role: currentUser.role || 'USER',
       password: currentUser.password || 'ProductionPassword123!'
-    };
+    });
 
-    const updated = [...managedUsers, newUser];
-    setManagedUsers(updated);
-    saveManagedUsers(updated);
-    setIsCreateOpen(false);
-    setCurrentUser({});
-    toast({ title: "User Created", description: `${newUser.name} has been added with auto-onboarding enabled.` });
+    if (res.success && res.user) {
+      setManagedUsers([...managedUsers, res.user as any]);
+      setIsCreateOpen(false);
+      setCurrentUser({});
+      toast({ title: "User Created", description: `${res.user.name} has been added to the database.` });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: "Could not create user. Email may exist." });
+    }
   };
 
-  const handleEditUser = (e: React.FormEvent) => {
+  const handleEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser.id) return;
 
-    const updated = managedUsers.map(u => u.id === currentUser.id ? { ...currentUser, onboarded: true } as User & { password?: string } : u);
-    setManagedUsers(updated);
-    saveManagedUsers(updated);
-    setIsEditOpen(false);
-    setCurrentUser({});
-    toast({ title: "User Updated", description: "The profile has been successfully modified." });
+    const res = await updateDbUser(currentUser.id, currentUser);
+    
+    if (res.success && res.user) {
+      const updated = managedUsers.map(u => u.id === currentUser.id ? res.user as any : u);
+      setManagedUsers(updated);
+      setIsEditOpen(false);
+      setCurrentUser({});
+      toast({ title: "User Updated", description: "The profile has been successfully modified in the database." });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: "Failed to update user." });
+    }
   };
 
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     if (id === adminUser?.id) {
       toast({ variant: "destructive", title: "Action Denied", description: "You cannot delete your own admin account." });
       return;
     }
-    const updated = managedUsers.filter(u => u.id !== id);
-    setManagedUsers(updated);
-    saveManagedUsers(updated);
-    toast({ title: "User Deleted", description: "The account has been removed from the registry." });
+    
+    const res = await deleteDbUser(id);
+    if (res.success) {
+      const updated = managedUsers.filter(u => u.id !== id);
+      setManagedUsers(updated);
+      toast({ title: "User Deleted", description: "The account has been removed from the database." });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: "Failed to delete user." });
+    }
   };
 
   const filteredUsers = managedUsers.filter(u => 

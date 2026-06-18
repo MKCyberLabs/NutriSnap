@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { getAuthSession, saveAuthSession } from '@/lib/auth-mock';
+import { updateUserMetrics } from '@/ai/actions/db-users';
 import { useToast } from '@/hooks/use-toast';
 import { Ruler, Weight, CalendarDays, CheckCircle2, User as UserIcon } from 'lucide-react';
 import {
@@ -49,6 +50,7 @@ export default function OnboardingPage() {
         }
       };
       saveAuthSession(updatedUser);
+      if (session.id) { updateUserMetrics(session.id, updatedUser.metrics); }
       toast({
         title: "Setup Complete!",
         description: "Your health profile has been personalized.",

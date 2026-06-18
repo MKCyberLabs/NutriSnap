@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+*.md
+docs
+.idx
+.firebaserc
+.vercel
+npm-debug.log*

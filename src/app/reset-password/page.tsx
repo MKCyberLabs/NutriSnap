@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label';
 import { ShieldAlert, CheckCircle2, AlertCircle } from 'lucide-react';
 import { getAuthSession, saveAuthSession } from '@/lib/auth-mock';
+import { resetDbUserPassword } from '@/ai/actions/db-users';
 import { useToast } from '@/hooks/use-toast';
 import { resetPasswordSchema } from '@/lib/validation';
 
@@ -41,11 +42,16 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    // In production, call API: await fetch('/api/auth/reset-password', ...)
-    // Simulating success
-    setTimeout(() => {
-      const session = getAuthSession();
-      if (session) {
+    const session = getAuthSession();
+    if (!session || !session.id) {
+      toast({ variant: "destructive", title: "Error", description: "No active session." });
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      const res = await resetDbUserPassword(session.id, password);
+      if (res.success) {
         const updated = { ...session, requiresPasswordReset: false };
         saveAuthSession(updated);
         toast({
@@ -53,9 +59,22 @@ export default function ResetPasswordPage() {
           description: "Your new password has been established. Session restored.",
         });
         router.push(session.role === 'ADMIN' ? '/admin' : '/dashboard');
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to reset password in database.",
+        });
       }
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred.",
+      });
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   return (

@@ -1,3 +1,4 @@
+import { prisma } from '@/lib/prisma';
 
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
@@ -27,40 +28,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Too many failed login attempts. Please try again in 15 minutes.' }, { status: 429 });
     }
 
-    // Mock User Lookup (Simulating Prisma)
-    const isTargetAdmin = email === 'admin@mkcyberlabs.in';
-    const isTargetEmployee = email === 'user@nutrisnap.com';
-    
-    // In production: const user = await prisma.user.findUnique({ where: { email } });
-    let mockUser = null;
-    
-    if (isTargetAdmin) {
-      mockUser = {
-        id: 'admin-1',
-        email: 'admin@mkcyberlabs.in',
-        name: 'MK CyberLabs Admin',
-        role: 'ADMIN',
-        hashedPassword: await bcrypt.hash('ProductionPassword123!', 12),
-        onboarded: true
-      };
-    } else if (isTargetEmployee) {
-      mockUser = {
-        id: '1',
-        email: 'user@nutrisnap.com',
-        name: 'Alex Johnson',
-        role: 'USER',
-        hashedPassword: await bcrypt.hash('ProductionPassword123!', 12),
-        onboarded: true
-      };
-    }
+    // Real Database Lookup via Prisma
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
 
-    if (!mockUser) {
+    if (!user) {
       updateAttempts(identifier);
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
     // Password Verification
-    const passwordMatch = await bcrypt.compare(password, mockUser.hashedPassword);
+    const passwordMatch = await bcrypt.compare(password, user.password);
     const recoveryKeyMatch = process.env.ADMIN_RECOVERY_KEY && password === process.env.ADMIN_RECOVERY_KEY;
 
     if (!passwordMatch && !recoveryKeyMatch) {
@@ -73,12 +52,18 @@ export async function POST(req: NextRequest) {
 
     // Prepare Response
     const responseData = {
-      id: mockUser.id,
-      email: mockUser.email,
-      name: mockUser.name,
-      role: mockUser.role,
-      onboarded: mockUser.onboarded,
-      requiresPasswordReset: !!recoveryKeyMatch,
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      onboarded: user.onboarded,
+      requiresPasswordReset: user.requiresPasswordReset || !!recoveryKeyMatch,
+      metrics: {
+        gender: user.gender,
+        age: user.age,
+        weight: user.weight,
+        height: user.height
+      }
     };
 
     return NextResponse.json(responseData);

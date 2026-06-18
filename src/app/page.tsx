@@ -46,11 +46,7 @@ export default function LoginPage() {
           description: `Access granted as ${localUser.role}`,
         });
         
-        if (localUser.role === 'ADMIN') {
-          router.push('/admin');
-        } else {
-          router.push('/dashboard');
-        }
+        if (localUser.role === 'ADMIN') { router.push('/admin'); } else { router.push(localUser.onboarded ? '/dashboard' : '/onboarding'); }
         return;
       }
 
@@ -78,9 +74,7 @@ export default function LoginPage() {
         router.push('/reset-password');
       } else if (data.role === 'ADMIN') {
         router.push('/admin');
-      } else {
-        router.push('/dashboard');
-      }
+      } else { router.push(data.onboarded ? '/dashboard' : '/onboarding'); }
     } catch (err: any) {
       toast({
         variant: "destructive",
@@ -162,7 +156,7 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-4">
               <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200 rounded-2xl" onClick={() => quickSelect('user@nutrisnap.com')}>
                 <UserCheck className="h-5 w-5 text-emerald-500" />
-                <span className="text-xs font-bold text-muted-foreground">Employee</span>
+                <span className="text-xs font-bold text-muted-foreground">User</span>
               </Button>
               <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200 rounded-2xl" onClick={() => quickSelect('admin@mkcyberlabs.in')}>
                 <ShieldCheck className="h-5 w-5 text-primary" />
