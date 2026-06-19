@@ -10,3 +10,14 @@ docs
 .firebaserc
 .vercel
 npm-debug.log*
+
+# Ignore files that do not affect the build to preserve Docker cache
+temp
+public/uploads
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.override.yml
+README.md
+HEALTH_MATRIX_DOCS.md
+apphosting.yaml

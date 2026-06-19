@@ -57,33 +57,38 @@ export type MealNutritionalAnalysisOutput = z.infer<
 export async function mealNutritionalAnalysis(
   input: MealNutritionalAnalysisInput
 ): Promise<MealNutritionalAnalysisOutput> {
-  // Simulate network/processing latency
-  await new Promise(resolve => setTimeout(resolve, 1200));
+  const pythonApiUrl = process.env.PYTHON_API_URL || 'http://localhost:5000/health-matrix';
+  
+  const response = await fetch(pythonApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      mealDescription: input.mealDescription,
+      imagePath: input.imagePath,
+      mealTime: input.mealTime,
+    }),
+  });
 
-  const mealName = input.mealDescription || "Custom Meal Selection";
+  if (!response.ok) {
+    throw new Error(`Python API failed with status ${response.status}`);
+  }
 
-  // Mock response mapping to the Health Matrix Specification
-  return {
-    calories: 450,
-    protein: 30.0,
-    carbs: 50.0,
-    fat: 15.0,
-    sugar: 10.0,
-    fiber: 5.0,
-    saturatedFat: 4.0,
-    healthInsight: "Analysis based on Health Matrix prototype data. This meal provides a diverse range of nutrients and maintains a balanced macro profile.",
-    foodItems: [
-      {
-        name: mealName,
-        grams: 300,
-        calories: 450,
-        protein: 30.0,
-        carbs: 50.0,
-        fat: 15.0,
-        fiber: 5.0,
-        saturatedFat: 4.0,
-        sugar: 10.0
-      }
-    ]
-  };
+  const data = await response.json();
+  
+  if (data.status !== 'success') {
+    throw new Error(`Python API returned an error: ${data.message || 'Unknown error'}`);
+  }
+
+  // The Python backend uses the 'agy' CLI, which might output thought process before the JSON.
+  // We need to extract the JSON block from data.response
+  const jsonMatch = data.response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('Failed to extract JSON from Python AI response.');
+  }
+
+  const parsedData = JSON.parse(jsonMatch[0]);
+
+  return parsedData as MealNutritionalAnalysisOutput;
 }

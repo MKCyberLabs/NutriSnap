@@ -37,3 +37,25 @@ export async function resetDbUserPassword(userId: string, newPassword: string) {
     return { success: false };
   }
 }
+
+export async function authenticateDbUser(email: string, password?: string) {
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return null;
+    
+    // For admin prototype passwords and new hashed passwords
+    if (user.password === password) {
+      return user;
+    }
+    
+    if (password) {
+      const isValid = await bcrypt.compare(password, user.password);
+      if (isValid) return user;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Failed to authenticate user:", error);
+    return null;
+  }
+}

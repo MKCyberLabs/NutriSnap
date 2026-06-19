@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { ShieldCheck, UserCheck, ArrowRight, Lock } from 'lucide-react';
-import { authenticateUser, saveAuthSession } from '@/lib/auth-mock';
+import { saveAuthSession } from '@/lib/auth-mock';
+import { authenticateDbUser } from '@/ai/actions/db-users';
 import { useToast } from '@/hooks/use-toast';
 import { loginSchema } from '@/lib/validation';
 
@@ -36,17 +37,17 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Prototype Auth: Check local managed users first (source of truth for created users)
-      const localUser = authenticateUser(email, password);
+      // 1. Production Auth: Check PostgreSQL DB via Server Action
+      const dbUser = await authenticateDbUser(email, password);
       
-      if (localUser) {
-        saveAuthSession(localUser);
+      if (dbUser) {
+        saveAuthSession(dbUser as any);
         toast({
           title: "Authenticated Successfully",
-          description: `Access granted as ${localUser.role}`,
+          description: `Access granted as ${dbUser.role}`,
         });
         
-        if (localUser.role === 'ADMIN') { router.push('/admin'); } else { router.push(localUser.onboarded ? '/dashboard' : '/onboarding'); }
+        if (dbUser.role === 'ADMIN') { router.push('/admin'); } else { router.push(dbUser.onboarded ? '/dashboard' : '/onboarding'); }
         return;
       }
 

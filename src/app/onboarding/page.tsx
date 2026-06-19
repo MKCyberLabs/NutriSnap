@@ -144,7 +144,7 @@ export default function OnboardingPage() {
                 Complete Setup <CheckCircle2 className="ml-2 h-5 w-5" />
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Your data is stored locally on this device for privacy.
+                Your data is securely stored in your private database.
               </p>
             </CardFooter>
           </form>

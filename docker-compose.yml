@@ -11,21 +11,28 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - proxy
+    security_opt:
+      - apparmor:unconfined
 
   nutrisnap:
     build: .
+    user: "root"
     container_name: nutrisnap_prod
     volumes:
-      - /opt/docker/containers/agy-cli-stream/temp:/app/public/uploads
+      - /home/user/Documents/HealthMatrix/temp:/app/public/uploads
+    ports:
+      - "3001:3000"
     restart: unless-stopped
     depends_on:
       - db
     environment:
       - DATABASE_URL=postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap
-      - PYTHON_API_URL=http://172.17.0.1:5000/health-matrix
+      - PYTHON_API_URL=http://host.docker.internal:5000/health-matrix
       - NODE_ENV=production
       - ADMIN_INITIAL_PASSWORD=ProductionPassword123!
       - ADMIN_RECOVERY_KEY=RecoveryKey@2024Secure!
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       - "traefik.enable=true"
       # MAIN SITE
@@ -36,6 +43,8 @@ services:
       - "traefik.http.services.nutrisnap.loadbalancer.server.port=3000"
     networks:
       - proxy
+    security_opt:
+      - apparmor:unconfined
 
 volumes:
   pgdata:

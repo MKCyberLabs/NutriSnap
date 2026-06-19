@@ -9,7 +9,8 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
 # Install dependencies and generate Prisma client
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
 RUN npx prisma generate
 
 # Stage 2: Build the Next.js application
@@ -19,7 +20,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build the project
-RUN npm run build
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # Stage 3: Production server
 FROM node:18-alpine AS runner

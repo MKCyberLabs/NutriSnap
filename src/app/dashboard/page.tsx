@@ -151,7 +151,7 @@ export default function DashboardPage() {
 
   const userTargets = useMemo(() => calculateNutrientTargets(user?.metrics), [user]);
 
-  const handleMealCardComplete = (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
+  const handleMealCardComplete = async (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const logTimestamp = new Date(selectedDate);
     if (mealTime && mealTime.includes(':')) {
       const [hours, minutes] = mealTime.split(':').map(Number);
@@ -184,6 +184,16 @@ export default function DashboardPage() {
     };
 
     saveLogsToStorage([newLog, ...logs]);
+    
+    // Save to Postgres and update local ID
+    const res = await saveMealLog(user?.id || '', newLog, newLog.items);
+    if (res && res.success && res.log) {
+      setLogs(prev => {
+        const updated = prev.map(l => l.id === newLog.id ? { ...l, id: res.log.id } : l);
+        localStorage.setItem('nutrisnap_logs', JSON.stringify(updated));
+        return updated;
+      });
+    }
   };
 
   const handleUpdateItemGrams = (logId: string, itemId: string, newGramsStr: string) => {
@@ -238,6 +248,12 @@ export default function DashboardPage() {
     });
 
     saveLogsToStorage(updatedLogs);
+    
+    const updatedLog = updatedLogs.find(l => l.id === logId);
+    if (updatedLog) {
+      updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
+    }
+
     setEditingGrams(null);
     toast({ title: "Weight Updated", description: "Nutritional values have been recalculated." });
   };
@@ -278,6 +294,12 @@ export default function DashboardPage() {
         };
       });
       saveLogsToStorage(updatedLogs);
+      
+      const updatedLog = updatedLogs.find(l => l.id === logId);
+      if (updatedLog) {
+        updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
+      }
+
       setNewItemText('');
       toast({ title: "Item Added", description: "Successfully updated your meal record." });
     } catch (error) {
@@ -315,6 +337,12 @@ export default function DashboardPage() {
       };
     });
     saveLogsToStorage(updatedLogs);
+    
+    const updatedLog = updatedLogs.find(l => l.id === logId);
+    if (updatedLog) {
+      updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
+    }
+    
     toast({ title: "Item Deleted", description: "The food item has been removed." });
   };
 
@@ -569,7 +597,7 @@ export default function DashboardPage() {
                                       <AlertDialogContent className="glass-card border-none rounded-3xl">
                                         <AlertDialogHeader>
                                           <AlertDialogTitle>Delete Log?</AlertDialogTitle>
-                                          <AlertDialogDescription>This will permanently remove this meal entry from your local history.</AlertDialogDescription>
+                                          <AlertDialogDescription>This will permanently remove this meal entry from your database.</AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
                                           <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
