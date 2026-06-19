@@ -87,10 +87,6 @@ export default function LoginPage() {
     }
   };
 
-  const quickSelect = (val: string) => {
-    setEmail(val);
-    setPassword('ProductionPassword123!');
-  };
 
   return (
     <main className="min-h-svh flex items-center justify-center bg-slate-50/50 p-4 font-sans">
@@ -145,25 +141,6 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
-                <span className="bg-white px-3 text-muted-foreground">Internal Directory</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200 rounded-2xl" onClick={() => quickSelect('user@nutrisnap.com')}>
-                <UserCheck className="h-5 w-5 text-emerald-500" />
-                <span className="text-xs font-bold text-muted-foreground">User</span>
-              </Button>
-              <Button variant="outline" className="flex flex-col h-auto py-3 px-2 gap-1 border-slate-200 rounded-2xl" onClick={() => quickSelect('admin@mkcyberlabs.in')}>
-                <ShieldCheck className="h-5 w-5 text-primary" />
-                <span className="text-xs font-bold text-primary">Global Admin</span>
-              </Button>
-            </div>
           </CardContent>
           <CardFooter>
             <p className="text-center text-[10px] text-muted-foreground w-full uppercase tracking-tighter">
