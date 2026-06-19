@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: nutrisnap_db_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nutrisnap
+      POSTGRES_PASSWORD: nutrisnap_pass
+      POSTGRES_DB: nutrisnap
+    ports:
+      - "5432:5432" # Expose DB for Prisma Studio
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    networks:
+      - proxy
+    security_opt:
+      - apparmor:unconfined
+
+  nutrisnap:
+    image: node:18-alpine
+    container_name: nutrisnap_dev
+    working_dir: /app
+    volumes:
+      - .:/app
+      - node_modules_dev:/app/node_modules
+      - /home/user/Documents/HealthMatrix/temp:/app/public/uploads
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap
+      - PYTHON_API_URL=http://host.docker.internal:5000/health-matrix
+      - NODE_ENV=development
+      - ADMIN_INITIAL_PASSWORD=ProductionPassword123!
+      - ADMIN_RECOVERY_KEY=RecoveryKey@2024Secure!
+      - CHOKIDAR_USEPOLLING=true
+    command: >
+      sh -c "npm install && npx prisma generate && npm run dev"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - proxy
+    security_opt:
+      - apparmor:unconfined
+
+volumes:
+  pgdata_dev:
+  node_modules_dev:
+
+networks:
+  proxy:
+    external: true

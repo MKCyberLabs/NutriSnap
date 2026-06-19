@@ -2,7 +2,25 @@
 
 This document provides a comprehensive guide for initializing, syncing, seeding, and exporting the NutriSnap PostgreSQL database using pure Docker commands. This approach avoids needing to install Node.js, `tsx`, or the full suite of Prisma dependencies on the host system.
 
-## 1. Initializing the Database Container
+## 🚀 Rapid Development Workflow (Hot-Reload)
+
+When you are actively editing code (changing UI, testing components), do **NOT** use `docker-compose up -d --build`. That command is for Production and takes a long time to optimize and minify files.
+
+Instead, use the dedicated Development Environment:
+
+```bash
+# 1. Stop your production containers if they are running
+docker-compose down
+
+# 2. Start the instant hot-reload development server
+docker-compose -f docker-compose.dev.yml up
+```
+
+This will run Next.js in `dev` mode and mount your live files. Now, whenever you press "Save" in your editor, your browser will update instantly in milliseconds!
+
+---
+
+## 1. Initializing the Production Container
 
 First, ensure your Docker network and database container are running. NutriSnap utilizes a shared Docker network (e.g., `proxy`) to allow the Next.js container to communicate with the DB.
 

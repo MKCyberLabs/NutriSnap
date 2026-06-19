@@ -116,6 +116,14 @@ export default function DashboardPage() {
       router.push('/');
       return;
     }
+    if (session.role === 'ADMIN') {
+      router.push('/admin');
+      return;
+    }
+    if (!session.onboarded) {
+      router.push('/onboarding');
+      return;
+    }
     setUser(session);
     
     // Fetch logs from the real database
