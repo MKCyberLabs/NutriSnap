@@ -7,8 +7,21 @@ export async function GET(
   { params }: { params: { filename: string } }
 ) {
   try {
-    const filename = params.filename;
+    // Sanitize the filename to prevent directory traversal attacks
+    const filename = path.basename(params.filename);
+
+    // Ensure filename is not empty after basename extraction
+    if (!filename) {
+      return new NextResponse('Invalid filename', { status: 400 });
+    }
+
     const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+
+    // Verify the resolved path is actually within the uploads directory
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!filePath.startsWith(uploadsDir)) {
+      return new NextResponse('Invalid path', { status: 400 });
+    }
 
     const fileBuffer = await readFile(filePath);
     
