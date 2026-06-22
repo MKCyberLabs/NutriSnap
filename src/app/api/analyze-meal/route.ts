@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mealNutritionalAnalysis } from '@/ai/flows/meal-nutritional-analysis';
+import healthMatrixMock from '@/mocks/health-matrix.json';
 
 /**
  * Health Matrix API Route
@@ -16,6 +17,12 @@ export async function POST(req: NextRequest) {
         { error: 'Payload Validation Failed: Either mealDescription or imagePath is required.' },
         { status: 400 }
       );
+    }
+
+    // 🔄 Mock Interception Point
+    if (process.env.USE_MOCK_HEALTH_API === 'true') {
+      console.log('🔄 [Mock Mode] Intercepting Health Matrix API call and returning static mock data.');
+      return NextResponse.json(healthMatrixMock);
     }
 
     // Call the internal Health Matrix analysis flow

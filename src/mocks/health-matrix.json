@@ -1,0 +1,21 @@
+{
+  "calories": 450,
+  "protein": 30.0,
+  "carbs": 50.0,
+  "fat": 15.0,
+  "sugar": 10.0,
+  "fiber": 5.0,
+  "saturatedFat": 4.0,
+  "healthInsight": "Great choice! This meal provides a diverse range of nutrients.",
+  "foodItems": [
+    {
+      "name": "Grilled Chicken",
+      "grams": 150,
+      "calories": 247,
+      "protein": 31.0,
+      "carbs": 0.0,
+      "fat": 12.5,
+      "sugar": 0.0
+    }
+  ]
+}
