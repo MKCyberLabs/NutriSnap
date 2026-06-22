@@ -368,17 +368,32 @@ export default function DashboardPage() {
     }
   };
 
-  const filteredLogs = useMemo(() => {
-    return logs.filter(log => {
-      if (!log || !log.timestamp) return false;
+  // ⚡ Bolt Optimization: Group logs by date string (yyyy-MM-dd) to change O(N*D) date parsing
+  // during render into O(N) one-time parsing and O(1) lookups per day.
+  const logsByDateStr = useMemo(() => {
+    const map = new Map<string, MealLog[]>();
+    logs.forEach(log => {
+      if (!log || !log.timestamp) return;
       try {
-        const logDate = parseISO(log.timestamp);
-        return isSameDay(logDate, selectedDate);
+        const logDate = typeof log.timestamp === 'string' ? parseISO(log.timestamp) : new Date(log.timestamp);
+        if (isValid(logDate)) {
+          const dateStr = format(logDate, 'yyyy-MM-dd');
+          if (!map.has(dateStr)) {
+            map.set(dateStr, []);
+          }
+          map.get(dateStr)!.push(log);
+        }
       } catch (e) {
-        return false;
+        // ignore invalid dates
       }
     });
-  }, [logs, selectedDate]);
+    return map;
+  }, [logs]);
+
+  const filteredLogs = useMemo(() => {
+    if (!isValid(selectedDate)) return [];
+    return logsByDateStr.get(format(selectedDate, 'yyyy-MM-dd')) || [];
+  }, [logsByDateStr, selectedDate]);
 
   const activeWeeklyRange = useMemo(() => {
     if (customRange?.from) {
@@ -394,14 +409,8 @@ export default function DashboardPage() {
     try {
       const days = eachDayOfInterval({ start: activeWeeklyRange.from, end: activeWeeklyRange.to });
       return days.map(date => {
-        const dayLogs = logs.filter(log => {
-          try {
-            const logDate = typeof log.timestamp === 'string' ? parseISO(log.timestamp) : new Date(log.timestamp);
-            return isSameDay(logDate, date);
-          } catch (e) {
-            return false;
-          }
-        });
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const dayLogs = logsByDateStr.get(dateStr) || [];
 
         const calories = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.calories) || 0), 0);
         const protein = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.protein) || 0), 0);
@@ -422,7 +431,7 @@ export default function DashboardPage() {
     } catch (e) {
       return [];
     }
-  }, [logs, activeWeeklyRange]);
+  }, [logsByDateStr, activeWeeklyRange]);
 
   const dailyTotals = useMemo(() => {
     let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
