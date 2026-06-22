@@ -47,7 +47,7 @@ export function Navbar() {
             <UserCircle className="h-4 w-4 text-muted-foreground" />
             <span className="max-w-[100px] truncate">{user?.name || 'User'}</span>
           </div>
-          <Button variant="outline" size="icon" onClick={handleLogout} className="rounded-full h-10 w-10 border-white/40 hover:bg-white/40">
+          <Button variant="outline" size="icon" aria-label="Log out" onClick={handleLogout} className="rounded-full h-10 w-10 border-white/40 hover:bg-white/40">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

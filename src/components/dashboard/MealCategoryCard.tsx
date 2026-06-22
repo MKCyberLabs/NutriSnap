@@ -62,6 +62,7 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
                 <Button 
                   variant="ghost" 
                   size="icon" 
+                  aria-label={`Log ${category}`}
                   className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
                 >
                   <Plus className="h-5 w-5" />
@@ -85,6 +86,7 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
                 <Button 
                   variant="ghost" 
                   size="icon" 
+                  aria-label={`Log ${category}`}
                   className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
                 >
                   <Plus className="h-5 w-5" />
