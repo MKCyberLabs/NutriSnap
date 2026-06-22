@@ -26,12 +26,15 @@ services:
       - /opt/docker/containers/agy-cli-stream/temp:/app/public/uploads
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap
-      - PYTHON_API_URL=http://host.docker.internal:5000/health-matrix
-      - NODE_ENV=development
-      - ADMIN_INITIAL_PASSWORD=ProductionPassword123!
-      - ADMIN_RECOVERY_KEY=RecoveryKey@2024Secure!
+      - DATABASE_URL=${DATABASE_URL:-postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap}
+      - PYTHON_API_URL=${PYTHON_API_URL:-http://host.docker.internal:5000/health-matrix}
+      - NODE_ENV=${NODE_ENV:-development}
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-ProductionPassword123!}
+      - ADMIN_RECOVERY_KEY=${ADMIN_RECOVERY_KEY:-RecoveryKey@2024Secure!}
+      - USE_MOCK_HEALTH_API=${USE_MOCK_HEALTH_API:-false}
       - CHOKIDAR_USEPOLLING=true
     command: >
       sh -c "npm install && npx prisma generate && npm run dev"
