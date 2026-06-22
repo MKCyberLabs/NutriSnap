@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
       email: user.email,
       name: user.name,
       role: user.role,
-      onboarded: user.onboarded,
+      // Dynamically calculate if bio data is truly complete
+      onboarded: user.onboarded && !!(user.age && user.age > 0 && user.weight && user.weight > 0 && user.height && user.height > 0),
       requiresPasswordReset: user.requiresPasswordReset || !!recoveryKeyMatch,
       metrics: {
         gender: user.gender,
