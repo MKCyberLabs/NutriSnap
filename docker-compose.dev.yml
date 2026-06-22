@@ -23,7 +23,7 @@ services:
     volumes:
       - .:/app
       - node_modules_dev:/app/node_modules
-      - /home/user/Documents/HealthMatrix/temp:/app/public/uploads
+      - /opt/docker/containers/agy-cli-stream/temp:/app/public/uploads
     ports:
       - "3000:3000"
     environment:

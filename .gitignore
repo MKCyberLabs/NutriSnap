@@ -34,7 +34,7 @@ yarn-error.log*
 .vercel
 
 # Prisma
-# Ignore local SQLite databases (even though you use Postgres now, good practice)
+prisma/generated/
 *.db
 *.db-journal
 

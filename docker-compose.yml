@@ -19,7 +19,7 @@ services:
     user: "root"
     container_name: nutrisnap_prod
     volumes:
-      - /home/user/Documents/HealthMatrix/temp:/app/public/uploads
+      - /opt/docker/containers/agy-cli-stream/temp:/app/public/uploads
     ports:
       - "3001:3000"
     restart: unless-stopped
@@ -36,7 +36,7 @@ services:
     labels:
       - "traefik.enable=true"
       # MAIN SITE
-      - "traefik.http.routers.nutrisnap.rule=Host(`nutrisnap.mkcyberlabs.in`)"
+      - "traefik.http.routers.nutrisnap.rule=Host(`nutrisnap.mkcyberlabs.in`) || Host(`nutrisnap.laxmimanickam.in`)"
       - "traefik.http.routers.nutrisnap.entrypoints=websecure"
       - "traefik.http.routers.nutrisnap.tls.certresolver=letsencrypt"
       # Since Next.js exposes port 9002 inside the Dockerfile
