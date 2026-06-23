@@ -4,11 +4,24 @@ import path from 'path';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
   try {
-    const filename = params.filename;
+    const resolvedParams = await params;
+    // Sanitize the filename to prevent directory traversal attacks
+    const filename = path.basename(resolvedParams.filename);
+
+    // Ensure filename is not empty after basename extraction
+    if (!filename) {
+      return new NextResponse('Invalid filename', { status: 400 });
+    }
     const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+
+    // Verify the resolved path is actually within the uploads directory
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!filePath.startsWith(uploadsDir)) {
+      return new NextResponse('Invalid path', { status: 400 });
+    }
 
     const fileBuffer = await readFile(filePath);
     
