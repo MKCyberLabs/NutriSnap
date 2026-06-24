@@ -447,12 +447,25 @@ export default function DashboardPage() {
 
   const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
 
+  // ⚡ Bolt Optimization: Memoize and consolidate weekly total aggregations
+  // Replaces 4 separate O(N) array reductions (one in weeklyAvgCalories, three in render)
+  // with a single O(N) pass to reduce redundant iteration over dynamicWeeklyData.
+  const weeklyTotals = useMemo(() => {
+    let protein = 0, carbs = 0, fat = 0, calories = 0;
+    for (const day of dynamicWeeklyData) {
+      protein += day.protein;
+      carbs += day.carbs;
+      fat += day.fat;
+      calories += day.calories;
+    }
+    return { protein, carbs, fat, calories };
+  }, [dynamicWeeklyData]);
+
   const weeklyAvgCalories = useMemo(() => {
     if (dynamicWeeklyData.length === 0) return 0;
     const totalDaysInRange = differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1;
-    const totalCalsInRange = dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0);
-    return Math.round(totalCalsInRange / totalDaysInRange);
-  }, [dynamicWeeklyData, activeWeeklyRange]);
+    return Math.round(weeklyTotals.calories / totalDaysInRange);
+  }, [dynamicWeeklyData, activeWeeklyRange, weeklyTotals.calories]);
 
   if (!isMounted) return null;
 
@@ -851,9 +864,9 @@ export default function DashboardPage() {
                 <CardHeader><CardTitle className="text-xl font-bold text-foreground">Range Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
-                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
-                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
+                    { label: 'Protein', val: weeklyTotals.protein, max: userTargets.protein * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) },
+                    { label: 'Carbs', val: weeklyTotals.carbs, max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) },
+                    { label: 'Fats', val: weeklyTotals.fat, max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
                   ].map(m => {
                     const percentage = Math.min((m.val / (m.max || 1)) * 100, 100);
                     return (
