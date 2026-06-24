@@ -485,14 +485,14 @@ export default function DashboardPage() {
                       </PopoverContent>
                     </Popover>
                     <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
-                      <Button variant="outline" size="icon" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" aria-label="Previous day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" aria-label="Next day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="glass-card flex items-center gap-2 p-1 rounded-xl border-white/60">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                      <Button variant="ghost" size="icon" aria-label="Previous week" className="h-8 w-8" onClick={() => {
                         setCustomRange(undefined);
                         setWeeklyPivotDate(subDays(weeklyPivotDate, 7));
                       }}><ChevronLeft className="h-4 w-4" /></Button>
@@ -513,7 +513,7 @@ export default function DashboardPage() {
                           />
                         </PopoverContent>
                       </Popover>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                      <Button variant="ghost" size="icon" aria-label="Next week" className="h-8 w-8" onClick={() => {
                         setCustomRange(undefined);
                         setWeeklyPivotDate(addDays(weeklyPivotDate, 7));
                       }}><ChevronRight className="h-4 w-4" /></Button>
@@ -607,7 +607,7 @@ export default function DashboardPage() {
                                     </div>
                                     <AlertDialog>
                                       <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
+                                        <Button variant="ghost" size="icon" aria-label="Delete log" className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
                                           <Trash2 className="h-4 w-4" />
                                         </Button>
                                       </AlertDialogTrigger>
@@ -654,6 +654,7 @@ export default function DashboardPage() {
                                               />
                                               <Button 
                                                 size="icon" 
+                                                aria-label="Save changes"
                                                 className="h-8 w-8 shrink-0 rounded-lg" 
                                                 onClick={() => handleUpdateItemGrams(log.id, item.id, editingGrams?.value || '0')}
                                               >
@@ -675,7 +676,7 @@ export default function DashboardPage() {
                                       </div>
                                       <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                          <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
+                                          <Button variant="ghost" size="icon" aria-label="Remove item" className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
                                             <X className="h-3 w-3" />
                                           </Button>
                                         </AlertDialogTrigger>
