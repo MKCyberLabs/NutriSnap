@@ -72,6 +72,94 @@ import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 
+// ⚡ Bolt Optimization: Localized state for "Edit Grams" to prevent the entire DashboardPage from re-rendering on every keystroke.
+function EditGramsPopover({ item, logId, onUpdate }: { item: FoodItem, logId: string, onUpdate: (logId: string, itemId: string, newGramsStr: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(item.grams.toString());
+
+  return (
+    <Popover open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (isOpen) setValue(item.grams.toString());
+    }}>
+      <PopoverTrigger asChild>
+        <button className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors">
+          {item.grams}g <Edit2 className="h-2.5 w-2.5 text-primary/60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="glass-card w-40 p-3 rounded-xl border-none shadow-xl" align="start">
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            className="h-8 text-xs rounded-lg"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+          <Button
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-lg"
+            onClick={() => {
+              onUpdate(logId, item.id, value);
+              setOpen(false);
+            }}
+          >
+            <Check className="h-4 w-4" />
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ⚡ Bolt Optimization: Localized state for "Append Item" input to isolate keystroke re-renders from the massive parent page.
+function AddItemPopover({ logId, onAdd, isAdding }: { logId: string, onAdd: (logId: string, text: string) => Promise<void>, isAdding: boolean }) {
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={(isOpen) => { if (!isAdding) setOpen(isOpen); }}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-[10px] gap-2 font-bold uppercase tracking-wider text-primary hover:bg-primary/5 rounded-lg">
+          <Plus className="h-3.5 w-3.5" /> Append Item
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="glass-card w-80 p-5 rounded-2xl border-none shadow-2xl" align="end">
+        <div className="space-y-4">
+          <h4 className="font-bold text-sm text-foreground">Add new item</h4>
+          <div className="space-y-3">
+            <Input
+              placeholder="e.g., 2 Large Eggs"
+              className="h-10 text-sm bg-white/20 border-white/40 rounded-xl"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              disabled={isAdding}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter' && text.trim() && !isAdding) {
+                  await onAdd(logId, text);
+                  setText('');
+                  setOpen(false);
+                }
+              }}
+            />
+            <Button
+              className="w-full h-10 gap-2 font-bold rounded-xl"
+              disabled={isAdding || !text.trim()}
+              onClick={async () => {
+                await onAdd(logId, text);
+                setText('');
+                setOpen(false);
+              }}
+            >
+              {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {isAdding ? 'Analyzing...' : 'Add Item'}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function calculateNutrientTargets(metrics?: UserMetrics) {
   // Use default metrics if none are provided to skip mandatory onboarding
   const activeMetrics = metrics || { height: 175, weight: 70, age: 30, gender: 'male' };
@@ -103,8 +191,6 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('daily');
   const [isMounted, setIsMounted] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState<string | null>(null);
-  const [newItemText, setNewItemText] = useState('');
-  const [editingGrams, setEditingGrams] = useState<{ logId: string, itemId: string, value: string } | null>(null);
 
   const [weeklyPivotDate, setWeeklyPivotDate] = useState<Date>(new Date());
   const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
@@ -262,15 +348,14 @@ export default function DashboardPage() {
       updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
     }
 
-    setEditingGrams(null);
     toast({ title: "Weight Updated", description: "Nutritional values have been recalculated." });
   };
 
-  const handleAddItemToLog = async (logId: string) => {
-    if (!newItemText.trim()) return;
+  const handleAddItemToLog = async (logId: string, text: string) => {
+    if (!text.trim()) return;
     setIsAddingItem(logId);
     try {
-      const result = await mealNutritionalAnalysis({ mealDescription: newItemText });
+      const result = await mealNutritionalAnalysis({ mealDescription: text });
       const updatedLogs = logs.map(log => {
         if (log.id !== logId) return log;
         const newItems: FoodItem[] = (result.foodItems || []).map(item => ({
@@ -308,7 +393,6 @@ export default function DashboardPage() {
         updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
       }
 
-      setNewItemText('');
       toast({ title: "Item Added", description: "Successfully updated your meal record." });
     } catch (error) {
       toast({ variant: "destructive", title: "Update failed", description: "Could not analyze item." });
@@ -447,12 +531,25 @@ export default function DashboardPage() {
 
   const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
 
+  // ⚡ Bolt Optimization: Memoize and consolidate weekly total aggregations
+  // Replaces 4 separate O(N) array reductions (one in weeklyAvgCalories, three in render)
+  // with a single O(N) pass to reduce redundant iteration over dynamicWeeklyData.
+  const weeklyTotals = useMemo(() => {
+    let protein = 0, carbs = 0, fat = 0, calories = 0;
+    for (const day of dynamicWeeklyData) {
+      protein += day.protein;
+      carbs += day.carbs;
+      fat += day.fat;
+      calories += day.calories;
+    }
+    return { protein, carbs, fat, calories };
+  }, [dynamicWeeklyData]);
+
   const weeklyAvgCalories = useMemo(() => {
     if (dynamicWeeklyData.length === 0) return 0;
     const totalDaysInRange = differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1;
-    const totalCalsInRange = dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0);
-    return Math.round(totalCalsInRange / totalDaysInRange);
-  }, [dynamicWeeklyData, activeWeeklyRange]);
+    return Math.round(weeklyTotals.calories / totalDaysInRange);
+  }, [dynamicWeeklyData, activeWeeklyRange, weeklyTotals.calories]);
 
   if (!isMounted) return null;
 
@@ -485,14 +582,14 @@ export default function DashboardPage() {
                       </PopoverContent>
                     </Popover>
                     <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" aria-label="Previous Day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
-                      <Button variant="outline" size="icon" aria-label="Next Day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" aria-label="Previous day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" aria-label="Next day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="glass-card flex items-center gap-2 p-1 rounded-xl border-white/60">
-                      <Button variant="ghost" size="icon" aria-label="Previous Week" className="h-8 w-8" onClick={() => {
+                      <Button variant="ghost" size="icon" aria-label="Previous week" className="h-8 w-8" onClick={() => {
                         setCustomRange(undefined);
                         setWeeklyPivotDate(subDays(weeklyPivotDate, 7));
                       }}><ChevronLeft className="h-4 w-4" /></Button>
@@ -513,7 +610,7 @@ export default function DashboardPage() {
                           />
                         </PopoverContent>
                       </Popover>
-                      <Button variant="ghost" size="icon" aria-label="Next Week" className="h-8 w-8" onClick={() => {
+                      <Button variant="ghost" size="icon" aria-label="Next week" className="h-8 w-8" onClick={() => {
                         setCustomRange(undefined);
                         setWeeklyPivotDate(addDays(weeklyPivotDate, 7));
                       }}><ChevronRight className="h-4 w-4" /></Button>
@@ -607,7 +704,7 @@ export default function DashboardPage() {
                                     </div>
                                     <AlertDialog>
                                       <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" aria-label="Delete Log" className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
+                                        <Button variant="ghost" size="icon" aria-label="Delete log" className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
                                           <Trash2 className="h-4 w-4" />
                                         </Button>
                                       </AlertDialogTrigger>
@@ -632,37 +729,7 @@ export default function DashboardPage() {
                                     <div className="flex flex-col">
                                       <span className="text-sm font-bold text-foreground">{item.name}</span>
                                       <div className="flex items-center gap-2">
-                                        <Popover 
-                                          open={editingGrams?.itemId === item.id} 
-                                          onOpenChange={(open) => {
-                                            if (open) setEditingGrams({ logId: log.id, itemId: item.id, value: item.grams.toString() });
-                                            else setEditingGrams(null);
-                                          }}
-                                        >
-                                          <PopoverTrigger asChild>
-                                            <button className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors">
-                                              {item.grams}g <Edit2 className="h-2.5 w-2.5 text-primary/60" />
-                                            </button>
-                                          </PopoverTrigger>
-                                          <PopoverContent className="glass-card w-40 p-3 rounded-xl border-none shadow-xl" align="start">
-                                            <div className="flex items-center gap-2">
-                                              <Input 
-                                                type="number" 
-                                                className="h-8 text-xs rounded-lg" 
-                                                value={editingGrams?.value || ''} 
-                                                onChange={(e) => setEditingGrams(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                              />
-                                              <Button 
-                                                size="icon" 
-                                                aria-label="Update grams"
-                                                className="h-8 w-8 shrink-0 rounded-lg" 
-                                                onClick={() => handleUpdateItemGrams(log.id, item.id, editingGrams?.value || '0')}
-                                              >
-                                                <Check className="h-4 w-4" />
-                                              </Button>
-                                            </div>
-                                          </PopoverContent>
-                                        </Popover>
+                                        <EditGramsPopover item={item} logId={log.id} onUpdate={handleUpdateItemGrams} />
                                         <span className="text-[10px] text-muted-foreground opacity-60">•</span>
                                         <span className="text-[10px] text-muted-foreground font-medium">{item.calories} kcal</span>
                                       </div>
@@ -703,25 +770,7 @@ export default function DashboardPage() {
                                 ))}
 
                                 <div className="pt-2 flex justify-end">
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button variant="ghost" size="sm" className="h-8 text-[10px] gap-2 font-bold uppercase tracking-wider text-primary hover:bg-primary/5 rounded-lg">
-                                        <Plus className="h-3.5 w-3.5" /> Append Item
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="glass-card w-80 p-5 rounded-2xl border-none shadow-2xl" align="end">
-                                      <div className="space-y-4">
-                                        <h4 className="font-bold text-sm text-foreground">Add to {log.category}</h4>
-                                        <div className="space-y-3">
-                                          <Input placeholder="e.g., 2 Large Eggs" className="h-10 text-sm bg-white/20 border-white/40 rounded-xl" value={newItemText} onChange={(e) => setNewItemText(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') handleAddItemToLog(log.id) }} />
-                                          <Button className="w-full h-10 gap-2 font-bold rounded-xl" disabled={isAddingItem === log.id || !newItemText.trim()} onClick={() => handleAddItemToLog(log.id)}>
-                                            {isAddingItem === log.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                            {isAddingItem === log.id ? 'Analyzing...' : 'Add Item'}
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </PopoverContent>
-                                  </Popover>
+                                  <AddItemPopover logId={log.id} onAdd={handleAddItemToLog} isAdding={isAddingItem === log.id} />
                                 </div>
                               </div>
                               
@@ -852,9 +901,9 @@ export default function DashboardPage() {
                 <CardHeader><CardTitle className="text-xl font-bold text-foreground">Range Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
-                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
-                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
+                    { label: 'Protein', val: weeklyTotals.protein, max: userTargets.protein * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) },
+                    { label: 'Carbs', val: weeklyTotals.carbs, max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) },
+                    { label: 'Fats', val: weeklyTotals.fat, max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
                   ].map(m => {
                     const percentage = Math.min((m.val / (m.max || 1)) * 100, 100);
                     return (

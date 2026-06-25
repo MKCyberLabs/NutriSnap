@@ -250,6 +250,7 @@ export default function AdminPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
+                          aria-label="Edit user"
                           className="h-8 w-8 rounded-full hover:bg-primary/10 hover:text-primary"
                           onClick={() => {
                             setCurrentUser(user);
@@ -261,6 +262,7 @@ export default function AdminPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
+                          aria-label="Delete user"
                           className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive"
                           onClick={() => handleDeleteUser(user.id)}
                         >
