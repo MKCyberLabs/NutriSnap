@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mealNutritionalAnalysis } from '@/ai/flows/meal-nutritional-analysis';
+import { NotFoodError } from '@/lib/errors';
 import healthMatrixMock from '@/mocks/health-matrix.json';
 
 /**
@@ -35,6 +36,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error: any) {
+    if (error.name === 'NotFoodError') {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     // Log the specific error to the server console for debugging
     console.error('Health Matrix API Logic Failure:', error);
 

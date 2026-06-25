@@ -8,6 +8,7 @@ export interface User {
   role: UserRole;
   onboarded: boolean;
   metrics?: UserMetrics;
+  telegramId?: string | null;
 }
 
 export interface UserMetrics {

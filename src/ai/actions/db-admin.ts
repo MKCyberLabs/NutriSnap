@@ -22,6 +22,7 @@ export async function createDbUser(userData: any) {
         name: userData.name,
         password: hashedPassword,
         role: userData.role,
+        telegramId: userData.telegramId || null,
         onboarded: true,
       }
     });
@@ -38,6 +39,7 @@ export async function updateDbUser(userId: string, userData: any) {
       email: userData.email,
       name: userData.name,
       role: userData.role,
+      telegramId: userData.telegramId || null,
     };
     if (userData.password) {
       updateData.password = await bcrypt.hash(userData.password, 10);

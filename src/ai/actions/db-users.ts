@@ -62,3 +62,24 @@ export async function authenticateDbUser(email: string, password?: string) {
     return null;
   }
 }
+
+export async function updateUserSettings(userId: string, data: { telegramId?: string, password?: string }) {
+  try {
+    const updateData: any = {};
+    if (data.telegramId !== undefined) {
+      updateData.telegramId = data.telegramId || null;
+    }
+    if (data.password) {
+      updateData.password = await bcrypt.hash(data.password, 10);
+    }
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: updateData
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update user settings:", error);
+    return { success: false };
+  }
+}

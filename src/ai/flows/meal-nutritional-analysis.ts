@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { NotFoodError } from '@/lib/errors';
 
 const MealNutritionalAnalysisInputSchema = z.object({
   mealDescription: z
@@ -90,5 +91,63 @@ export async function mealNutritionalAnalysis(
 
   const parsedData = JSON.parse(jsonMatch[0]);
 
+  if (parsedData.error === "NOT_FOOD") {
+    throw new NotFoodError(parsedData.aiNote || "This image does not contain identifiable food.");
+  }
+
   return parsedData as MealNutritionalAnalysisOutput;
+}
+
+const TelegramMealAnalysisInputSchema = z.object({
+  mealDescription: z.string().optional(),
+  imagePath: z.string().optional(),
+  telegramTimestamp: z.number().describe('Unix timestamp in ms of the Telegram message'),
+});
+export type TelegramMealAnalysisInput = z.infer<typeof TelegramMealAnalysisInputSchema>;
+
+const TelegramMealAnalysisOutputSchema = MealNutritionalAnalysisOutputSchema.extend({
+  calculatedTime: z.string(),
+  calculatedCategory: z.string(),
+});
+export type TelegramMealAnalysisOutput = z.infer<typeof TelegramMealAnalysisOutputSchema>;
+
+export async function telegramMealNutritionalAnalysis(
+  input: TelegramMealAnalysisInput
+): Promise<TelegramMealAnalysisOutput> {
+  const pythonApiUrl = (process.env.PYTHON_API_URL || 'http://localhost:5000/health-matrix').replace('/health-matrix', '/health-matrix-telegram');
+  
+  const response = await fetch(pythonApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      mealDescription: input.mealDescription,
+      imagePath: input.imagePath,
+      telegramTimestamp: input.telegramTimestamp,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Python API failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  
+  if (data.status !== 'success') {
+    throw new Error(`Python API returned an error: ${data.message || 'Unknown error'}`);
+  }
+
+  const jsonMatch = data.response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('Failed to extract JSON from Python AI response.');
+  }
+
+  const parsedData = JSON.parse(jsonMatch[0]);
+
+  if (parsedData.error === "NOT_FOOD") {
+    throw new NotFoodError(parsedData.aiNote || "This image does not contain identifiable food.");
+  }
+
+  return parsedData as TelegramMealAnalysisOutput;
 }
