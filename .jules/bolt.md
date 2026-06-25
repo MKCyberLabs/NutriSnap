@@ -8,3 +8,6 @@
 ## 2025-02-28 - [Memoizing Iterations of Render State]
 **Learning:** Found multiple distinct `reduce` calls looping over the exact same dataset (`dynamicWeeklyData`) during each render and within hooks. Array functions inside render can be a hidden source of CPU overhead.
 **Action:** Consolidate redundant aggregations using `useMemo` where variables sum up everything in a single loop `for (const day of dynamicWeeklyData)`. This reduces redundant work and provides cached values to use inside render and hooks.
+## 2023-10-27 - [Anti-pattern] Redundant Array Reductions During Render
+**Learning:** The dashboard component previously used multiple inline `.filter().reduce()` passes per meal category and multiple `.reduce()` passes per nutrient directly inside `useMemo` blocks and JSX. This leads to O(N*M) and O(N*K) iterations on every render or recalculation.
+**Action:** Always consolidate multiple array reduction operations into a single O(N) iteration (e.g. using a single `for...of` loop or `.reduce()` with an object accumulator) instead of chaining multiple array methods.
