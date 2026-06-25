@@ -160,9 +160,9 @@ function AddItemPopover({ logId, onAdd, isAdding }: { logId: string, onAdd: (log
   );
 }
 
-function calculateNutrientTargets(metrics?: UserMetrics) {
+function calculateNutrientTargets(user?: any) {
   // Use default metrics if none are provided to skip mandatory onboarding
-  const activeMetrics = metrics || { height: 175, weight: 70, age: 30, gender: 'male' };
+  const activeMetrics = user?.metrics || { height: 175, weight: 70, age: 30, gender: 'male' };
   
   const { weight, height, age, gender } = activeMetrics;
   
@@ -173,10 +173,10 @@ function calculateNutrientTargets(metrics?: UserMetrics) {
   const tdee = bmr * 1.5; // Activity factor for demo
 
   return {
-    calories: Math.round(tdee),
-    protein: Math.round((tdee * 0.30) / 4),
-    carbs: Math.round((tdee * 0.40) / 4),
-    fat: Math.round((tdee * 0.30) / 9),
+    calories: user?.dailyCaloriesGoal || Math.round(tdee),
+    protein: user?.dailyProteinGoal || Math.round((tdee * 0.30) / 4),
+    carbs: user?.dailyCarbsGoal || Math.round((tdee * 0.40) / 4),
+    fat: user?.dailyFatGoal || Math.round((tdee * 0.30) / 9),
     sugar: 35
   };
 }
@@ -243,7 +243,7 @@ export default function DashboardPage() {
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
   };
 
-  const userTargets = useMemo(() => calculateNutrientTargets(user?.metrics), [user]);
+  const userTargets = useMemo(() => calculateNutrientTargets(user), [user]);
 
   const handleMealCardComplete = async (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const logTimestamp = new Date(selectedDate);

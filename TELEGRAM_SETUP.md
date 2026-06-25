@@ -23,7 +23,32 @@ We built a Next.js App Router API endpoint to serve as the Webhook receiver:
   4. **Processing**: Downloads the highest resolution photo sent by the user to the shared Docker volume (`public/uploads`).
   5. **AI Analysis**: Passes the local image path and caption to the `mealNutritionalAnalysis` Genkit flow (which communicates with the Python AI microservice on port 5000).
   6. **Database Persistence**: Saves the parsed nutritional data (calories, protein, carbs, fat, etc.) into the `MealLog` table.
-  7. **Response**: Replies to the user with a formatted markdown message detailing their meal's nutritional value.
+  7. **Response**: Replies to the user with a formatted markdown message detailing their meal's nutritional value. You should now receive a `✅ Meal logged successfully!` response.
+
+## Available Bot Commands & Parameters
+
+The bot provides the following slash commands directly in the Telegram chat interface. These will appear in the `/` autocomplete menu:
+
+- `/help` 
+  - **Description**: Displays a list of all commands and how to log meals.
+  - **Parameters**: None
+
+- `/goals`
+  - **Description**: Displays your current timezone, macro goals, and remaining daily limits.
+  - **Parameters**: None
+
+- `/setgoal <metric> <value>`
+  - **Description**: Sets a daily goal for a specific macro.
+  - **Parameters**: 
+    - `metric`: The nutritional property to track. Must be one of `calories`, `protein`, `carbs`, or `fat`.
+    - `value`: An integer representing the target (e.g., `2000` for kcal, `150` for grams).
+  - **Example**: `/setgoal calories 2000` or `/setgoal protein 150`
+
+- `/settimezone <timezone>`
+  - **Description**: Sets your local timezone. This ensures your daily "Remaining Macros" resets exactly at midnight in your region.
+  - **Parameters**:
+    - `timezone`: An IANA-formatted timezone string.
+  - **Example**: `/settimezone America/New_York` or `/settimezone Asia/Kolkata`
 
 ## 4. Webhook Registration Script
 To link the Telegram Bot token to the Next.js API endpoint, we built a utility script:

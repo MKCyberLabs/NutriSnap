@@ -19,7 +19,7 @@ services:
     user: "root"
     container_name: nutrisnap_prod
     volumes:
-      - /opt/docker/containers/agy-cli-stream/temp:/app/public/uploads
+      - /opt/docker/containers/vision-health-app/temp:/app/public/uploads
     ports:
       - "3001:3000"
     restart: unless-stopped

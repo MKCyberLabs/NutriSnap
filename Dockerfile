@@ -22,7 +22,7 @@ COPY . .
 # Build the project
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # Stage 3: Production server
 FROM node:18-alpine AS runner

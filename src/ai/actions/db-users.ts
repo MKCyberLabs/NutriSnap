@@ -63,7 +63,7 @@ export async function authenticateDbUser(email: string, password?: string) {
   }
 }
 
-export async function updateUserSettings(userId: string, data: { telegramId?: string, password?: string }) {
+export async function updateUserSettings(userId: string, data: { telegramId?: string, password?: string, timezone?: string, dailyCaloriesGoal?: number, dailyProteinGoal?: number, dailyCarbsGoal?: number, dailyFatGoal?: number, age?: number, weight?: number, height?: number, gender?: string }) {
   try {
     const updateData: any = {};
     if (data.telegramId !== undefined) {
@@ -72,6 +72,16 @@ export async function updateUserSettings(userId: string, data: { telegramId?: st
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 10);
     }
+    if (data.timezone !== undefined) updateData.timezone = data.timezone;
+    if (data.dailyCaloriesGoal !== undefined) updateData.dailyCaloriesGoal = data.dailyCaloriesGoal || null;
+    if (data.dailyProteinGoal !== undefined) updateData.dailyProteinGoal = data.dailyProteinGoal || null;
+    if (data.dailyCarbsGoal !== undefined) updateData.dailyCarbsGoal = data.dailyCarbsGoal || null;
+    if (data.dailyFatGoal !== undefined) updateData.dailyFatGoal = data.dailyFatGoal || null;
+    
+    if (data.age !== undefined) updateData.age = data.age || null;
+    if (data.weight !== undefined) updateData.weight = data.weight || null;
+    if (data.height !== undefined) updateData.height = data.height || null;
+    if (data.gender !== undefined) updateData.gender = data.gender || null;
     
     await prisma.user.update({
       where: { id: userId },
