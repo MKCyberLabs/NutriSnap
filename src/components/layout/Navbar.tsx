@@ -56,7 +56,7 @@ export function Navbar() {
 
     if (res.success) {
       if (telegramId !== undefined && user) {
-        const updatedUser = { ...user, telegramId: telegramId || undefined };
+        const updatedUser = { ...user, telegramId: telegramId || undefined } as User;
         saveAuthSession(updatedUser);
         setUser(updatedUser);
       }
