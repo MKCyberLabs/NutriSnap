@@ -266,6 +266,38 @@ ${formatBar(totSugar, gSugar)} ${totSugar > gSugar ? '⚠️ *Limit Reached!*' :
   return ctx.reply(msg, { parse_mode: 'Markdown' });
 });
 
+// Handle reminder replies first
+bot.on('message', async (ctx, next) => {
+  if (ctx.message?.reply_to_message && ctx.message.reply_to_message.text?.includes("with the time in HH:MM format")) {
+    const telegramId = String(ctx.from!.id);
+    const user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) return;
+
+    const text = ctx.message.text?.trim() || "";
+    // extract category from replied message text: "for your **Breakfast** reminder."
+    const match = ctx.message.reply_to_message.text.match(/for your (\*\*|[a-zA-Z]+|\*)*([A-Za-z]+)(\*\*|[a-zA-Z]+|\*)* reminder/);
+    if (!match) return;
+    
+    // index 2 is the actual category because of the regex groups
+    const category = match[2];
+    
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
+      return ctx.reply("❌ Invalid format. Please use HH:MM format (e.g. 08:00 or 14:30).");
+    }
+
+    const existing = await prisma.reminder.findFirst({ where: { userId: user.id, category } });
+    if (existing) {
+      await prisma.reminder.update({ where: { id: existing.id }, data: { time: text, isActive: true } });
+    } else {
+      await prisma.reminder.create({ data: { userId: user.id, category, time: text, isActive: true } });
+    }
+    
+    return ctx.reply(`✅ Your ${category} reminder is set to ${text}!`);
+  }
+  
+  return next();
+});
+
 bot.on('message', async (ctx) => {
   try {
     const telegramId = String(ctx.from!.id);
@@ -442,46 +474,6 @@ _${analysisResult.healthInsight}_${goalsMsg}`;
 
   } catch (error) {
     console.error("Grammy webhook error:", error);
-  }
-});
-
-// Fallback for non-photo messages
-bot.on('message', async (ctx) => {
-  if (ctx.message?.reply_to_message && ctx.message.reply_to_message.text?.includes("with the time in HH:MM format")) {
-    const telegramId = String(ctx.from!.id);
-    const user = await prisma.user.findUnique({ where: { telegramId } });
-    if (!user) return;
-
-    const text = ctx.message.text?.trim() || "";
-    // extract category from replied message text: "for your **Breakfast** reminder."
-    const match = ctx.message.reply_to_message.text.match(/for your (\*\*|[a-zA-Z]+|\*)*([A-Za-z]+)(\*\*|[a-zA-Z]+|\*)* reminder/);
-    if (!match) return;
-    
-    // index 2 is the actual category because of the regex groups
-    const category = match[2];
-    
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
-      return ctx.reply("❌ Invalid format. Please use HH:MM format (e.g. 08:00 or 14:30).");
-    }
-
-    const existing = await prisma.reminder.findFirst({ where: { userId: user.id, category } });
-    if (existing) {
-      await prisma.reminder.update({ where: { id: existing.id }, data: { time: text, isActive: true } });
-    } else {
-      await prisma.reminder.create({ data: { userId: user.id, category, time: text, isActive: true } });
-    }
-    
-    return ctx.reply(`✅ Your ${category} reminder is set to ${text}!`);
-  }
-
-  if (!ctx.message?.photo) {
-     const telegramId = String(ctx.from!.id);
-     const user = await prisma.user.findUnique({ where: { telegramId } });
-     if (!user) {
-        await ctx.reply("Access Denied: Please contact the administrator to register.");
-        return;
-     }
-     await ctx.reply("Please send a photo of your meal with an optional caption.");
   }
 });
 
