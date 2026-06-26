@@ -50,7 +50,7 @@ COPY --from=builder /app/prisma ./prisma
 
 # Create a startup script that runs db push then starts the server
 RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'npx prisma db push --accept-data-loss' >> /app/start.sh && \
+    echo 'npx -y prisma db push --accept-data-loss' >> /app/start.sh && \
     echo 'exec node server.js' >> /app/start.sh && \
     chmod +x /app/start.sh && \
     chown nextjs:nodejs /app/start.sh
