@@ -179,11 +179,45 @@ export default function SettingsPage() {
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-4">
               <Input 
+                list="timezones"
                 value={timezone} 
                 onChange={(e) => setTimezone(e.target.value)}
                 placeholder="e.g. America/New_York or Asia/Kolkata"
                 className="bg-white/50 dark:bg-black/40 flex-1"
               />
+              <datalist id="timezones">
+                <option value="Africa/Cairo" />
+                <option value="Africa/Johannesburg" />
+                <option value="Africa/Lagos" />
+                <option value="America/Chicago" />
+                <option value="America/Denver" />
+                <option value="America/Los_Angeles" />
+                <option value="America/New_York" />
+                <option value="America/Sao_Paulo" />
+                <option value="Asia/Bangkok" />
+                <option value="Asia/Dubai" />
+                <option value="Asia/Hong_Kong" />
+                <option value="Asia/Kolkata" />
+                <option value="Asia/Riyadh" />
+                <option value="Asia/Seoul" />
+                <option value="Asia/Shanghai" />
+                <option value="Asia/Singapore" />
+                <option value="Asia/Tokyo" />
+                <option value="Australia/Brisbane" />
+                <option value="Australia/Melbourne" />
+                <option value="Australia/Perth" />
+                <option value="Australia/Sydney" />
+                <option value="Europe/Amsterdam" />
+                <option value="Europe/Berlin" />
+                <option value="Europe/Istanbul" />
+                <option value="Europe/London" />
+                <option value="Europe/Moscow" />
+                <option value="Europe/Paris" />
+                <option value="Europe/Rome" />
+                <option value="Pacific/Auckland" />
+                <option value="Pacific/Honolulu" />
+                <option value="UTC" />
+              </datalist>
               <Button onClick={handleSaveTimezone} disabled={savingTz} className="shrink-0 w-full sm:w-auto">
                 {savingTz ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save Timezone
