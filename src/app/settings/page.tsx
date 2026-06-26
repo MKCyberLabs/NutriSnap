@@ -203,6 +203,22 @@ export default function SettingsPage() {
   const handleSaveSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!user?.id) return;
+
+    if (newPassword) {
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
+      if (!passwordRegex.test(newPassword)) {
+        toast({ 
+          variant: "destructive", 
+          title: "Weak Password", 
+          description: "Password must be at least 12 characters and include an uppercase letter, a lowercase letter, a number, and a special character." 
+        });
+        return;
+      }
+    } else if (activeTab === 'account') {
+      toast({ variant: "destructive", title: "Validation Error", description: "Please enter a new password to save." });
+      return;
+    }
+
     setSavingSettings(true);
 
     const payload = {
