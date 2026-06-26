@@ -12,7 +12,7 @@ const INITIAL_MOCK_USERS: Record<string, ManagedUser> = {
     email: 'admin@mkcyberlabs.in',
     role: 'ADMIN',
     onboarded: true,
-    password: 'ProductionPassword123!'
+    password: process.env.ADMIN_INITIAL_PASSWORD || 'ChangeMeImmediately!'
   },
   'user@nutrisnap.com': {
     id: '1',
@@ -20,7 +20,7 @@ const INITIAL_MOCK_USERS: Record<string, ManagedUser> = {
     email: 'user@nutrisnap.com',
     role: 'USER',
     onboarded: true,
-    password: 'ProductionPassword123!'
+    password: process.env.ADMIN_INITIAL_PASSWORD || 'ChangeMeImmediately!'
   },
 };
 

@@ -15,7 +15,11 @@ export async function fetchAllUsers() {
 
 export async function createDbUser(userData: any) {
   try {
-    const hashedPassword = await bcrypt.hash(userData.password || 'ProductionPassword123!', 10);
+    const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
+    if (!userData.password && !initialPassword) {
+      throw new Error('No password provided and ADMIN_INITIAL_PASSWORD is not set');
+    }
+    const hashedPassword = await bcrypt.hash(userData.password || initialPassword!, 10);
     const user = await prisma.user.create({
       data: {
         email: userData.email,
