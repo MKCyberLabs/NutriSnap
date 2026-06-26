@@ -40,13 +40,13 @@ If you are developing or maintaining the Next.js app and adding background jobs 
 
 Next.js `npm run build` generates static pages and runs `instrumentation.ts`. If `instrumentation.ts` initializes a long-running background worker (like `setInterval` or `cron`), the Node.js event loop will never empty, causing `npm run build` to hang forever at the `Collecting page data ...` step!
 
-To fix this, always check the `NEXT_PHASE` environment variable in `src/instrumentation.ts`:
+To fix this, we've added an `ENV IS_BUILDING=1` step to the Dockerfile right before the build command. Always check this in `src/instrumentation.ts`:
 
 ```typescript
 export async function register() {
   if (
     process.env.NEXT_RUNTIME === 'nodejs' && 
-    process.env.NEXT_PHASE !== 'phase-production-build' // <--- CRITICAL
+    process.env.IS_BUILDING !== '1' // <--- CRITICAL
   ) {
     const { startScheduler } = await import('./lib/scheduler');
     startScheduler();

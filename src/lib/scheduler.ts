@@ -21,10 +21,14 @@ export function startScheduler() {
         include: { user: true },
       });
 
+      console.log(`[Scheduler] Checking ${activeReminders.length} active reminders...`);
+
       if (activeReminders.length === 0) return;
 
       for (const reminder of activeReminders) {
         if (!reminder.user.telegramId) continue;
+        
+        console.log(`[Scheduler] Reminder: ${reminder.category} at ${reminder.time} for user ${reminder.user.timezone}`);
 
         const userTimezone = reminder.user.timezone || 'UTC';
         const nowInTz = new TZDate(new Date(), userTimezone);
