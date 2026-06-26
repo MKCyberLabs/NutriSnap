@@ -63,7 +63,12 @@ export default function SettingsPage() {
 
   const allTimezones = useMemo(() => {
     try {
-      return Intl.supportedValuesOf('timeZone');
+      const tzs = Intl.supportedValuesOf('timeZone');
+      if (!tzs.includes('Asia/Kolkata')) {
+        tzs.push('Asia/Kolkata');
+        tzs.sort();
+      }
+      return tzs;
     } catch (e) {
       return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
     }
