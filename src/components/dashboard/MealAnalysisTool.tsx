@@ -180,6 +180,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                   variant={period === p ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setPeriod(p)}
+                  aria-pressed={period === p}
                   className={`h-8 px-3 rounded-lg text-[10px] font-bold transition-all ${
                     period === p 
                       ? 'bg-primary text-primary-foreground shadow-sm' 
@@ -218,7 +219,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
           <div className="relative group">
             <label 
               htmlFor="photo-upload" 
-              className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-primary/20 rounded-2xl cursor-pointer hover:bg-primary/5 hover:border-primary/40 transition-all overflow-hidden ${previewUrl ? 'border-primary/40 bg-primary/5' : ''}`}
+              className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-primary/20 rounded-2xl cursor-pointer hover:bg-primary/5 hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 transition-all overflow-hidden ${previewUrl ? 'border-primary/40 bg-primary/5' : ''}`}
             >
               {previewUrl ? (
                 <img src={previewUrl} alt="Meal preview" className="w-full h-full object-cover" />
@@ -231,7 +232,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                   <p className="text-xs text-muted-foreground mt-1">PNG, JPG up to 10MB</p>
                 </div>
               )}
-              <input id="photo-upload" type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              <input id="photo-upload" type="file" accept="image/*" className="sr-only" onChange={handleFileUpload} />
             </label>
 
             {previewUrl && (
