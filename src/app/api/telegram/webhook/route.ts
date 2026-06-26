@@ -352,6 +352,12 @@ bot.on('message', async (ctx) => {
 
     // 4. Call Telegram-specific Genkit flow
     const telegramTimestampMs = ctx.message!.date * 1000;
+    const userTimezone = user.timezone || 'UTC';
+    const localTimeString = new Intl.DateTimeFormat('en-US', {
+      timeZone: userTimezone,
+      dateStyle: 'full',
+      timeStyle: 'long'
+    }).format(new Date(telegramTimestampMs));
 
     let analysisResult;
     try {
@@ -359,6 +365,7 @@ bot.on('message', async (ctx) => {
         mealDescription: caption,
         imagePath: localImagePath,
         telegramTimestamp: telegramTimestampMs,
+        userLocalTime: localTimeString,
       });
     } catch (error: any) {
       console.error("Analysis Error:", error);

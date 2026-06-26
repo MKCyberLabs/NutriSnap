@@ -102,6 +102,7 @@ const TelegramMealAnalysisInputSchema = z.object({
   mealDescription: z.string().optional(),
   imagePath: z.string().optional(),
   telegramTimestamp: z.number().describe('Unix timestamp in ms of the Telegram message'),
+  userLocalTime: z.string().optional().describe('Formatted local time string based on user timezone'),
 });
 export type TelegramMealAnalysisInput = z.infer<typeof TelegramMealAnalysisInputSchema>;
 
@@ -125,6 +126,7 @@ export async function telegramMealNutritionalAnalysis(
       mealDescription: input.mealDescription,
       imagePath: input.imagePath,
       telegramTimestamp: input.telegramTimestamp,
+      userLocalTime: input.userLocalTime,
     }),
   });
 
