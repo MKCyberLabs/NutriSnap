@@ -33,13 +33,25 @@ export function startScheduler() {
         const userTimezone = reminder.user.timezone || 'UTC';
         const nowInTz = new TZDate(new Date(), userTimezone);
         
-        // Current time in HH:mm in user's timezone
-        const currentTimeString = format(nowInTz, 'HH:mm');
+        // Current time in HH:mm in user's timezone using native Intl API
+        const currentTimeString = new Intl.DateTimeFormat('en-GB', { 
+          timeZone: userTimezone, 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false 
+        }).format(new Date());
 
         if (currentTimeString === reminder.time) {
           // It is exactly the minute of the reminder.
           // Check if they already logged this category today
-          const tzStart = startOfDay(nowInTz);
+          const tzDateString = new Intl.DateTimeFormat('en-US', { 
+            timeZone: userTimezone, 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit' 
+          }).format(new Date());
+          const [month, day, year] = tzDateString.split('/');
+          const tzStart = new TZDate(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0, userTimezone);
           
           const existingMeal = await prisma.mealLog.findFirst({
             where: {

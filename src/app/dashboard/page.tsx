@@ -71,6 +71,23 @@ import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { motion, Variants } from 'framer-motion';
+
+// Animation variants for staggered cascade
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 24 } }
+};
 
 // ⚡ Bolt Optimization: Localized state for "Edit Grams" to prevent the entire DashboardPage from re-rendering on every keystroke.
 function EditGramsPopover({ item, logId, onUpdate }: { item: FoodItem, logId: string, onUpdate: (logId: string, itemId: string, newGramsStr: string) => void }) {
@@ -652,20 +669,22 @@ export default function DashboardPage() {
         </header>
 
         {activeTab === 'daily' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as MealCategory[]).map((cat) => (
-                  <MealCategoryCard 
-                    key={cat} 
-                    category={cat} 
-                    totalCalories={byCategory[cat]}
-                    onAnalysisComplete={(data, category, mealTime, imagePath) => handleMealCardComplete(data, category, mealTime, imagePath)} 
-                  />
+                  <motion.div key={cat} variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={{ type: 'spring' as const, stiffness: 400, damping: 17 }}>
+                    <MealCategoryCard 
+                      category={cat} 
+                      totalCalories={byCategory[cat]}
+                      onAnalysisComplete={(data, category, mealTime, imagePath) => handleMealCardComplete(data, category, mealTime, imagePath)} 
+                    />
+                  </motion.div>
                 ))}
               </section>
 
-              <Card className="glass-card border-white/60 rounded-3xl overflow-hidden">
+              <motion.div variants={itemVariants}>
+                <Card className="glass-card border-white/60 rounded-3xl overflow-hidden">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div>
                     <CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground"><History className="h-5 w-5 text-primary" /> Daily Activity</CardTitle>
@@ -681,7 +700,7 @@ export default function DashboardPage() {
                     ) : (
                       <div className="space-y-6">
                         {filteredLogs.map((log) => (
-                          <div key={log.id} className="relative pl-6 border-l-2 border-primary/20 pb-4 last:pb-0">
+                          <motion.div key={log.id} variants={itemVariants} className="relative pl-6 border-l-2 border-primary/20 pb-4 last:pb-0">
                             <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background" />
                             <div className="glass-card rounded-2xl p-5 border-white/60">
                               <div className="flex justify-between items-center mb-4">
@@ -827,16 +846,18 @@ export default function DashboardPage() {
                                 </div>
                               )}
                             </div>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
                     )}
                   </ScrollArea>
                 </CardContent>
               </Card>
+              </motion.div>
             </div>
 
             <aside className="space-y-6">
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader>
                   <CardTitle className="text-xl font-bold text-foreground">Biometric Targets</CardTitle>
@@ -869,6 +890,8 @@ export default function DashboardPage() {
                   })}
                 </CardContent>
               </Card>
+              </motion.div>
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30">
                 <CardHeader className="pb-2"><CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground"><Info className="h-4 w-4 text-primary" /> Daily Insight</CardTitle></CardHeader>
                 <CardContent className="text-sm leading-relaxed text-foreground/80">
@@ -876,11 +899,13 @@ export default function DashboardPage() {
                     `Precision tracking active. You have achieved ${Math.round((totalP / userTargets.protein) * 100)}% of your daily protein target.`}
                 </CardContent>
               </Card>
+              </motion.div>
             </aside>
-          </div>
+          </motion.div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader><CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground"><BarChart3 className="h-5 w-5 text-primary" /> Calorie Trends</CardTitle></CardHeader>
                 <CardContent className="pt-6">
@@ -905,17 +930,21 @@ export default function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
+              </motion.div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[ 
                   { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, 
                   { icon: BarChart3, val: dynamicWeeklyData.length > 0 ? Math.max(...dynamicWeeklyData.map(d => d.calories)) : 0, label: 'Peak Day' }, 
                   { icon: History, val: dynamicWeeklyData.filter(d => d.calories > 0).length, label: 'Tracked Days' } 
                 ].map((s, i) => (
-                  <Card key={i} className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>
+                  <motion.div key={i} variants={itemVariants} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ type: 'spring' as const, stiffness: 400, damping: 17 }}>
+                    <Card className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>
+                  </motion.div>
                 ))}
               </div>
             </div>
             <aside className="space-y-6">
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader><CardTitle className="text-xl font-bold text-foreground">Range Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
@@ -939,11 +968,14 @@ export default function DashboardPage() {
                   })}
                 </CardContent>
               </Card>
+              </motion.div>
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30"><CardHeader className="pb-2"><CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground"><BrainCircuit className="h-4 w-4 text-primary" /> Period Insight</CardTitle></CardHeader>
                 <CardContent className="text-sm leading-relaxed text-foreground/80">Historical tracking analysis complete. The weekly averages are derived from your actual logged entries for this period.</CardContent>
               </Card>
+              </motion.div>
             </aside>
-          </div>
+          </motion.div>
         )}
       </main>
     </div>
