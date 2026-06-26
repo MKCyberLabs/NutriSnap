@@ -31,6 +31,7 @@ export interface FoodItem {
   fiber: number;
   saturatedFat: number;
   sugar: number;
+  rating?: number;
 }
 
 export interface MealLog {

@@ -44,7 +44,8 @@ const MealNutritionalAnalysisOutputSchema = z.object({
     fat: z.number(),
     fiber: z.number(),
     saturatedFat: z.number(),
-    sugar: z.number()
+    sugar: z.number(),
+    rating: z.number()
   }))
 });
 export type MealNutritionalAnalysisOutput = z.infer<

@@ -33,7 +33,8 @@ export async function fetchUserLogs(userId: string) {
         fat: item.fat,
         fiber: item.fiber,
         saturatedFat: item.saturatedFat,
-        sugar: item.sugar
+        sugar: item.sugar,
+        rating: item.rating
       }))
     }));
   } catch (error) {
@@ -68,7 +69,8 @@ export async function saveMealLog(userId: string, logData: any, itemsData: any[]
             fat: item.fat,
             fiber: item.fiber,
             saturatedFat: item.saturatedFat,
-            sugar: item.sugar
+            sugar: item.sugar,
+            rating: item.rating
           }))
         }
       },
@@ -115,7 +117,8 @@ export async function updateMealLogItems(logId: string, itemsData: any[], newTot
               fat: item.fat,
               fiber: item.fiber,
               saturatedFat: item.saturatedFat,
-              sugar: item.sugar
+              sugar: item.sugar,
+              rating: item.rating
             }))
           }
         }

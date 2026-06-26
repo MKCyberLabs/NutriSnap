@@ -408,14 +408,23 @@ bot.on('message', async (ctx) => {
             fiber: item.fiber,
             saturatedFat: item.saturatedFat,
             sugar: item.sugar,
+            rating: item.rating,
           })),
         },
       },
     });
 
+    // Calculate Average Rating
+    let totalRating = 0;
+    analysisResult.foodItems.forEach((i: any) => totalRating += (i.rating || 3));
+    const avgRating = analysisResult.foodItems.length > 0 
+      ? Math.round(totalRating / analysisResult.foodItems.length) 
+      : 3;
+    const mealStars = '⭐'.repeat(avgRating);
+
     // 6. Send success message
     const itemsText = analysisResult.foodItems.map((item: any) => 
-      `- ${item.name}: ${item.calories} kcal, ${item.protein}g P, ${item.carbs}g C, ${item.fat}g F, ${item.sugar}g Sugar`
+      `- ${item.name} (${'⭐'.repeat(item.rating || 3)}): ${item.calories} kcal, ${item.protein}g P, ${item.carbs}g C, ${item.fat}g F, ${item.sugar}g Sugar`
     ).join('\n');
 
     // Calculate daily remaining
@@ -465,6 +474,7 @@ bot.on('message', async (ctx) => {
     }
 
     const successText = `✅ Meal logged successfully!
+Overall Health Rating: ${mealStars} (${avgRating}/5)
 
 **Items Detected:**
 ${itemsText}

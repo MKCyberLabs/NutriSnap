@@ -705,7 +705,12 @@ export default function DashboardPage() {
                             <div className="glass-card rounded-2xl p-5 border-white/60">
                               <div className="flex justify-between items-center mb-4">
                                 <div className="flex items-center gap-3">
-                                  <Badge variant="secondary" className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold">{log.category}</Badge>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="secondary" className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold">{log.category}</Badge>
+                                    <span className="text-xs">
+                                      {'⭐'.repeat(log.items.length > 0 ? Math.round(log.items.reduce((s, i) => s + (i.rating || 3), 0) / log.items.length) : 3)}
+                                    </span>
+                                  </div>
                                   <span className="text-xs text-muted-foreground font-medium">{format(parseISO(log.timestamp), 'h:mm a')}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -765,7 +770,9 @@ export default function DashboardPage() {
                                 {log.items.map((item) => (
                                   <div key={item.id} className="p-3 rounded-xl bg-white/30 dark:bg-black/20 border border-white/40 flex items-center justify-between group">
                                     <div className="flex flex-col">
-                                      <span className="text-sm font-bold text-foreground">{item.name}</span>
+                                      <span className="text-sm font-bold text-foreground">
+                                        {item.name} <span className="text-xs font-normal">{'⭐'.repeat(item.rating || 3)}</span>
+                                      </span>
                                       <div className="flex items-center gap-2">
                                         <EditGramsPopover item={item} logId={log.id} onUpdate={handleUpdateItemGrams} />
                                         <span className="text-[10px] text-muted-foreground opacity-60">•</span>
