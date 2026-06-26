@@ -73,7 +73,7 @@ export default function AdminPage() {
       name: currentUser.name || '',
       email: currentUser.email || '',
       role: currentUser.role || 'USER',
-      password: currentUser.password || 'ProductionPassword123!'
+      password: currentUser.password
     });
 
     if (res.success && res.user) {
@@ -156,7 +156,7 @@ export default function AdminPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Initial Password</Label>
-                  <Input id="password" type="password" placeholder="ProductionPassword123!" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="rounded-xl" />
+                  <Input id="password" type="password" placeholder="Leave blank for default" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="rounded-xl" />
                 </div>
                 <div className="space-y-2">
                   <Label>System Role</Label>

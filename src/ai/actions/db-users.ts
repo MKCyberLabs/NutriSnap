@@ -46,11 +46,6 @@ export async function authenticateDbUser(email: string, password?: string) {
     // Dynamically calculate if bio data is truly complete
     user.onboarded = user.onboarded && !!(user.age && user.age > 0 && user.weight && user.weight > 0 && user.height && user.height > 0);
     
-    // For admin prototype passwords and new hashed passwords
-    if (user.password === password) {
-      return user;
-    }
-    
     if (password) {
       const isValid = await bcrypt.compare(password, user.password);
       if (isValid) return user;
