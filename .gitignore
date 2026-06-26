@@ -39,4 +39,4 @@ prisma/generated/
 *.db-journal
 
 # Custom Application Data
-/public/uploads/
+/public/uploads/tsconfig.tsbuildinfo
