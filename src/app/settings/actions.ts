@@ -46,3 +46,20 @@ export async function deleteReminder(id: string) {
   revalidatePath('/settings');
   return { success: true };
 }
+
+export async function getUserTimezone(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true }
+  });
+  return user?.timezone || 'UTC';
+}
+
+export async function updateTimezone(userId: string, timezone: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { timezone }
+  });
+  revalidatePath('/settings');
+  return { success: true };
+}

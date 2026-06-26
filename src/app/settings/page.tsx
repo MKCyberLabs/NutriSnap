@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
-import { getReminders, saveReminder, toggleReminder } from './actions';
+import { getReminders, saveReminder, toggleReminder, getUserTimezone, updateTimezone } from './actions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,8 @@ export default function SettingsPage() {
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState<string>('UTC');
+  const [savingTz, setSavingTz] = useState(false);
 
   // Local state for time inputs
   const [times, setTimes] = useState<Record<string, string>>({
@@ -46,7 +48,11 @@ export default function SettingsPage() {
         newTimes[r.category] = r.time;
       });
       setTimes(newTimes);
-      setLoading(false);
+      
+      getUserTimezone(session.id).then((tz) => {
+        setTimezone(tz);
+        setLoading(false);
+      });
     });
   }, [router]);
 
@@ -79,6 +85,19 @@ export default function SettingsPage() {
       setReminders(fresh);
     } catch (err) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to toggle reminder.' });
+    }
+  };
+
+  const handleSaveTimezone = async () => {
+    if (!user) return;
+    setSavingTz(true);
+    try {
+      await updateTimezone(user.id, timezone);
+      toast({ title: 'Saved', description: `Timezone updated to ${timezone}` });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to update timezone.' });
+    } finally {
+      setSavingTz(false);
     }
   };
 
@@ -145,6 +164,34 @@ export default function SettingsPage() {
                 </div>
               );
             })}
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-white/60 rounded-3xl overflow-hidden mt-8">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-foreground">
+              Regional Settings
+            </CardTitle>
+            <CardDescription>
+              Set your local timezone so reminders and daily goals reset correctly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Input 
+                value={timezone} 
+                onChange={(e) => setTimezone(e.target.value)}
+                placeholder="e.g. America/New_York or Asia/Kolkata"
+                className="bg-white/50 dark:bg-black/40 flex-1"
+              />
+              <Button onClick={handleSaveTimezone} disabled={savingTz} className="shrink-0 w-full sm:w-auto">
+                {savingTz ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save Timezone
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              Use standard IANA format (e.g., <code className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded">America/New_York</code>, <code className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded">Europe/London</code>, <code className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded">Asia/Kolkata</code>)
+            </p>
           </CardContent>
         </Card>
       </main>
