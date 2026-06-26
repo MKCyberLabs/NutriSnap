@@ -94,7 +94,7 @@ bot.command('ask', async (ctx) => {
     });
     
     // Replace eyes with blue tick (or thumbs up fallback if unsupported)
-    try { await ctx.react('☑️'); } catch (e) { try { await ctx.react('👍'); } catch (e2) {} }
+    try { await ctx.react('👍'); } catch (e) {}
     return ctx.reply(aiResponse, { parse_mode: 'Markdown' });
   } catch (error) {
     try { await ctx.api.setMessageReaction(ctx.chat!.id, ctx.msg!.message_id, []); } catch (e) {}
@@ -372,7 +372,7 @@ bot.on('message', async (ctx) => {
       return;
     }
 
-    try { await ctx.react('☑️'); } catch (e) { try { await ctx.react('👍'); } catch (e2) {} }
+    try { await ctx.react('👍'); } catch (e) {}
 
     // 5. Save to database
     await prisma.mealLog.create({
