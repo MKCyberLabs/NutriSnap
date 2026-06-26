@@ -51,4 +51,5 @@ export interface MealLog {
   description?: string;
   photoUrl?: string; // Legacy field
   imagePath?: string; // New field for local storage path
+  isPending?: boolean; // True while waiting for DB save
 }

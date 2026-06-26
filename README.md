@@ -21,3 +21,14 @@ The Python API has been configured as a permanent background service. It is set 
 - **View Live Logs:** `journalctl -u gemini-api -f`
 - **Restart Service:** `systemctl restart gemini-api`
 - **Enable Auto-Start on Boot:** `systemctl enable gemini-api.service` (Already enabled)
+
+## Managing the Database
+
+When setting up NutriSnap on a fresh system (where the database is empty), you must sync the database schema.
+If the database schema drifts or you get Prisma errors on startup, run the following command to forcefully push the schema:
+
+```bash
+docker compose exec nutrisnap npx prisma db push --accept-data-loss
+```
+
+*(Note: The `Dockerfile` has been updated to run this automatically on startup, but you can run it manually if you bypass the startup script).*

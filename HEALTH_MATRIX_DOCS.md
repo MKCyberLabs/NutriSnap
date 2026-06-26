@@ -27,7 +27,7 @@ The frontend sends the following lightweight payload to the `mealNutritionalAnal
 1. **Payload Validation:** Verify that either `mealDescription` or `imagePath` is present.
 2. **Local File Reading (Disk IO):** 
    - If `imagePath` is provided, the backend uses Node's `fs` (File System) module to locate the file in the `/public` directory (which is mapped to the Docker volume).
-   - The backend reads the file synchronously into a Buffer and converts it into the necessary data URI format required by the Genkit/Gemini SDK.
+   - The backend uses asynchronous file reading (`fs.promises.readFile`) to load the image into a Buffer, ensuring that the main Node.js event loop is not blocked during heavy load. It then converts it into the necessary data URI format required by the Genkit/Gemini SDK.
 3. **Prompt Assembly:** Combines the description and the locally read image into a multi-modal prompt.
 4. **Strict Formatting:** Demands a JSON output that matches the NutriSnap dashboard schema.
 

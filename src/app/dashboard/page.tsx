@@ -274,7 +274,8 @@ export default function DashboardPage() {
         sugar: Number(data.sugar || 0),
       },
       healthInsight: data.healthInsight,
-      imagePath: imagePath
+      imagePath: imagePath,
+      isPending: true
     };
 
     saveLogsToStorage([newLog, ...logs]);
@@ -283,7 +284,7 @@ export default function DashboardPage() {
     const res = await saveMealLog(user?.id || '', newLog, newLog.items);
     if (res && res.success && res.log) {
       setLogs(prev => {
-        const updated = prev.map(l => l.id === newLog.id ? { ...l, id: res.log.id } : l);
+        const updated = prev.map(l => l.id === newLog.id ? { ...l, id: res.log.id, isPending: false } : l);
         localStorage.setItem('nutrisnap_logs', JSON.stringify(updated));
         return updated;
       });
@@ -722,8 +723,8 @@ export default function DashboardPage() {
                                     </div>
                                     <AlertDialog>
                                       <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" aria-label="Delete log" className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
-                                          <Trash2 className="h-4 w-4" />
+                                        <Button variant="ghost" size="icon" aria-label="Delete log" disabled={log.isPending} className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full disabled:opacity-50">
+                                          {log.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                         </Button>
                                       </AlertDialogTrigger>
                                       <AlertDialogContent className="glass-card border-none rounded-3xl">

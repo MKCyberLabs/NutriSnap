@@ -34,6 +34,7 @@ services:
       - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-ProductionPassword123!}
       - ADMIN_RECOVERY_KEY=${ADMIN_RECOVERY_KEY:-RecoveryKey@2024Secure!}
       - USE_MOCK_HEALTH_API=${USE_MOCK_HEALTH_API:-false}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     labels:

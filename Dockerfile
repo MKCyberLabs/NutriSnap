@@ -45,11 +45,19 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+COPY --from=builder /app/prisma ./prisma
+
 USER nextjs
 
 EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-# Start the server
-CMD ["node", "server.js"]
+# Create a startup script that runs db push then starts the server
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'npx prisma db push --accept-data-loss' >> /app/start.sh && \
+    echo 'exec node server.js' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
+# Start the server using the script
+CMD ["/app/start.sh"]

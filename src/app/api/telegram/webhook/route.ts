@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Bot, Context } from 'grammy';
+import { Bot, Context, InlineKeyboard } from 'grammy';
 import { prisma } from '@/lib/prisma';
 import { mealNutritionalAnalysis, telegramMealNutritionalAnalysis } from '@/ai/flows/meal-nutritional-analysis';
+import { askNutritionFlow } from '@/ai/flows/ask-nutrition';
 import { NotFoodError } from '@/lib/errors';
 import fs from 'fs';
 import path from 'path';
@@ -39,7 +40,9 @@ bot.api.setMyCommands([
   { command: 'goals', description: 'View your daily nutrition goals and remaining limits' },
   { command: 'summary', description: 'View your daily nutrition progress and biometric targets' },
   { command: 'setgoal', description: 'Set a daily macro limit (e.g., /setgoal calories 2000)' },
-  { command: 'settimezone', description: 'Set your local timezone (e.g., /settimezone America/New_York)' }
+  { command: 'settimezone', description: 'Set your local timezone (e.g., /settimezone America/New_York)' },
+  { command: 'ask', description: 'Ask the AI about your nutritional habits' },
+  { command: 'reminder', description: 'Set meal reminders' }
 ]).catch(console.error);
 
 bot.command('help', async (ctx) => {
@@ -54,6 +57,9 @@ Use the following commands to manage your account:
   _Example: /setgoal calories 2000_
 /settimezone [timezone] - Set your local timezone so your daily limits reset correctly at midnight.
   _Example: /settimezone Europe/London_
+/ask [question] - Ask the AI about your nutritional habits.
+  _Example: /ask Where are my nutrients lacking?_
+/reminder - Configure daily meal reminders (Breakfast, Lunch, Snack, Dinner).
 
 **How to log a meal:**
 Simply send a photo of your food, OR type the name of the food (e.g. "Chicken salad with olive oil"). I will automatically analyze its nutritional content!`;
@@ -63,6 +69,38 @@ Simply send a photo of your food, OR type the name of the food (e.g. "Chicken sa
 
 bot.command('start', async (ctx) => {
   return ctx.reply("Welcome to NutriSnap! Send me a photo of your food, or type out what you ate, and I'll calculate the nutrition for you. Type /help to see all settings.");
+});
+
+bot.command('ask', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const userQuestion = ctx.match;
+
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply("Access Denied: Please contact the administrator to register.");
+
+  if (!userQuestion) {
+    return ctx.reply("Usage: /ask [your question]\nExample: /ask Where are my nutrients lacking?");
+  }
+
+  // Send eyes reaction and typing action while the AI processes
+  try { await ctx.react('👀'); } catch (e) {}
+  await ctx.replyWithChatAction('typing');
+  
+  try {
+    const aiResponse = await askNutritionFlow({
+      userQuestion,
+      userId: user.id,
+      telegramId: user.telegramId!
+    });
+    
+    // Replace eyes with blue tick (or thumbs up fallback if unsupported)
+    try { await ctx.react('☑️'); } catch (e) { try { await ctx.react('👍'); } catch (e2) {} }
+    return ctx.reply(aiResponse, { parse_mode: 'Markdown' });
+  } catch (error) {
+    try { await ctx.api.setMessageReaction(ctx.chat!.id, ctx.msg!.message_id, []); } catch (e) {}
+    console.error("Ask flow error:", error);
+    return ctx.reply("Sorry, I had trouble answering that. Please try again later.");
+  }
 });
 
 bot.command('setgoal', async (ctx) => {
@@ -135,6 +173,29 @@ bot.command('goals', async (ctx) => {
   ].join('\n');
   
   return ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
+bot.command('reminder', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply("Access Denied: Please contact the administrator to register.");
+
+  const keyboard = new InlineKeyboard()
+    .text('🍳 Breakfast', 'rem_Breakfast').row()
+    .text('🍱 Lunch', 'rem_Lunch').row()
+    .text('🥪 Snack', 'rem_Snack').row()
+    .text('🍲 Dinner', 'rem_Dinner');
+
+  return ctx.reply("Which meal reminder would you like to configure?", { reply_markup: keyboard });
+});
+
+bot.callbackQuery(/^rem_(.+)$/, async (ctx) => {
+  const category = ctx.match[1];
+  await ctx.answerCallbackQuery();
+  return ctx.reply(`Please reply to this message with the time in HH:MM format (24-hour, e.g. 08:00 or 14:30) for your **${category}** reminder.`, {
+    reply_markup: { force_reply: true },
+    parse_mode: 'Markdown'
+  });
 });
 
 bot.command('summary', async (ctx) => {
@@ -224,13 +285,14 @@ bot.on('message', async (ctx) => {
       return;
     }
 
-    // 2. Reaction (👀)
+    // 2. Reaction (👀) and Typing Status
     try {
       // grammY context has built-in reaction method!
       await ctx.react('👀');
     } catch (e) {
       await ctx.reply("👀 Processing...");
     }
+    await ctx.replyWithChatAction('typing');
 
     let localImagePath = undefined;
     if (hasPhoto) {
@@ -277,7 +339,7 @@ bot.on('message', async (ctx) => {
       return;
     }
 
-    try { await ctx.api.setMessageReaction(ctx.chat!.id, ctx.msg!.message_id, []); } catch (e) {}
+    try { await ctx.react('☑️'); } catch (e) { try { await ctx.react('👍'); } catch (e2) {} }
 
     // 5. Save to database
     await prisma.mealLog.create({
@@ -385,6 +447,33 @@ _${analysisResult.healthInsight}_${goalsMsg}`;
 
 // Fallback for non-photo messages
 bot.on('message', async (ctx) => {
+  if (ctx.message?.reply_to_message && ctx.message.reply_to_message.text?.includes("with the time in HH:MM format")) {
+    const telegramId = String(ctx.from!.id);
+    const user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) return;
+
+    const text = ctx.message.text?.trim() || "";
+    // extract category from replied message text: "for your **Breakfast** reminder."
+    const match = ctx.message.reply_to_message.text.match(/for your (\*\*|[a-zA-Z]+|\*)*([A-Za-z]+)(\*\*|[a-zA-Z]+|\*)* reminder/);
+    if (!match) return;
+    
+    // index 2 is the actual category because of the regex groups
+    const category = match[2];
+    
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
+      return ctx.reply("❌ Invalid format. Please use HH:MM format (e.g. 08:00 or 14:30).");
+    }
+
+    const existing = await prisma.reminder.findFirst({ where: { userId: user.id, category } });
+    if (existing) {
+      await prisma.reminder.update({ where: { id: existing.id }, data: { time: text, isActive: true } });
+    } else {
+      await prisma.reminder.create({ data: { userId: user.id, category, time: text, isActive: true } });
+    }
+    
+    return ctx.reply(`✅ Your ${category} reminder is set to ${text}!`);
+  }
+
   if (!ctx.message?.photo) {
      const telegramId = String(ctx.from!.id);
      const user = await prisma.user.findUnique({ where: { telegramId } });

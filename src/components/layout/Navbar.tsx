@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { LogOut, UserCircle, Settings, KeyRound, MessageCircle, Clock, Target, Check, ChevronsUpDown } from 'lucide-react';
+import { LogOut, UserCircle, Settings, KeyRound, MessageCircle, Clock, Target, Check, ChevronsUpDown, Bell } from 'lucide-react';
 import { getAuthSession, clearAuthSession, saveAuthSession } from '@/lib/auth-mock';
 import { useEffect, useState, useMemo } from 'react';
 import { User } from '@/lib/types';
@@ -81,7 +81,12 @@ export function Navbar() {
     }
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error(e);
+    }
     clearAuthSession();
     router.push('/');
   };
@@ -143,6 +148,12 @@ export function Navbar() {
             <UserCircle className="h-4 w-4 text-muted-foreground" />
             <span className="max-w-[100px] truncate">{user?.name || 'User'}</span>
           </div>
+          
+          <Link href="/settings">
+            <Button variant="outline" size="icon" aria-label="Reminders" className="rounded-full h-10 w-10 border-white/40 hover:bg-white/40 text-primary">
+              <Bell className="h-4 w-4" />
+            </Button>
+          </Link>
           
           <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
             <DialogTrigger asChild>
