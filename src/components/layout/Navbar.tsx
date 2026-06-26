@@ -107,7 +107,7 @@ export function Navbar() {
     const res = await updateUserSettings(user.id, payload);
 
     if (res.success) {
-      const updatedUser = { ...user, ...payload };
+      const updatedUser = { ...user, ...payload, telegramId: telegramId || undefined } as User;
       saveAuthSession(updatedUser as any);
       setUser(updatedUser);
       toast({ title: "Settings Saved", description: "Your profile has been updated successfully!" });
