@@ -274,12 +274,13 @@ bot.on('message', async (ctx, next) => {
     if (!user) return;
 
     const text = ctx.message.text?.trim() || "";
-    // extract category from replied message text: "for your **Breakfast** reminder."
-    const match = ctx.message.reply_to_message.text.match(/for your (\*\*|[a-zA-Z]+|\*)*([A-Za-z]+)(\*\*|[a-zA-Z]+|\*)* reminder/);
+    // extract category from replied message text: "for your Snack reminder."
+    // Note: ctx.message.reply_to_message.text strips markdown, so '**Snack**' becomes 'Snack'.
+    const match = ctx.message.reply_to_message.text.match(/for your ([A-Za-z]+) reminder/);
     if (!match) return;
     
-    // index 2 is the actual category because of the regex groups
-    const category = match[2];
+    // index 1 is the actual category because of the regex group
+    const category = match[1];
     
     if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(text)) {
       return ctx.reply("❌ Invalid format. Please use HH:MM format (e.g. 08:00 or 14:30).");
