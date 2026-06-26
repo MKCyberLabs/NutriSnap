@@ -32,3 +32,24 @@ docker compose exec nutrisnap npx prisma db push --accept-data-loss
 ```
 
 *(Note: The `Dockerfile` has been updated to run this automatically on startup, but you can run it manually if you bypass the startup script).*
+
+## Development Notes & Troubleshooting
+
+### Background Workers & Next.js Builds
+If you are developing or maintaining the Next.js app and adding background jobs (like `node-cron` used for Telegram reminders in `src/lib/scheduler.ts`), you **must** ensure they are skipped during the Next.js build phase.
+
+Next.js `npm run build` generates static pages and runs `instrumentation.ts`. If `instrumentation.ts` initializes a long-running background worker (like `setInterval` or `cron`), the Node.js event loop will never empty, causing `npm run build` to hang forever at the `Collecting page data ...` step!
+
+To fix this, always check the `NEXT_PHASE` environment variable in `src/instrumentation.ts`:
+
+```typescript
+export async function register() {
+  if (
+    process.env.NEXT_RUNTIME === 'nodejs' && 
+    process.env.NEXT_PHASE !== 'phase-production-build' // <--- CRITICAL
+  ) {
+    const { startScheduler } = await import('./lib/scheduler');
+    startScheduler();
+  }
+}
+```
