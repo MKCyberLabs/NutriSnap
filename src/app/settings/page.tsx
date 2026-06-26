@@ -454,7 +454,7 @@ export default function SettingsPage() {
                                       onChange={(e) => setTimes({ ...times, [cat]: e.target.value })}
                                       className={`w-32 ${glassInputClasses}`}
                                     />
-                                    <Button onClick={() => handleSaveReminder(cat)} disabled={savingReminder === cat} variant="secondary" size="icon" className="shrink-0 rounded-xl bg-white/40 hover:bg-white/60">
+                                    <Button onClick={() => handleSaveReminder(cat)} disabled={savingReminder === cat} variant="secondary" size="icon" aria-label={`Save ${cat} reminder`} className="shrink-0 rounded-xl bg-white/40 hover:bg-white/60">
                                       {savingReminder === cat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                                     </Button>
                                   </div>

@@ -114,6 +114,7 @@ function EditGramsPopover({ item, logId, onUpdate }: { item: FoodItem, logId: st
           />
           <Button
             size="icon"
+            aria-label="Confirm update"
             className="h-8 w-8 shrink-0 rounded-lg"
             onClick={() => {
               onUpdate(logId, item.id, value);
