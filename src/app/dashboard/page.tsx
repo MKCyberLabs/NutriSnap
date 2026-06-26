@@ -496,11 +496,15 @@ export default function DashboardPage() {
         const dateStr = format(date, 'yyyy-MM-dd');
         const dayLogs = logsByDateStr.get(dateStr) || [];
 
-        const calories = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.calories) || 0), 0);
-        const protein = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.protein) || 0), 0);
-        const carbs = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.carbs) || 0), 0);
-        const fat = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.fat) || 0), 0);
-        const sugar = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.sugar) || 0), 0);
+        // ⚡ Bolt Optimization: Consolidate 5 separate reductions into a single O(N) loop
+        let calories = 0, protein = 0, carbs = 0, fat = 0, sugar = 0;
+        for (const log of dayLogs) {
+          calories += Number(log.totalNutrients.calories) || 0;
+          protein += Number(log.totalNutrients.protein) || 0;
+          carbs += Number(log.totalNutrients.carbs) || 0;
+          fat += Number(log.totalNutrients.fat) || 0;
+          sugar += Number(log.totalNutrients.sugar) || 0;
+        }
 
         return {
           day: format(date, 'EEE'),
@@ -517,19 +521,33 @@ export default function DashboardPage() {
     }
   }, [logsByDateStr, activeWeeklyRange]);
 
+  // ⚡ Bolt Optimization: Calculate daily totals and category calorie breakdowns in a single O(N) pass.
+  // Replaces 4 inline .filter().reduce() loops on every render.
   const dailyTotals = useMemo(() => {
     let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
+    const byCategory: Record<MealCategory, number> = {
+      Breakfast: 0,
+      Lunch: 0,
+      Dinner: 0,
+      Snacks: 0,
+    };
+
     filteredLogs.forEach(log => {
       protein += Number(log.totalNutrients.protein || 0);
       carbs += Number(log.totalNutrients.carbs || 0);
       fat += Number(log.totalNutrients.fat || 0);
       sugar += Number(log.totalNutrients.sugar || 0);
-      calories += Number(log.totalNutrients.calories || 0);
+
+      const logCals = Number(log.totalNutrients.calories || 0);
+      calories += logCals;
+      if (log.category && byCategory[log.category] !== undefined) {
+        byCategory[log.category] += logCals;
+      }
     });
-    return { protein, carbs, fat, sugar, calories };
+    return { protein, carbs, fat, sugar, calories, byCategory };
   }, [filteredLogs]);
 
-  const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
+  const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals, byCategory } = dailyTotals;
 
   // ⚡ Bolt Optimization: Memoize and consolidate weekly total aggregations
   // Replaces 4 separate O(N) array reductions (one in weeklyAvgCalories, three in render)
@@ -640,7 +658,7 @@ export default function DashboardPage() {
                   <MealCategoryCard 
                     key={cat} 
                     category={cat} 
-                    totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + Number(log.totalNutrients.calories || 0), 0)} 
+                    totalCalories={byCategory[cat]}
                     onAnalysisComplete={(data, category, mealTime, imagePath) => handleMealCardComplete(data, category, mealTime, imagePath)} 
                   />
                 ))}
