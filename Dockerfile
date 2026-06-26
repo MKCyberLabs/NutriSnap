@@ -21,7 +21,6 @@ COPY . .
 
 # Build the project
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV IS_BUILDING=1
 RUN npx prisma generate
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
