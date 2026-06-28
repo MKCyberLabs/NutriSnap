@@ -18,40 +18,44 @@ export const askNutritionFlow = ai.defineFlow(
     outputSchema: z.string(),
   },
   async (input) => {
+    // Safely fetch user data and goals
+    const user = await prisma.user.findUnique({
+      where: { id: input.userId },
+      select: {
+        weight: true,
+        dailyCaloriesGoal: true,
+        dailyProteinGoal: true,
+        dailyCarbsGoal: true,
+        dailyFatGoal: true,
+      }
+    });
+
+    // Safely fetch last 30 days of meal logs
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const mealLogs = await prisma.mealLog.findMany({
+      where: {
+        userId: input.userId,
+        createdAt: { gte: thirtyDaysAgo }
+      },
+      select: {
+        totalCalories: true,
+        totalProtein: true,
+        totalCarbs: true,
+        totalFat: true,
+        totalSugar: true,
+        createdAt: true,
+      }
+    });
 
-    const [user, mealLogs] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: input.userId },
-        select: {
-          weight: true,
-          dailyCaloriesGoal: true,
-          dailyProteinGoal: true,
-          dailyCarbsGoal: true,
-          dailyFatGoal: true,
-        }
-      }),
-      prisma.mealLog.findMany({
-        where: {
-          userId: input.userId,
-          createdAt: { gte: thirtyDaysAgo }
-        },
-        include: { items: true },
-        orderBy: { createdAt: 'desc' }
-      })
-    ]);
-
+    const userDataJson = JSON.stringify({ user, recentMeals: mealLogs });
     const prompt = `You are the NutriSnap AI assistant. Analyze the user's provided health data and answer their question directly.
 Be concise, conversational, and helpful.
 
-Your goal is to answer the user's question using their data. You have been provided with the user's nutrition data, including their goals and meal logs from the last 30 days.
+Important Context: Use the provided JSON data to answer the user's question. Do NOT attempt to query any database.
 
-User Goals and Data:
-${JSON.stringify(user, null, 2)}
-
-User's Meal Logs (Last 30 Days):
-${JSON.stringify(mealLogs, null, 2)}
+User Data (JSON):
+${userDataJson}
 
 If they are lacking a nutrient, follow this exact structure:
 1. State their 30-day average.
