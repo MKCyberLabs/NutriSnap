@@ -11,3 +11,10 @@
 ## 2023-10-27 - [Anti-pattern] Redundant Array Reductions During Render
 **Learning:** The dashboard component previously used multiple inline `.filter().reduce()` passes per meal category and multiple `.reduce()` passes per nutrient directly inside `useMemo` blocks and JSX. This leads to O(N*M) and O(N*K) iterations on every render or recalculation.
 **Action:** Always consolidate multiple array reduction operations into a single O(N) iteration (e.g. using a single `for...of` loop or `.reduce()` with an object accumulator) instead of chaining multiple array methods.
+## 2025-02-20 - [Prisma Performance]
+**Learning:** Adding indexes to frequently filtered and sorted columns, especially foreign keys, drastically reduces sequence scanning in large database tables. `MealLog`s are filtered by `userId` and sorted by `createdAt` in desc order. `FoodItem`s are accessed via their `mealLogId`. `Reminder`s are fetched via `userId`.
+**Action:** Use `@@index` in the `prisma/schema.prisma` model definitions to explicitly instruct the underlying DB to build these critical indexes.
+
+## 2024-07-25 - [O(n) Consolidation]
+**Learning:** Replaced multiple O(n) `.reduce()` calls calculating total nutrients inside `handleUpdateItemGrams`, `handleAddItem`, and `handleDeleteItem` in `src/app/dashboard/page.tsx` with a single O(n) pass using a helper function `recalculateNutrients()`. This reduces the operations from O(7*n) to O(n).
+**Action:** Always prefer consolidating multiple iterations over the same array into a single pass when computing multiple aggregates.

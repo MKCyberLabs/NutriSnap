@@ -40,9 +40,8 @@ export async function POST(req: NextRequest) {
 
     // Password Verification
     const passwordMatch = await bcrypt.compare(password, user.password);
-    const recoveryKeyMatch = process.env.ADMIN_RECOVERY_KEY && password === process.env.ADMIN_RECOVERY_KEY;
 
-    if (!passwordMatch && !recoveryKeyMatch) {
+    if (!passwordMatch) {
       updateAttempts(identifier);
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
@@ -58,7 +57,7 @@ export async function POST(req: NextRequest) {
       role: user.role,
       // Dynamically calculate if bio data is truly complete
       onboarded: user.onboarded && !!(user.age && user.age > 0 && user.weight && user.weight > 0 && user.height && user.height > 0),
-      requiresPasswordReset: user.requiresPasswordReset || !!recoveryKeyMatch,
+      requiresPasswordReset: user.requiresPasswordReset,
       metrics: {
         gender: user.gender,
         age: user.age,

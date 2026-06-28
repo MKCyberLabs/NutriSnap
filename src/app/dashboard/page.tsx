@@ -199,6 +199,33 @@ function calculateNutrientTargets(user?: any) {
   };
 }
 
+function recalculateNutrients(items: FoodItem[]) {
+  let totalCalories = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+  let totalFiber = 0, totalSatFat = 0, totalSugar = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    totalCalories += Number(item.calories) || 0;
+    totalProtein += Number(item.protein) || 0;
+    totalCarbs += Number(item.carbs) || 0;
+    totalFat += Number(item.fat) || 0;
+    totalFiber += Number(item.fiber) || 0;
+    totalSatFat += Number(item.saturatedFat) || 0;
+    totalSugar += Number(item.sugar) || 0;
+  }
+
+  return {
+    calories: totalCalories,
+    protein: totalProtein,
+    carbs: totalCarbs,
+    fat: totalFat,
+    fiber: totalFiber,
+    saturatedFat: totalSatFat,
+    sugar: totalSugar,
+  };
+}
+
+
 export default function DashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -336,13 +363,14 @@ export default function DashboardPage() {
         };
       });
 
-      const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
-      const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
-      const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
-      const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-      const totalSatFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
+      const { calories, protein, carbs, fat, fiber, saturatedFat, sugar } = recalculateNutrients(updatedItems);
+      const totalCalories = calories;
+      const totalProtein = protein;
+      const totalCarbs = carbs;
+      const totalFat = fat;
+      const totalFiber = fiber;
+      const totalSatFat = saturatedFat;
+      const totalSugar = sugar;
 
       return {
         ...log,
@@ -382,13 +410,14 @@ export default function DashboardPage() {
           id: Math.random().toString(36).substr(2, 9),
         }));
         const combinedItems = [...log.items, ...newItems];
-        const totalCalories = combinedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
-        const totalProtein = combinedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
-        const totalCarbs = combinedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
-        const totalFat = combinedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-        const totalFiber = combinedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-        const totalSatFat = combinedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-        const totalSugar = combinedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
+        const { calories, protein, carbs, fat, fiber, saturatedFat, sugar } = recalculateNutrients(combinedItems);
+        const totalCalories = calories;
+        const totalProtein = protein;
+        const totalCarbs = carbs;
+        const totalFat = fat;
+        const totalFiber = fiber;
+        const totalSatFat = saturatedFat;
+        const totalSugar = sugar;
 
         return {
           ...log,
@@ -424,13 +453,14 @@ export default function DashboardPage() {
     const updatedLogs = logs.map(log => {
       if (log.id !== logId) return log;
       const updatedItems = log.items.filter(item => item.id !== itemId);
-      const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
-      const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
-      const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
-      const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-      const totalSatFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
+      const { calories, protein, carbs, fat, fiber, saturatedFat, sugar } = recalculateNutrients(updatedItems);
+      const totalCalories = calories;
+      const totalProtein = protein;
+      const totalCarbs = carbs;
+      const totalFat = fat;
+      const totalFiber = fiber;
+      const totalSatFat = saturatedFat;
+      const totalSugar = sugar;
 
       return {
         ...log,

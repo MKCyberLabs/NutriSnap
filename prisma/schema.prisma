@@ -52,6 +52,8 @@ model MealLog {
   user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model FoodItem {
@@ -70,6 +72,8 @@ model FoodItem {
   mealLog      MealLog  @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([mealLogId])
 }
 
 model Reminder {
@@ -81,4 +85,6 @@ model Reminder {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
