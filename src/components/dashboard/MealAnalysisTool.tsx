@@ -17,6 +17,11 @@ import {
 } from "@/components/ui/select";
 import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analysis';
 
+// ⚡ Bolt Optimization: Extracted static arrays outside the component
+// Prevents O(N) re-allocations of 72 elements on every keystroke when user types in the description box.
+const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+const minuteOptions = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+
 interface MealAnalysisToolProps {
   category: MealCategory;
   onAnalysisComplete: (data: MealNutritionalAnalysisOutput, mealTime: string, imagePath?: string) => void;
@@ -131,9 +136,6 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
       setIsAnalyzing(false);
     }
   };
-
-  const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
-  const minuteOptions = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
 
   return (
     <div className="flex flex-col h-full">
