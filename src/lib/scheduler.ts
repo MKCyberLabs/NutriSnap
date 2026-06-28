@@ -79,6 +79,73 @@ export function startScheduler() {
           }
         }
       }
+
+      // --- Hydration Reminders ---
+      const activeHydrationSettings = await prisma.hydrationSetting.findMany({
+        where: { isActive: true },
+        include: { user: true },
+      });
+
+      console.log(`[Scheduler] Checking ${activeHydrationSettings.length} active hydration settings...`);
+
+      for (const setting of activeHydrationSettings) {
+        if (!setting.user.telegramId) continue;
+
+        const userTimezone = setting.user.timezone || 'UTC';
+        const now = new Date();
+        
+        // Check day of week in user's timezone
+        const currentDay = new Intl.DateTimeFormat('en-US', { timeZone: userTimezone, weekday: 'long' }).format(now);
+        
+        if (!setting.activeDays.includes(currentDay)) {
+          continue;
+        }
+
+        // Current time in user timezone
+        const currentTimeString = new Intl.DateTimeFormat('en-GB', { 
+          timeZone: userTimezone, 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false 
+        }).format(now);
+
+        const currentMinutes = parseInt(currentTimeString.split(':')[0]) * 60 + parseInt(currentTimeString.split(':')[1]);
+        const startMinutes = parseInt(setting.startTime.split(':')[0]) * 60 + parseInt(setting.startTime.split(':')[1]);
+        const endMinutes = parseInt(setting.endTime.split(':')[0]) * 60 + parseInt(setting.endTime.split(':')[1]);
+
+        if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
+          const diffMinutes = currentMinutes - startMinutes;
+          if (diffMinutes % setting.intervalMinutes === 0) {
+            // Include InlineKeyboard from grammy if not already imported (wait, we must use the already imported Bot, maybe need to import InlineKeyboard? Yes, it's not imported in scheduler.ts)
+            // Let's just use raw inline_keyboard array to avoid changing imports, or import it.
+            // Wait, we can just use the raw Telegram API format for inline keyboards to avoid needing InlineKeyboard import.
+            const inline_keyboard = [
+              [
+                { text: '💧 250ml', callback_data: 'hyd_250' },
+                { text: '💧 500ml', callback_data: 'hyd_500' }
+              ],
+              [
+                { text: '💧 750ml', callback_data: 'hyd_750' },
+                { text: '✏️ Custom', callback_data: 'hyd_custom' }
+              ]
+            ];
+
+            try {
+              await bot.api.sendMessage(
+                setting.user.telegramId,
+                `🚰 **Time to hydrate!**\n\nHow much water did you drink?`,
+                { 
+                  parse_mode: 'Markdown', 
+                  reply_markup: { inline_keyboard } 
+                }
+              );
+              console.log(`Sent hydration reminder to user ${setting.user.id}`);
+            } catch (telegramErr) {
+              console.error(`Failed to send hydration reminder to ${setting.user.telegramId}:`, telegramErr);
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('Error in cron scheduler:', err);
     }

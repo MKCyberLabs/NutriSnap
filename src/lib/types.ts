@@ -9,6 +9,7 @@ export interface User {
   onboarded: boolean;
   metrics?: UserMetrics;
   telegramId?: string | null;
+  dailyWaterGoal?: number;
 }
 
 export interface UserMetrics {
@@ -19,6 +20,8 @@ export interface UserMetrics {
 }
 
 export type MealCategory = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks';
+
+export type DrinkType = 'Water' | 'Coffee' | 'Soft Drink' | 'Milk' | 'Smoothie';
 
 export interface FoodItem {
   id: string;
@@ -53,4 +56,19 @@ export interface MealLog {
   photoUrl?: string; // Legacy field
   imagePath?: string; // New field for local storage path
   isPending?: boolean; // True while waiting for DB save
+}
+
+export interface HydrationEntry {
+  id: string;
+  amountMl: number;
+  drinkType: DrinkType;
+  createdAt: string;
+}
+
+export interface HydrationSettingData {
+  startTime: string;
+  endTime: string;
+  intervalMinutes: number;
+  activeDays: string[];
+  isActive: boolean;
 }

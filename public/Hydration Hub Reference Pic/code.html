@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Hydration Hub - NutriSnap</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            nutri: {
+              bg: '#e8f7fd',
+              card: '#ffffff',
+              text: '#1a365d',
+              muted: '#64748b',
+              accent: '#38bdf8',
+              accentHover: '#0ea5e9',
+              bottleBg: '#bfdbfe',
+              water: '#22d3ee',
+              iconBg: '#e0f2fe',
+              infoBg: '#e6f6f4',
+            }
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-styles">
+    body {
+      background-color: theme('colors.nutri.bg');
+      color: theme('colors.nutri.text');
+    }
+    
+    .timeline-line::before {
+      content: '';
+      position: absolute;
+      top: 2rem;
+      bottom: 0;
+      left: 0.85rem;
+      width: 2px;
+      background-color: theme('colors.gray.200');
+      z-index: 0;
+    }
+    
+    .timeline-item {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Custom scrollbar for timeline if it overflows */
+    .timeline-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .timeline-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .timeline-container::-webkit-scrollbar-thumb {
+      background-color: theme('colors.gray.300');
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased">
+<!-- BEGIN: MainHeader -->
+<header class="flex items-center justify-between px-6 py-4 bg-white/50 backdrop-blur-sm border-b border-white/20">
+<div class="flex items-center gap-2 cursor-pointer">
+<div class="w-8 h-8 rounded-lg bg-nutri-text text-white flex items-center justify-center font-bold text-lg">
+        N
+      </div>
+<span class="font-bold text-xl tracking-tight text-nutri-text">NutriSnap</span>
+</div>
+<div class="flex bg-white rounded-full p-1 shadow-sm border border-gray-100">
+<button class="px-4 py-1.5 rounded-full text-sm font-medium text-gray-500 hover:text-nutri-text transition-colors">NutriSnap</button>
+<button class="px-4 py-1.5 rounded-full text-sm font-semibold bg-nutri-accent text-white shadow-sm transition-colors">Hydration Hub</button>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 cursor-pointer hover:bg-white/60 p-1.5 rounded-full transition-colors">
+<i class="fa-regular fa-circle-user text-xl text-gray-600"></i>
+<span class="text-sm font-medium">bob</span>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:bg-white/60 transition-colors">
+<i class="fa-solid fa-gear"></i>
+</button>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:bg-white/60 transition-colors">
+<i class="fa-solid fa-arrow-right-from-bracket"></i>
+</button>
+</div>
+</header>
+<!-- END: MainHeader -->
+<main class="max-w-7xl mx-auto px-6 py-8">
+<!-- BEGIN: SubHeader -->
+<section class="mb-8">
+<h1 class="text-3xl font-extrabold mb-4">Hydration Hub</h1>
+<div class="flex items-center gap-4">
+<div class="flex bg-nutri-bottleBg rounded-full p-1 border border-blue-200 shadow-inner">
+<button class="px-4 py-1.5 rounded-full text-sm font-medium bg-white text-nutri-text shadow-sm">Daily</button>
+<button class="px-4 py-1.5 rounded-full text-sm font-medium text-nutri-text/70 hover:text-nutri-text">Weekly</button>
+</div>
+<div class="flex items-center bg-white rounded-full px-4 py-2 shadow-sm border border-gray-100 cursor-pointer">
+<i class="fa-regular fa-calendar text-gray-500 mr-2"></i>
+<span class="text-sm font-medium">Saturday, Jun 27th</span>
+</div>
+<div class="flex gap-2">
+<button class="w-9 h-9 rounded-full bg-white shadow-sm border border-gray-100 flex items-center justify-center text-gray-500 hover:text-nutri-text hover:bg-gray-50 transition-colors">
+<i class="fa-solid fa-chevron-left text-sm"></i>
+</button>
+<button class="w-9 h-9 rounded-full bg-white shadow-sm border border-gray-100 flex items-center justify-center text-gray-500 hover:text-nutri-text hover:bg-gray-50 transition-colors">
+<i class="fa-solid fa-chevron-right text-sm"></i>
+</button>
+</div>
+</div>
+</section>
+<!-- END: SubHeader -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- BEGIN: Left Column - Bottle Vis -->
+<section class="col-span-1 lg:col-span-3 flex justify-center items-start pt-4">
+<!-- Simplified bottle representation using CSS shapes for ease, though an SVG would be ideal for exact curves -->
+<div class="relative w-48 h-96 bg-blue-100/50 rounded-[4rem] border-4 border-blue-200 overflow-hidden shadow-sm flex flex-col items-center justify-end pb-8">
+<!-- Bottle Neck -->
+<div class="absolute -top-1 left-1/2 -translate-x-1/2 w-20 h-12 bg-blue-200/80 rounded-t-xl z-20 border-b border-blue-300">
+<div class="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-4 bg-gray-400 rounded-sm z-30"></div>
+</div>
+<!-- Water level -->
+<div class="absolute bottom-0 left-0 w-full h-[60%] bg-gradient-to-t from-blue-500 to-cyan-400 rounded-b-[3.5rem] flex flex-col items-center justify-center text-white pb-4 z-10">
+<!-- Simulated waves -->
+<svg class="absolute top-0 left-0 w-full h-8 -mt-7 text-cyan-400 fill-current" preserveaspectratio="none" viewbox="0 0 1440 320">
+<path d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,165.3C672,171,768,213,864,218.7C960,224,1056,192,1152,181.3C1248,171,1344,181,1392,186.7L1440,192L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
+</svg>
+<span class="text-4xl font-extrabold drop-shadow-md z-20">60%</span>
+<span class="text-sm font-medium drop-shadow-md z-20">Goal</span>
+</div>
+<!-- Empty space text -->
+<div class="absolute top-24 w-full flex flex-col items-center text-nutri-text z-20">
+<span class="text-4xl font-extrabold text-teal-700">1650</span>
+<span class="text-sm font-medium text-gray-600">2750 ml</span>
+</div>
+</div>
+</section>
+<!-- END: Left Column -->
+<!-- BEGIN: Middle Column - Quick Add & Timeline -->
+<section class="col-span-1 lg:col-span-6 flex flex-col gap-6">
+<!-- Quick Add Cards -->
+<div class="grid grid-cols-4 gap-4">
+<!-- 250ml -->
+<button class="bg-white rounded-3xl p-4 shadow-sm border border-gray-50 flex flex-col items-center justify-center gap-3 hover:shadow-md transition-shadow group">
+<div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 text-white flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+<i class="fa-solid fa-glass-water"></i>
+</div>
+<span class="font-bold text-lg text-nutri-text"><span class="text-teal-700">250</span> <span class="text-sm text-gray-500">ml</span></span>
+</button>
+<!-- 500ml -->
+<button class="bg-white rounded-3xl p-4 shadow-sm border border-gray-50 flex flex-col items-center justify-center gap-3 hover:shadow-md transition-shadow group">
+<div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 text-white flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+<i class="fa-solid fa-droplet"></i>
+</div>
+<span class="font-bold text-lg text-nutri-text"><span class="text-teal-700">500</span> <span class="text-sm text-gray-500">ml</span></span>
+</button>
+<!-- 750ml -->
+<button class="bg-white rounded-3xl p-4 shadow-sm border border-gray-50 flex flex-col items-center justify-center gap-3 hover:shadow-md transition-shadow group">
+<div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 text-white flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+<i class="fa-solid fa-bottle-water"></i>
+</div>
+<span class="font-bold text-lg text-nutri-text"><span class="text-teal-700">750</span> <span class="text-sm text-gray-500">ml</span></span>
+</button>
+<!-- Custom -->
+<button class="bg-white rounded-3xl p-4 shadow-sm border border-gray-50 flex flex-col items-center justify-center gap-3 hover:shadow-md transition-shadow group">
+<div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 text-white flex items-center justify-center text-2xl shadow-inner group-hover:scale-105 transition-transform">
+<i class="fa-solid fa-plus"></i>
+</div>
+<span class="font-bold text-lg text-teal-700">Custom</span>
+</button>
+</div>
+<!-- Daily Activity Timeline -->
+<div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-50 flex-1 flex flex-col max-h-[500px]">
+<div class="mb-6">
+<h2 class="text-lg font-bold flex items-center gap-2">
+<i class="fa-solid fa-clock-rotate-left text-gray-400"></i>
+              Daily Activity
+            </h2>
+<p class="text-sm text-gray-500">Visual timeline of your metabolic intake.</p>
+</div>
+<div class="relative timeline-line timeline-container overflow-y-auto pr-2 flex-1">
+<!-- Timeline Item 1 -->
+<div class="timeline-item flex items-center justify-between mb-6 group">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-cyan-500 border-2 border-white shadow-sm z-10 ml-[2px]"></div>
+<div class="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-sm">
+<i class="fa-solid fa-glass-water"></i>
+</div>
+<span class="font-bold">500 ml Glass</span>
+</div>
+<div class="flex items-center gap-4 text-gray-500 text-sm font-medium">
+<span>- 8:30 AM</span>
+<div class="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+<button class="hover:text-nutri-accent transition-colors"><i class="fa-solid fa-pen"></i></button>
+<button class="hover:text-red-500 transition-colors"><i class="fa-regular fa-trash-can"></i></button>
+</div>
+</div>
+</div>
+<!-- Timeline Item 2 -->
+<div class="timeline-item flex items-center justify-between mb-6 group">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-blue-100 border-2 border-white shadow-sm z-10 ml-[2px]"></div>
+<div class="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-sm">
+<i class="fa-solid fa-mug-hot"></i>
+</div>
+<span class="font-bold">250 ml Mug</span>
+</div>
+<div class="flex items-center gap-4 text-gray-500 text-sm font-medium">
+<span>- 10:15 AM</span>
+<div class="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+<button class="hover:text-nutri-accent transition-colors"><i class="fa-solid fa-pen"></i></button>
+<button class="hover:text-red-500 transition-colors"><i class="fa-regular fa-trash-can"></i></button>
+</div>
+</div>
+</div>
+<!-- Timeline Item 3 -->
+<div class="timeline-item flex items-center justify-between mb-6 group">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-blue-100 border-2 border-white shadow-sm z-10 ml-[2px]"></div>
+<div class="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-sm">
+<i class="fa-solid fa-bottle-water"></i>
+</div>
+<span class="font-bold">750 ml Bottle</span>
+</div>
+<div class="flex items-center gap-4 text-gray-500 text-sm font-medium">
+<span>- 12:45 PM</span>
+<div class="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+<button class="hover:text-nutri-accent transition-colors"><i class="fa-solid fa-pen"></i></button>
+<button class="hover:text-red-500 transition-colors"><i class="fa-regular fa-trash-can"></i></button>
+</div>
+</div>
+</div>
+<!-- Timeline Item 4 -->
+<div class="timeline-item flex items-center justify-between mb-6 group">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-blue-100 border-2 border-white shadow-sm z-10 ml-[2px]"></div>
+<div class="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-sm">
+<i class="fa-solid fa-plus"></i>
+</div>
+<span class="font-bold">150 ml Custom</span>
+</div>
+<div class="flex items-center gap-4 text-gray-500 text-sm font-medium">
+<span>- 3:00 PM</span>
+<div class="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+<button class="hover:text-nutri-accent transition-colors"><i class="fa-solid fa-pen"></i></button>
+<button class="hover:text-red-500 transition-colors"><i class="fa-regular fa-trash-can"></i></button>
+</div>
+</div>
+</div>
+<!-- Timeline Item 5 (Repeated for scrolling effect if needed, based on image) -->
+<div class="timeline-item flex items-center justify-between mb-6 group">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-blue-100 border-2 border-white shadow-sm z-10 ml-[2px]"></div>
+<div class="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-sm">
+<i class="fa-solid fa-mug-hot"></i>
+</div>
+<span class="font-bold">250 ml Mug</span>
+</div>
+<div class="flex items-center gap-4 text-gray-500 text-sm font-medium">
+<span>- 10:15 AM</span>
+<div class="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+<button class="hover:text-nutri-accent transition-colors"><i class="fa-solid fa-pen"></i></button>
+<button class="hover:text-red-500 transition-colors"><i class="fa-regular fa-trash-can"></i></button>
+</div>
+</div>
+</div>
+<!-- Timeline Item 6 -->
+<div class="timeline-item flex items-center justify-between mb-2 group">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 rounded-full bg-blue-100 border-2 border-white shadow-sm z-10 ml-[2px]"></div>
+<div class="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-sm">
+<i class="fa-solid fa-bottle-water"></i>
+</div>
+<span class="font-bold">750 ml Bottle</span>
+</div>
+<div class="flex items-center gap-4 text-gray-500 text-sm font-medium">
+<span>- 12:45 PM</span>
+<div class="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+<button class="hover:text-nutri-accent transition-colors"><i class="fa-solid fa-pen"></i></button>
+<button class="hover:text-red-500 transition-colors"><i class="fa-regular fa-trash-can"></i></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- END: Middle Column -->
+<!-- BEGIN: Right Column - Insights & Info -->
+<section class="col-span-1 lg:col-span-3 flex flex-col gap-6">
+<!-- Hydration Insights Card -->
+<div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-50">
+<h2 class="text-lg font-bold mb-4">Hydration Insights</h2>
+<div class="flex justify-between mb-4">
+<!-- 6 Filled Glasses -->
+<i class="fa-solid fa-glass-water text-2xl text-cyan-500"></i>
+<i class="fa-solid fa-glass-water text-2xl text-cyan-500"></i>
+<i class="fa-solid fa-glass-water text-2xl text-cyan-500"></i>
+<i class="fa-solid fa-glass-water text-2xl text-cyan-500"></i>
+<i class="fa-solid fa-glass-water text-2xl text-cyan-500"></i>
+<i class="fa-solid fa-glass-water text-2xl text-cyan-500"></i>
+<!-- 2 Empty/Light Glasses -->
+<i class="fa-solid fa-glass-water text-2xl text-cyan-100"></i>
+<i class="fa-solid fa-glass-water text-2xl text-cyan-100"></i>
+</div>
+<p class="text-sm text-gray-700 mb-4 leading-relaxed">
+            You're <span class="font-bold">60%</span> of the way to your goal! Keep it up!
+          </p>
+<div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+<div class="h-full bg-cyan-500 rounded-full w-[60%]"></div>
+</div>
+</div>
+<!-- Info Card -->
+<div class="bg-nutri-infoBg rounded-3xl p-6 shadow-sm border border-teal-50">
+<h3 class="font-bold flex items-center gap-2 mb-2 text-teal-900">
+<i class="fa-regular fa-circle-info text-teal-600"></i>
+            Did you know?
+          </h3>
+<p class="text-sm text-teal-800 leading-relaxed">
+            Drinking water before meals can help with digestion.
+          </p>
+</div>
+</section>
+<!-- END: Right Column -->
+</div>
+</main>
+</body></html>

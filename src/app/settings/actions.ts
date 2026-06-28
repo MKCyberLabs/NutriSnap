@@ -63,3 +63,17 @@ export async function updateTimezone(userId: string, timezone: string) {
   revalidatePath('/settings');
   return { success: true };
 }
+
+export async function getHydrationSetting(userId: string) {
+  return prisma.hydrationSetting.findUnique({
+    where: { userId }
+  });
+}
+
+export async function saveHydrationSetting(userId: string, data: any) {
+  return prisma.hydrationSetting.upsert({
+    where: { userId },
+    update: data,
+    create: { userId, ...data }
+  });
+}

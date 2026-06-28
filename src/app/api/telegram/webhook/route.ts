@@ -198,6 +198,33 @@ bot.callbackQuery(/^rem_(.+)$/, async (ctx) => {
   });
 });
 
+bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
+  const amountStr = ctx.match[1];
+  await ctx.answerCallbackQuery();
+  
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply("Access Denied.");
+  
+  if (amountStr === 'custom') {
+    return ctx.reply("Please reply to this message with the amount of water you drank (in ml), e.g. 300.", {
+      reply_markup: { force_reply: true },
+      parse_mode: 'Markdown'
+    });
+  }
+  
+  const amountMl = parseInt(amountStr, 10);
+  if (!isNaN(amountMl)) {
+    await prisma.hydrationLog.create({
+      data: {
+        userId: user.id,
+        amountMl: amountMl
+      }
+    });
+    return ctx.reply(`✅ Logged ${amountMl}ml of water! Keep it up 💧`);
+  }
+});
+
 bot.command('summary', async (ctx) => {
   const telegramId = String(ctx.from!.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
@@ -294,6 +321,25 @@ bot.on('message', async (ctx, next) => {
     }
     
     return ctx.reply(`✅ Your ${category} reminder is set to ${text}!`);
+  } else if (ctx.message?.reply_to_message && ctx.message.reply_to_message.text?.includes("amount of water you drank (in ml)")) {
+    const telegramId = String(ctx.from!.id);
+    const user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) return;
+
+    const text = ctx.message.text?.trim() || "";
+    const amountMl = parseInt(text, 10);
+    
+    if (isNaN(amountMl) || amountMl <= 0) {
+      return ctx.reply("❌ Invalid format. Please enter a valid number (e.g. 300).");
+    }
+    
+    await prisma.hydrationLog.create({
+      data: {
+        userId: user.id,
+        amountMl: amountMl
+      }
+    });
+    return ctx.reply(`✅ Logged ${amountMl}ml of water! Keep it up 💧`);
   }
   
   return next();

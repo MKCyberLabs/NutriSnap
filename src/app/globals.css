@@ -72,3 +72,46 @@
     @apply bg-white/50 dark:bg-black/50 backdrop-blur-lg border-b border-white/40 dark:border-white/10;
   }
 }
+
+/* Hydration Hub Blue Theme Override */
+.hydration-theme {
+  --primary: 199 89% 48%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 199 89% 48%;
+}
+
+.hydration-theme .glass-nav {
+  background: rgba(224, 242, 254, 0.7);
+  border-bottom-color: rgba(186, 230, 253, 0.5);
+}
+
+/* Water Bottle Wave Animation */
+@keyframes wave1 {
+  0% { transform: translateX(0) translateZ(0) scaleY(1); }
+  50% { transform: translateX(-25%) translateZ(0) scaleY(0.55); }
+  100% { transform: translateX(-50%) translateZ(0) scaleY(1); }
+}
+
+@keyframes wave2 {
+  0% { transform: translateX(0) translateZ(0) scaleY(1); }
+  50% { transform: translateX(25%) translateZ(0) scaleY(0.65); }
+  100% { transform: translateX(50%) translateZ(0) scaleY(1); }
+}
+
+@keyframes bubble {
+  0% { transform: translateY(0) scale(1); opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { transform: translateY(-120px) scale(0.4); opacity: 0; }
+}
+
+.wave-animation-1 {
+  animation: wave1 7s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+}
+
+.wave-animation-2 {
+  animation: wave2 5s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+}
+
+.bubble-animation {
+  animation: bubble 4s ease-in infinite;
+}

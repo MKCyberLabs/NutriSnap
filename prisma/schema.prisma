@@ -27,8 +27,11 @@ model User {
   dailyProteinGoal      Int?
   dailyCarbsGoal        Int?
   dailyFatGoal          Int?
+  dailyWaterGoal        Int       @default(2750)
   mealLogs              MealLog[]
   reminders             Reminder[]
+  hydrationSetting      HydrationSetting?
+  hydrationLogs         HydrationLog[]
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }
@@ -82,6 +85,31 @@ model Reminder {
   category  String
   time      String
   isActive  Boolean  @default(true)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model HydrationSetting {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  startTime       String
+  endTime         String
+  intervalMinutes Int
+  activeDays      String[]
+  isActive        Boolean  @default(true)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model HydrationLog {
+  id        String   @id @default(cuid())
+  userId    String
+  amountMl  Int
+  drinkType String   @default("Water")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

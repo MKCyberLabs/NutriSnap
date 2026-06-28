@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession, saveAuthSession } from '@/lib/auth-mock';
-import { getReminders, saveReminder, toggleReminder, getUserTimezone, updateTimezone } from './actions';
+import { getReminders, saveReminder, toggleReminder, getUserTimezone, updateTimezone, getHydrationSetting, saveHydrationSetting } from './actions';
+import { getUserDailyWaterGoal, saveUserDailyWaterGoal } from '../hydration/actions';
 import { updateUserSettings } from '@/ai/actions/db-users';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,9 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Bell, Loader2, Save, KeyRound, MessageCircle, Clock, Target, Check, ChevronsUpDown, ShieldAlert, Activity, Settings2 } from 'lucide-react';
+import { Bell, Loader2, Save, KeyRound, MessageCircle, Clock, Target, Check, ChevronsUpDown, ShieldAlert, Activity, Settings2, Droplets } from 'lucide-react';
 import { User } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -40,6 +42,7 @@ export default function SettingsPage() {
     Snack: '16:00',
     Dinner: '20:00'
   });
+  const [hydrationSetting, setHydrationSetting] = useState<any>(null);
 
   // Settings form state
   const [initialState, setInitialState] = useState<any>(null);
@@ -55,6 +58,7 @@ export default function SettingsPage() {
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [gender, setGender] = useState('male');
+  const [waterGoal, setWaterGoal] = useState('');
 
   // Timezone Combobox state
   const [tzSearch, setTzSearch] = useState('');
@@ -92,8 +96,9 @@ export default function SettingsPage() {
     if (weight !== initialState.weight) return true;
     if (height !== initialState.height) return true;
     if (gender !== initialState.gender) return true;
+    if (waterGoal !== initialState.waterGoal) return true;
     return false;
-  }, [initialState, newPassword, telegramId, timezone, calGoal, proGoal, carbGoal, fatGoal, age, weight, height, gender]);
+  }, [initialState, newPassword, telegramId, timezone, calGoal, proGoal, carbGoal, fatGoal, age, weight, height, gender, waterGoal]);
 
   useEffect(() => {
     const session = getAuthSession() as any;
@@ -120,22 +125,40 @@ export default function SettingsPage() {
       });
       setTimes(newTimes);
       
+      getHydrationSetting(session.id).then((hs) => {
+        if (hs) {
+          setHydrationSetting(hs);
+        } else {
+          setHydrationSetting({
+            startTime: '08:00',
+            endTime: '22:00',
+            intervalMinutes: 120,
+            activeDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+            isActive: true
+          });
+        }
+      });
+
       getUserTimezone(session.id).then((tz) => {
         const userTz = tz || session.timezone || 'UTC';
         setTimezone(userTz);
-        setInitialState({
-          telegramId: session.telegramId || '',
-          timezone: userTz,
-          calGoal: session.dailyCaloriesGoal ? String(session.dailyCaloriesGoal) : '',
-          proGoal: session.dailyProteinGoal ? String(session.dailyProteinGoal) : '',
-          carbGoal: session.dailyCarbsGoal ? String(session.dailyCarbsGoal) : '',
-          fatGoal: session.dailyFatGoal ? String(session.dailyFatGoal) : '',
-          age: session.age ? String(session.age) : '',
-          weight: session.weight ? String(session.weight) : '',
-          height: session.height ? String(session.height) : '',
-          gender: session.gender || 'male',
+        getUserDailyWaterGoal(session.id).then(g => {
+          setWaterGoal(String(g));
+          setInitialState({
+            telegramId: session.telegramId || '',
+            timezone: userTz,
+            calGoal: session.dailyCaloriesGoal ? String(session.dailyCaloriesGoal) : '',
+            proGoal: session.dailyProteinGoal ? String(session.dailyProteinGoal) : '',
+            carbGoal: session.dailyCarbsGoal ? String(session.dailyCarbsGoal) : '',
+            fatGoal: session.dailyFatGoal ? String(session.dailyFatGoal) : '',
+            age: session.age ? String(session.age) : '',
+            weight: session.weight ? String(session.weight) : '',
+            height: session.height ? String(session.height) : '',
+            gender: session.gender || 'male',
+            waterGoal: String(g)
+          });
+          setLoading(false);
         });
-        setLoading(false);
       });
     });
   }, [router]);
@@ -165,6 +188,7 @@ export default function SettingsPage() {
         setWeight(initialState.weight);
         setHeight(initialState.height);
         setGender(initialState.gender);
+        setWaterGoal(initialState.waterGoal);
       }
     }
   };
@@ -236,6 +260,10 @@ export default function SettingsPage() {
     };
 
     const res = await updateUserSettings(user.id, payload);
+    
+    if (waterGoal) {
+      await saveUserDailyWaterGoal(user.id, parseInt(waterGoal, 10));
+    }
 
     if (res.success) {
       const updatedUser = { ...user, ...payload, telegramId: telegramId || undefined } as User;
@@ -253,6 +281,7 @@ export default function SettingsPage() {
         weight: weight,
         height: height,
         gender: gender,
+        waterGoal: waterGoal,
       });
       toast({ title: "Settings Saved", description: "Your profile has been updated successfully!" });
       setNewPassword('');
@@ -361,6 +390,16 @@ export default function SettingsPage() {
                         </div>
 
                         <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
+                          <h3 className="font-bold text-lg flex items-center gap-2"><Droplets className="h-5 w-5 text-sky-500" /> Daily Hydration Goal</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="waterGoal">Water (ml)</Label>
+                              <Input id="waterGoal" type="number" placeholder="2750" value={waterGoal} onChange={e => setWaterGoal(e.target.value)} className={glassInputClasses} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
                           <h3 className="font-bold text-lg flex items-center gap-2"><Activity className="h-5 w-5 text-primary" /> Biometrics</h3>
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -462,6 +501,102 @@ export default function SettingsPage() {
                               );
                             })}
                           </div>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-primary/10">
+                          <h3 className="font-bold text-lg flex items-center gap-2"><Droplets className="h-5 w-5 text-blue-500" /> Hydration Reminders</h3>
+                          {hydrationSetting && (
+                            <div className="p-4 rounded-xl bg-white/20 dark:bg-black/20 border border-white/30 backdrop-blur-md space-y-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h4 className="font-bold">Telegram Hydration Alerts</h4>
+                                  <p className="text-xs text-muted-foreground">{hydrationSetting.isActive ? 'Active' : 'Disabled'}</p>
+                                </div>
+                                <Switch 
+                                  checked={hydrationSetting.isActive} 
+                                  onCheckedChange={async (checked) => {
+                                    const next = { ...hydrationSetting, isActive: checked };
+                                    setHydrationSetting(next);
+                                    if (user) await saveHydrationSetting(user.id, next);
+                                  }} 
+                                />
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label>Wake Up Time</Label>
+                                  <Input 
+                                    type="time" 
+                                    value={hydrationSetting.startTime} 
+                                    onChange={(e) => setHydrationSetting({ ...hydrationSetting, startTime: e.target.value })}
+                                    className={glassInputClasses}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Sleep Time</Label>
+                                  <Input 
+                                    type="time" 
+                                    value={hydrationSetting.endTime} 
+                                    onChange={(e) => setHydrationSetting({ ...hydrationSetting, endTime: e.target.value })}
+                                    className={glassInputClasses}
+                                  />
+                                </div>
+                                <div className="space-y-2 col-span-2">
+                                  <Label>Reminder Interval</Label>
+                                  <Select 
+                                    value={String(hydrationSetting.intervalMinutes)}
+                                    onValueChange={(val) => setHydrationSetting({ ...hydrationSetting, intervalMinutes: parseInt(val) })}
+                                  >
+                                    <SelectTrigger className={glassInputClasses}>
+                                      <SelectValue placeholder="Select interval" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="30">30 minutes</SelectItem>
+                                      <SelectItem value="60">1 hour</SelectItem>
+                                      <SelectItem value="90">1.5 hours</SelectItem>
+                                      <SelectItem value="120">2 hours</SelectItem>
+                                      <SelectItem value="180">3 hours</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2 col-span-2">
+                                  <Label className="mb-2 block">Active Days</Label>
+                                  <div className="flex items-center gap-2">
+                                    {['S','M','T','W','T','F','S'].map((dayLabel, idx) => {
+                                      const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+                                      const dayName = dayNames[idx];
+                                      const isActiveDay = hydrationSetting.activeDays.includes(dayName);
+                                      return (
+                                        <button
+                                          key={idx}
+                                          onClick={() => {
+                                            const newDays = isActiveDay 
+                                              ? hydrationSetting.activeDays.filter((d: string) => d !== dayName)
+                                              : [...hydrationSetting.activeDays, dayName];
+                                            setHydrationSetting({ ...hydrationSetting, activeDays: newDays });
+                                          }}
+                                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${isActiveDay ? 'bg-sky-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'}`}
+                                        >
+                                          {dayLabel}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button 
+                                onClick={async () => {
+                                  if (user) {
+                                    await saveHydrationSetting(user.id, hydrationSetting);
+                                    toast({ title: "Saved", description: "Hydration settings updated." });
+                                  }
+                                }} 
+                                className="w-full mt-4 bg-sky-500 hover:bg-sky-600 text-white"
+                              >
+                                Save Hydration Settings
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </div>
