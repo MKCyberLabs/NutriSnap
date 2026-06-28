@@ -12,6 +12,7 @@ datasource db {
 model User {
   id                    String    @id @default(cuid())
   email                 String    @unique
+  telegramId            String?   @unique
   name                  String?
   password              String
   role                  String    @default("USER")
@@ -21,7 +22,13 @@ model User {
   age                   Int?
   weight                Float?
   height                Float?
+  timezone              String    @default("UTC")
+  dailyCaloriesGoal     Int?
+  dailyProteinGoal      Int?
+  dailyCarbsGoal        Int?
+  dailyFatGoal          Int?
   mealLogs              MealLog[]
+  reminders             Reminder[]
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }
@@ -45,6 +52,8 @@ model MealLog {
   user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model FoodItem {
@@ -59,7 +68,23 @@ model FoodItem {
   fiber        Float
   saturatedFat Float
   sugar        Float
+  rating       Int?
   mealLog      MealLog  @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([mealLogId])
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String
+  time      String
+  isActive  Boolean  @default(true)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

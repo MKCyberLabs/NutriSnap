@@ -71,10 +71,115 @@ import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { motion, Variants } from 'framer-motion';
 
-function calculateNutrientTargets(metrics?: UserMetrics) {
+// Animation variants for staggered cascade
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 24 } }
+};
+
+// ⚡ Bolt Optimization: Localized state for "Edit Grams" to prevent the entire DashboardPage from re-rendering on every keystroke.
+function EditGramsPopover({ item, logId, onUpdate }: { item: FoodItem, logId: string, onUpdate: (logId: string, itemId: string, newGramsStr: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(item.grams.toString());
+
+  return (
+    <Popover open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (isOpen) setValue(item.grams.toString());
+    }}>
+      <PopoverTrigger asChild>
+        <button className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors">
+          {item.grams}g <Edit2 className="h-2.5 w-2.5 text-primary/60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="glass-card w-40 p-3 rounded-xl border-none shadow-xl" align="start">
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            className="h-8 text-xs rounded-lg"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+          <Button
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-lg"
+            onClick={() => {
+              onUpdate(logId, item.id, value);
+              setOpen(false);
+            }}
+          >
+            <Check className="h-4 w-4" />
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ⚡ Bolt Optimization: Localized state for "Append Item" input to isolate keystroke re-renders from the massive parent page.
+function AddItemPopover({ logId, onAdd, isAdding }: { logId: string, onAdd: (logId: string, text: string) => Promise<void>, isAdding: boolean }) {
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={(isOpen) => { if (!isAdding) setOpen(isOpen); }}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-[10px] gap-2 font-bold uppercase tracking-wider text-primary hover:bg-primary/5 rounded-lg">
+          <Plus className="h-3.5 w-3.5" /> Append Item
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="glass-card w-80 p-5 rounded-2xl border-none shadow-2xl" align="end">
+        <div className="space-y-4">
+          <h4 className="font-bold text-sm text-foreground">Add new item</h4>
+          <div className="space-y-3">
+            <Input
+              placeholder="e.g., 2 Large Eggs"
+              className="h-10 text-sm bg-white/20 border-white/40 rounded-xl"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              disabled={isAdding}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter' && text.trim() && !isAdding) {
+                  await onAdd(logId, text);
+                  setText('');
+                  setOpen(false);
+                }
+              }}
+            />
+            <Button
+              className="w-full h-10 gap-2 font-bold rounded-xl"
+              disabled={isAdding || !text.trim()}
+              onClick={async () => {
+                await onAdd(logId, text);
+                setText('');
+                setOpen(false);
+              }}
+            >
+              {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {isAdding ? 'Analyzing...' : 'Add Item'}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function calculateNutrientTargets(user?: any) {
   // Use default metrics if none are provided to skip mandatory onboarding
-  const activeMetrics = metrics || { height: 175, weight: 70, age: 30, gender: 'male' };
+  const activeMetrics = user?.metrics || { height: 175, weight: 70, age: 30, gender: 'male' };
   
   const { weight, height, age, gender } = activeMetrics;
   
@@ -85,13 +190,40 @@ function calculateNutrientTargets(metrics?: UserMetrics) {
   const tdee = bmr * 1.5; // Activity factor for demo
 
   return {
-    calories: Math.round(tdee),
-    protein: Math.round((tdee * 0.30) / 4),
-    carbs: Math.round((tdee * 0.40) / 4),
-    fat: Math.round((tdee * 0.30) / 9),
+    calories: user?.dailyCaloriesGoal || Math.round(tdee),
+    protein: user?.dailyProteinGoal || Math.round((tdee * 0.30) / 4),
+    carbs: user?.dailyCarbsGoal || Math.round((tdee * 0.40) / 4),
+    fat: user?.dailyFatGoal || Math.round((tdee * 0.30) / 9),
     sugar: 35
   };
 }
+
+function recalculateNutrients(items: FoodItem[]) {
+  let totalCalories = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+  let totalFiber = 0, totalSatFat = 0, totalSugar = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    totalCalories += Number(item.calories) || 0;
+    totalProtein += Number(item.protein) || 0;
+    totalCarbs += Number(item.carbs) || 0;
+    totalFat += Number(item.fat) || 0;
+    totalFiber += Number(item.fiber) || 0;
+    totalSatFat += Number(item.saturatedFat) || 0;
+    totalSugar += Number(item.sugar) || 0;
+  }
+
+  return {
+    calories: totalCalories,
+    protein: totalProtein,
+    carbs: totalCarbs,
+    fat: totalFat,
+    fiber: totalFiber,
+    saturatedFat: totalSatFat,
+    sugar: totalSugar,
+  };
+}
+
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -103,8 +235,6 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('daily');
   const [isMounted, setIsMounted] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState<string | null>(null);
-  const [newItemText, setNewItemText] = useState('');
-  const [editingGrams, setEditingGrams] = useState<{ logId: string, itemId: string, value: string } | null>(null);
 
   const [weeklyPivotDate, setWeeklyPivotDate] = useState<Date>(new Date());
   const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
@@ -157,7 +287,7 @@ export default function DashboardPage() {
     localStorage.setItem('nutrisnap_logs', JSON.stringify(updatedLogs));
   };
 
-  const userTargets = useMemo(() => calculateNutrientTargets(user?.metrics), [user]);
+  const userTargets = useMemo(() => calculateNutrientTargets(user), [user]);
 
   const handleMealCardComplete = async (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const logTimestamp = new Date(selectedDate);
@@ -188,7 +318,8 @@ export default function DashboardPage() {
         sugar: Number(data.sugar || 0),
       },
       healthInsight: data.healthInsight,
-      imagePath: imagePath
+      imagePath: imagePath,
+      isPending: true
     };
 
     saveLogsToStorage([newLog, ...logs]);
@@ -197,7 +328,7 @@ export default function DashboardPage() {
     const res = await saveMealLog(user?.id || '', newLog, newLog.items);
     if (res && res.success && res.log) {
       setLogs(prev => {
-        const updated = prev.map(l => l.id === newLog.id ? { ...l, id: res.log.id } : l);
+        const updated = prev.map(l => l.id === newLog.id ? { ...l, id: res.log.id, isPending: false } : l);
         localStorage.setItem('nutrisnap_logs', JSON.stringify(updated));
         return updated;
       });
@@ -231,13 +362,14 @@ export default function DashboardPage() {
         };
       });
 
-      const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
-      const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
-      const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
-      const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-      const totalSatFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
+      const { calories, protein, carbs, fat, fiber, saturatedFat, sugar } = recalculateNutrients(updatedItems);
+      const totalCalories = calories;
+      const totalProtein = protein;
+      const totalCarbs = carbs;
+      const totalFat = fat;
+      const totalFiber = fiber;
+      const totalSatFat = saturatedFat;
+      const totalSugar = sugar;
 
       return {
         ...log,
@@ -262,15 +394,14 @@ export default function DashboardPage() {
       updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
     }
 
-    setEditingGrams(null);
     toast({ title: "Weight Updated", description: "Nutritional values have been recalculated." });
   };
 
-  const handleAddItemToLog = async (logId: string) => {
-    if (!newItemText.trim()) return;
+  const handleAddItemToLog = async (logId: string, text: string) => {
+    if (!text.trim()) return;
     setIsAddingItem(logId);
     try {
-      const result = await mealNutritionalAnalysis({ mealDescription: newItemText });
+      const result = await mealNutritionalAnalysis({ mealDescription: text });
       const updatedLogs = logs.map(log => {
         if (log.id !== logId) return log;
         const newItems: FoodItem[] = (result.foodItems || []).map(item => ({
@@ -278,13 +409,14 @@ export default function DashboardPage() {
           id: Math.random().toString(36).substr(2, 9),
         }));
         const combinedItems = [...log.items, ...newItems];
-        const totalCalories = combinedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
-        const totalProtein = combinedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
-        const totalCarbs = combinedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
-        const totalFat = combinedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-        const totalFiber = combinedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-        const totalSatFat = combinedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-        const totalSugar = combinedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
+        const { calories, protein, carbs, fat, fiber, saturatedFat, sugar } = recalculateNutrients(combinedItems);
+        const totalCalories = calories;
+        const totalProtein = protein;
+        const totalCarbs = carbs;
+        const totalFat = fat;
+        const totalFiber = fiber;
+        const totalSatFat = saturatedFat;
+        const totalSugar = sugar;
 
         return {
           ...log,
@@ -308,7 +440,6 @@ export default function DashboardPage() {
         updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
       }
 
-      setNewItemText('');
       toast({ title: "Item Added", description: "Successfully updated your meal record." });
     } catch (error) {
       toast({ variant: "destructive", title: "Update failed", description: "Could not analyze item." });
@@ -321,13 +452,14 @@ export default function DashboardPage() {
     const updatedLogs = logs.map(log => {
       if (log.id !== logId) return log;
       const updatedItems = log.items.filter(item => item.id !== itemId);
-      const totalCalories = updatedItems.reduce((sum, i) => sum + (Number(i.calories) || 0), 0);
-      const totalProtein = updatedItems.reduce((sum, i) => sum + (Number(i.protein) || 0), 0);
-      const totalCarbs = updatedItems.reduce((sum, i) => sum + (Number(i.carbs) || 0), 0);
-      const totalFat = updatedItems.reduce((sum, i) => sum + (Number(i.fat) || 0), 0);
-      const totalFiber = updatedItems.reduce((sum, i) => sum + (Number(i.fiber) || 0), 0);
-      const totalSatFat = updatedItems.reduce((sum, i) => sum + (Number(i.saturatedFat) || 0), 0);
-      const totalSugar = updatedItems.reduce((sum, i) => sum + (Number(i.sugar) || 0), 0);
+      const { calories, protein, carbs, fat, fiber, saturatedFat, sugar } = recalculateNutrients(updatedItems);
+      const totalCalories = calories;
+      const totalProtein = protein;
+      const totalCarbs = carbs;
+      const totalFat = fat;
+      const totalFiber = fiber;
+      const totalSatFat = saturatedFat;
+      const totalSugar = sugar;
 
       return {
         ...log,
@@ -412,11 +544,15 @@ export default function DashboardPage() {
         const dateStr = format(date, 'yyyy-MM-dd');
         const dayLogs = logsByDateStr.get(dateStr) || [];
 
-        const calories = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.calories) || 0), 0);
-        const protein = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.protein) || 0), 0);
-        const carbs = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.carbs) || 0), 0);
-        const fat = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.fat) || 0), 0);
-        const sugar = dayLogs.reduce((sum, log) => sum + (Number(log.totalNutrients.sugar) || 0), 0);
+        // ⚡ Bolt Optimization: Consolidate 5 separate reductions into a single O(N) loop
+        let calories = 0, protein = 0, carbs = 0, fat = 0, sugar = 0;
+        for (const log of dayLogs) {
+          calories += Number(log.totalNutrients.calories) || 0;
+          protein += Number(log.totalNutrients.protein) || 0;
+          carbs += Number(log.totalNutrients.carbs) || 0;
+          fat += Number(log.totalNutrients.fat) || 0;
+          sugar += Number(log.totalNutrients.sugar) || 0;
+        }
 
         return {
           day: format(date, 'EEE'),
@@ -433,26 +569,53 @@ export default function DashboardPage() {
     }
   }, [logsByDateStr, activeWeeklyRange]);
 
+  // ⚡ Bolt Optimization: Calculate daily totals and category calorie breakdowns in a single O(N) pass.
+  // Replaces 4 inline .filter().reduce() loops on every render.
   const dailyTotals = useMemo(() => {
     let protein = 0, carbs = 0, fat = 0, sugar = 0, calories = 0;
+    const byCategory: Record<MealCategory, number> = {
+      Breakfast: 0,
+      Lunch: 0,
+      Dinner: 0,
+      Snacks: 0,
+    };
+
     filteredLogs.forEach(log => {
       protein += Number(log.totalNutrients.protein || 0);
       carbs += Number(log.totalNutrients.carbs || 0);
       fat += Number(log.totalNutrients.fat || 0);
       sugar += Number(log.totalNutrients.sugar || 0);
-      calories += Number(log.totalNutrients.calories || 0);
+
+      const logCals = Number(log.totalNutrients.calories || 0);
+      calories += logCals;
+      if (log.category && byCategory[log.category] !== undefined) {
+        byCategory[log.category] += logCals;
+      }
     });
-    return { protein, carbs, fat, sugar, calories };
+    return { protein, carbs, fat, sugar, calories, byCategory };
   }, [filteredLogs]);
 
-  const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals } = dailyTotals;
+  const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals, byCategory } = dailyTotals;
+
+  // ⚡ Bolt Optimization: Memoize and consolidate weekly total aggregations
+  // Replaces 4 separate O(N) array reductions (one in weeklyAvgCalories, three in render)
+  // with a single O(N) pass to reduce redundant iteration over dynamicWeeklyData.
+  const weeklyTotals = useMemo(() => {
+    let protein = 0, carbs = 0, fat = 0, calories = 0;
+    for (const day of dynamicWeeklyData) {
+      protein += day.protein;
+      carbs += day.carbs;
+      fat += day.fat;
+      calories += day.calories;
+    }
+    return { protein, carbs, fat, calories };
+  }, [dynamicWeeklyData]);
 
   const weeklyAvgCalories = useMemo(() => {
     if (dynamicWeeklyData.length === 0) return 0;
     const totalDaysInRange = differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1;
-    const totalCalsInRange = dynamicWeeklyData.reduce((acc, d) => acc + d.calories, 0);
-    return Math.round(totalCalsInRange / totalDaysInRange);
-  }, [dynamicWeeklyData, activeWeeklyRange]);
+    return Math.round(weeklyTotals.calories / totalDaysInRange);
+  }, [dynamicWeeklyData, activeWeeklyRange, weeklyTotals.calories]);
 
   if (!isMounted) return null;
 
@@ -485,14 +648,14 @@ export default function DashboardPage() {
                       </PopoverContent>
                     </Popover>
                     <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
-                      <Button variant="outline" size="icon" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" aria-label="Previous day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(subDays(selectedDate, 1))}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" aria-label="Next day" className="glass-card h-10 w-10 rounded-xl border-white/60" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="glass-card flex items-center gap-2 p-1 rounded-xl border-white/60">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                      <Button variant="ghost" size="icon" aria-label="Previous week" className="h-8 w-8" onClick={() => {
                         setCustomRange(undefined);
                         setWeeklyPivotDate(subDays(weeklyPivotDate, 7));
                       }}><ChevronLeft className="h-4 w-4" /></Button>
@@ -513,7 +676,7 @@ export default function DashboardPage() {
                           />
                         </PopoverContent>
                       </Popover>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                      <Button variant="ghost" size="icon" aria-label="Next week" className="h-8 w-8" onClick={() => {
                         setCustomRange(undefined);
                         setWeeklyPivotDate(addDays(weeklyPivotDate, 7));
                       }}><ChevronRight className="h-4 w-4" /></Button>
@@ -536,20 +699,22 @@ export default function DashboardPage() {
         </header>
 
         {activeTab === 'daily' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as MealCategory[]).map((cat) => (
-                  <MealCategoryCard 
-                    key={cat} 
-                    category={cat} 
-                    totalCalories={filteredLogs.filter(l => l.category === cat).reduce((sum, log) => sum + Number(log.totalNutrients.calories || 0), 0)} 
-                    onAnalysisComplete={(data, category, mealTime, imagePath) => handleMealCardComplete(data, category, mealTime, imagePath)} 
-                  />
+                  <motion.div key={cat} variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={{ type: 'spring' as const, stiffness: 400, damping: 17 }}>
+                    <MealCategoryCard 
+                      category={cat} 
+                      totalCalories={byCategory[cat]}
+                      onAnalysisComplete={(data, category, mealTime, imagePath) => handleMealCardComplete(data, category, mealTime, imagePath)} 
+                    />
+                  </motion.div>
                 ))}
               </section>
 
-              <Card className="glass-card border-white/60 rounded-3xl overflow-hidden">
+              <motion.div variants={itemVariants}>
+                <Card className="glass-card border-white/60 rounded-3xl overflow-hidden">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div>
                     <CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground"><History className="h-5 w-5 text-primary" /> Daily Activity</CardTitle>
@@ -565,12 +730,17 @@ export default function DashboardPage() {
                     ) : (
                       <div className="space-y-6">
                         {filteredLogs.map((log) => (
-                          <div key={log.id} className="relative pl-6 border-l-2 border-primary/20 pb-4 last:pb-0">
+                          <motion.div key={log.id} variants={itemVariants} className="relative pl-6 border-l-2 border-primary/20 pb-4 last:pb-0">
                             <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background" />
                             <div className="glass-card rounded-2xl p-5 border-white/60">
                               <div className="flex justify-between items-center mb-4">
                                 <div className="flex items-center gap-3">
-                                  <Badge variant="secondary" className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold">{log.category}</Badge>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="secondary" className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold">{log.category}</Badge>
+                                    <span className="text-xs">
+                                      {'⭐'.repeat(log.items.length > 0 ? Math.round(log.items.reduce((s, i) => s + (i.rating || 3), 0) / log.items.length) : 3)}
+                                    </span>
+                                  </div>
                                   <span className="text-xs text-muted-foreground font-medium">{format(parseISO(log.timestamp), 'h:mm a')}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -607,8 +777,8 @@ export default function DashboardPage() {
                                     </div>
                                     <AlertDialog>
                                       <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full">
-                                          <Trash2 className="h-4 w-4" />
+                                        <Button variant="ghost" size="icon" aria-label="Delete log" disabled={log.isPending} className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full disabled:opacity-50">
+                                          {log.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                         </Button>
                                       </AlertDialogTrigger>
                                       <AlertDialogContent className="glass-card border-none rounded-3xl">
@@ -630,38 +800,11 @@ export default function DashboardPage() {
                                 {log.items.map((item) => (
                                   <div key={item.id} className="p-3 rounded-xl bg-white/30 dark:bg-black/20 border border-white/40 flex items-center justify-between group">
                                     <div className="flex flex-col">
-                                      <span className="text-sm font-bold text-foreground">{item.name}</span>
+                                      <span className="text-sm font-bold text-foreground">
+                                        {item.name} <span className="text-xs font-normal">{'⭐'.repeat(item.rating || 3)}</span>
+                                      </span>
                                       <div className="flex items-center gap-2">
-                                        <Popover 
-                                          open={editingGrams?.itemId === item.id} 
-                                          onOpenChange={(open) => {
-                                            if (open) setEditingGrams({ logId: log.id, itemId: item.id, value: item.grams.toString() });
-                                            else setEditingGrams(null);
-                                          }}
-                                        >
-                                          <PopoverTrigger asChild>
-                                            <button className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors">
-                                              {item.grams}g <Edit2 className="h-2.5 w-2.5 text-primary/60" />
-                                            </button>
-                                          </PopoverTrigger>
-                                          <PopoverContent className="glass-card w-40 p-3 rounded-xl border-none shadow-xl" align="start">
-                                            <div className="flex items-center gap-2">
-                                              <Input 
-                                                type="number" 
-                                                className="h-8 text-xs rounded-lg" 
-                                                value={editingGrams?.value || ''} 
-                                                onChange={(e) => setEditingGrams(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                              />
-                                              <Button 
-                                                size="icon" 
-                                                className="h-8 w-8 shrink-0 rounded-lg" 
-                                                onClick={() => handleUpdateItemGrams(log.id, item.id, editingGrams?.value || '0')}
-                                              >
-                                                <Check className="h-4 w-4" />
-                                              </Button>
-                                            </div>
-                                          </PopoverContent>
-                                        </Popover>
+                                        <EditGramsPopover item={item} logId={log.id} onUpdate={handleUpdateItemGrams} />
                                         <span className="text-[10px] text-muted-foreground opacity-60">•</span>
                                         <span className="text-[10px] text-muted-foreground font-medium">{item.calories} kcal</span>
                                       </div>
@@ -675,7 +818,7 @@ export default function DashboardPage() {
                                       </div>
                                       <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                          <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
+                                          <Button variant="ghost" size="icon" aria-label="Remove item" className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
                                             <X className="h-3 w-3" />
                                           </Button>
                                         </AlertDialogTrigger>
@@ -702,25 +845,7 @@ export default function DashboardPage() {
                                 ))}
 
                                 <div className="pt-2 flex justify-end">
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button variant="ghost" size="sm" className="h-8 text-[10px] gap-2 font-bold uppercase tracking-wider text-primary hover:bg-primary/5 rounded-lg">
-                                        <Plus className="h-3.5 w-3.5" /> Append Item
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="glass-card w-80 p-5 rounded-2xl border-none shadow-2xl" align="end">
-                                      <div className="space-y-4">
-                                        <h4 className="font-bold text-sm text-foreground">Add to {log.category}</h4>
-                                        <div className="space-y-3">
-                                          <Input placeholder="e.g., 2 Large Eggs" className="h-10 text-sm bg-white/20 border-white/40 rounded-xl" value={newItemText} onChange={(e) => setNewItemText(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') handleAddItemToLog(log.id) }} />
-                                          <Button className="w-full h-10 gap-2 font-bold rounded-xl" disabled={isAddingItem === log.id || !newItemText.trim()} onClick={() => handleAddItemToLog(log.id)}>
-                                            {isAddingItem === log.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                            {isAddingItem === log.id ? 'Analyzing...' : 'Add Item'}
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </PopoverContent>
-                                  </Popover>
+                                  <AddItemPopover logId={log.id} onAdd={handleAddItemToLog} isAdding={isAddingItem === log.id} />
                                 </div>
                               </div>
                               
@@ -758,16 +883,18 @@ export default function DashboardPage() {
                                 </div>
                               )}
                             </div>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
                     )}
                   </ScrollArea>
                 </CardContent>
               </Card>
+              </motion.div>
             </div>
 
             <aside className="space-y-6">
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader>
                   <CardTitle className="text-xl font-bold text-foreground">Biometric Targets</CardTitle>
@@ -800,6 +927,8 @@ export default function DashboardPage() {
                   })}
                 </CardContent>
               </Card>
+              </motion.div>
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30">
                 <CardHeader className="pb-2"><CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground"><Info className="h-4 w-4 text-primary" /> Daily Insight</CardTitle></CardHeader>
                 <CardContent className="text-sm leading-relaxed text-foreground/80">
@@ -807,11 +936,13 @@ export default function DashboardPage() {
                     `Precision tracking active. You have achieved ${Math.round((totalP / userTargets.protein) * 100)}% of your daily protein target.`}
                 </CardContent>
               </Card>
+              </motion.div>
             </aside>
-          </div>
+          </motion.div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader><CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground"><BarChart3 className="h-5 w-5 text-primary" /> Calorie Trends</CardTitle></CardHeader>
                 <CardContent className="pt-6">
@@ -836,24 +967,28 @@ export default function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
+              </motion.div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[ 
                   { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, 
                   { icon: BarChart3, val: dynamicWeeklyData.length > 0 ? Math.max(...dynamicWeeklyData.map(d => d.calories)) : 0, label: 'Peak Day' }, 
                   { icon: History, val: dynamicWeeklyData.filter(d => d.calories > 0).length, label: 'Tracked Days' } 
                 ].map((s, i) => (
-                  <Card key={i} className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>
+                  <motion.div key={i} variants={itemVariants} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ type: 'spring' as const, stiffness: 400, damping: 17 }}>
+                    <Card className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>
+                  </motion.div>
                 ))}
               </div>
             </div>
             <aside className="space-y-6">
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl">
                 <CardHeader><CardTitle className="text-xl font-bold text-foreground">Range Progress</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                   {[ 
-                    { label: 'Protein', val: dynamicWeeklyData.reduce((acc, d) => acc + d.protein, 0), max: userTargets.protein * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
-                    { label: 'Carbs', val: dynamicWeeklyData.reduce((acc, d) => acc + d.carbs, 0), max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }, 
-                    { label: 'Fats', val: dynamicWeeklyData.reduce((acc, d) => acc + d.fat, 0), max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
+                    { label: 'Protein', val: weeklyTotals.protein, max: userTargets.protein * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) },
+                    { label: 'Carbs', val: weeklyTotals.carbs, max: userTargets.carbs * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) },
+                    { label: 'Fats', val: weeklyTotals.fat, max: userTargets.fat * (differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1) }
                   ].map(m => {
                     const percentage = Math.min((m.val / (m.max || 1)) * 100, 100);
                     return (
@@ -870,11 +1005,14 @@ export default function DashboardPage() {
                   })}
                 </CardContent>
               </Card>
+              </motion.div>
+              <motion.div variants={itemVariants}>
               <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30"><CardHeader className="pb-2"><CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground"><BrainCircuit className="h-4 w-4 text-primary" /> Period Insight</CardTitle></CardHeader>
                 <CardContent className="text-sm leading-relaxed text-foreground/80">Historical tracking analysis complete. The weekly averages are derived from your actual logged entries for this period.</CardContent>
               </Card>
+              </motion.div>
             </aside>
-          </div>
+          </motion.div>
         )}
       </main>
     </div>

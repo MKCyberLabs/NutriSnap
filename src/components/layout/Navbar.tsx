@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { LogOut, UserCircle, Settings } from 'lucide-react';
+import { LogOut, UserCircle, Settings, Bell } from 'lucide-react';
 import { getAuthSession, clearAuthSession } from '@/lib/auth-mock';
 import { useEffect, useState } from 'react';
 import { User } from '@/lib/types';
@@ -11,13 +11,19 @@ import { User } from '@/lib/types';
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Partial<User> | null>(null);
 
   useEffect(() => {
-    setUser(getAuthSession());
+    const session = getAuthSession();
+    setUser(session);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error(e);
+    }
     clearAuthSession();
     router.push('/');
   };
@@ -47,6 +53,14 @@ export function Navbar() {
             <UserCircle className="h-4 w-4 text-muted-foreground" />
             <span className="max-w-[100px] truncate">{user?.name || 'User'}</span>
           </div>
+          
+          {/* New Settings Link replaces both the modal and the old bell icon */}
+          <Link href="/settings">
+            <Button variant="outline" size="icon" aria-label="Settings" className="rounded-full h-10 w-10 border-white/40 hover:bg-white/40 text-primary">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
+
           <Button variant="outline" size="icon" aria-label="Log out" onClick={handleLogout} className="rounded-full h-10 w-10 border-white/40 hover:bg-white/40">
             <LogOut className="h-4 w-4" />
           </Button>

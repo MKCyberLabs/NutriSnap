@@ -66,7 +66,17 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    return NextResponse.json(responseData);
+    const response = NextResponse.json(responseData);
+    
+    // Set HttpOnly cookies for server-side session verification
+    response.cookies.set('nutrisnap_session_id', user.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/'
+    });
+    
+    return response;
   } catch (error) {
     console.error('Login Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

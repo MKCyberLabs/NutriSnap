@@ -53,7 +53,7 @@ export default function AdminPage() {
   // Modal states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<Partial<User & { password?: string }>>({});
+  const [currentUser, setCurrentUser] = useState<Partial<User & { password?: string, telegramId?: string | null }>>({});
 
   useEffect(() => {
     const session = getAuthSession();
@@ -73,7 +73,8 @@ export default function AdminPage() {
       name: currentUser.name || '',
       email: currentUser.email || '',
       role: currentUser.role || 'USER',
-      password: currentUser.password || 'ProductionPassword123!'
+      telegramId: currentUser.telegramId || null,
+      password: currentUser.password
     });
 
     if (res.success && res.user) {
@@ -156,7 +157,11 @@ export default function AdminPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Initial Password</Label>
-                  <Input id="password" type="password" placeholder="ProductionPassword123!" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="rounded-xl" />
+                  <Input id="password" type="password" placeholder="Leave blank for default" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="telegram">Telegram ID (Optional)</Label>
+                  <Input id="telegram" placeholder="e.g. 123456789" value={currentUser.telegramId || ''} onChange={e => setCurrentUser({...currentUser, telegramId: e.target.value})} className="rounded-xl" />
                 </div>
                 <div className="space-y-2">
                   <Label>System Role</Label>
@@ -218,6 +223,7 @@ export default function AdminPage() {
                 <TableRow className="border-b border-primary/5 hover:bg-transparent">
                   <TableHead className="font-bold">Identity</TableHead>
                   <TableHead className="font-bold">Role</TableHead>
+                  <TableHead className="font-bold">Telegram</TableHead>
                   <TableHead className="font-bold">Onboarding</TableHead>
                   <TableHead className="font-bold">Bio Stats</TableHead>
                   <TableHead className="text-right font-bold">Actions</TableHead>
@@ -237,6 +243,9 @@ export default function AdminPage() {
                         {user.role}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {user.telegramId ? <span className="text-emerald-600 font-medium">{user.telegramId}</span> : 'Not linked'}
+                    </TableCell>
                     <TableCell>
                       <Badge className={user.onboarded ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"} variant="outline">
                         {user.onboarded ? "Complete" : "Pending"}
@@ -250,6 +259,7 @@ export default function AdminPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
+                          aria-label="Edit user"
                           className="h-8 w-8 rounded-full hover:bg-primary/10 hover:text-primary"
                           onClick={() => {
                             setCurrentUser(user);
@@ -261,6 +271,7 @@ export default function AdminPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
+                          aria-label="Delete user"
                           className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive"
                           onClick={() => handleDeleteUser(user.id)}
                         >
@@ -299,6 +310,16 @@ export default function AdminPage() {
                   placeholder="New password (optional)" 
                   value={currentUser.password || ''} 
                   onChange={e => setCurrentUser({...currentUser, password: e.target.value})} 
+                  className="rounded-xl" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-telegram">Telegram ID</Label>
+                <Input 
+                  id="edit-telegram" 
+                  placeholder="e.g. 123456789 (optional)" 
+                  value={currentUser.telegramId || ''} 
+                  onChange={e => setCurrentUser({...currentUser, telegramId: e.target.value})} 
                   className="rounded-xl" 
                 />
               </div>

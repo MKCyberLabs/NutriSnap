@@ -22,7 +22,7 @@ COPY . .
 # Build the project
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # Stage 3: Production server
 FROM node:18-alpine AS runner
@@ -45,11 +45,20 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+COPY --from=builder /app/prisma ./prisma
+
+# Create a startup script that runs db push then starts the server
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'npx -y prisma db push --accept-data-loss' >> /app/start.sh && \
+    echo 'exec node server.js' >> /app/start.sh && \
+    chmod +x /app/start.sh && \
+    chown nextjs:nodejs /app/start.sh
+
 USER nextjs
 
 EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-# Start the server
-CMD ["node", "server.js"]
+# Start the server using the script
+CMD ["/app/start.sh"]

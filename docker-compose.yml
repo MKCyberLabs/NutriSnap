@@ -19,7 +19,7 @@ services:
     user: "root"
     container_name: nutrisnap_prod
     volumes:
-      - /opt/docker/containers/agy-cli-stream/temp:/app/public/uploads
+      - /opt/docker/containers/vision-health-app/temp:/app/public/uploads
     ports:
       - "3001:3000"
     restart: unless-stopped
@@ -34,6 +34,7 @@ services:
       - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-ProductionPassword123!}
       - ADMIN_RECOVERY_KEY=${ADMIN_RECOVERY_KEY:-RecoveryKey@2024Secure!}
       - USE_MOCK_HEALTH_API=${USE_MOCK_HEALTH_API:-false}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     labels:

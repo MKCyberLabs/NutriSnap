@@ -27,7 +27,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate a unique filename: timestamp_random.extension
-    const fileExtension = path.extname(file.name) || '.png';
+    const fileExtension = path.extname(file.name).toLowerCase() || '.png';
+
+    // Security Enhancement: Validate file extension
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg', '.gif'];
+    if (!allowedExtensions.includes(fileExtension)) {
+      return NextResponse.json({ error: 'Unsupported file type. Only images are allowed.' }, { status: 400 });
+    }
+
     const uniqueFilename = `${Date.now()}_${Math.floor(Math.random() * 100000)}${fileExtension}`;
     const filePath = path.join(uploadDir, uniqueFilename);
 

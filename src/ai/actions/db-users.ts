@@ -46,11 +46,6 @@ export async function authenticateDbUser(email: string, password?: string) {
     // Dynamically calculate if bio data is truly complete
     user.onboarded = user.onboarded && !!(user.age && user.age > 0 && user.weight && user.weight > 0 && user.height && user.height > 0);
     
-    // For admin prototype passwords and new hashed passwords
-    if (user.password === password) {
-      return user;
-    }
-    
     if (password) {
       const isValid = await bcrypt.compare(password, user.password);
       if (isValid) return user;
@@ -60,5 +55,36 @@ export async function authenticateDbUser(email: string, password?: string) {
   } catch (error) {
     console.error("Failed to authenticate user:", error);
     return null;
+  }
+}
+
+export async function updateUserSettings(userId: string, data: { telegramId?: string, password?: string, timezone?: string, dailyCaloriesGoal?: number, dailyProteinGoal?: number, dailyCarbsGoal?: number, dailyFatGoal?: number, age?: number, weight?: number, height?: number, gender?: string }) {
+  try {
+    const updateData: any = {};
+    if (data.telegramId !== undefined) {
+      updateData.telegramId = data.telegramId || null;
+    }
+    if (data.password) {
+      updateData.password = await bcrypt.hash(data.password, 10);
+    }
+    if (data.timezone !== undefined) updateData.timezone = data.timezone;
+    if (data.dailyCaloriesGoal !== undefined) updateData.dailyCaloriesGoal = data.dailyCaloriesGoal || null;
+    if (data.dailyProteinGoal !== undefined) updateData.dailyProteinGoal = data.dailyProteinGoal || null;
+    if (data.dailyCarbsGoal !== undefined) updateData.dailyCarbsGoal = data.dailyCarbsGoal || null;
+    if (data.dailyFatGoal !== undefined) updateData.dailyFatGoal = data.dailyFatGoal || null;
+    
+    if (data.age !== undefined) updateData.age = data.age || null;
+    if (data.weight !== undefined) updateData.weight = data.weight || null;
+    if (data.height !== undefined) updateData.height = data.height || null;
+    if (data.gender !== undefined) updateData.gender = data.gender || null;
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: updateData
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update user settings:", error);
+    return { success: false };
   }
 }

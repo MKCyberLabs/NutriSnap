@@ -8,6 +8,7 @@ export interface User {
   role: UserRole;
   onboarded: boolean;
   metrics?: UserMetrics;
+  telegramId?: string | null;
 }
 
 export interface UserMetrics {
@@ -30,6 +31,7 @@ export interface FoodItem {
   fiber: number;
   saturatedFat: number;
   sugar: number;
+  rating?: number;
 }
 
 export interface MealLog {
@@ -50,4 +52,5 @@ export interface MealLog {
   description?: string;
   photoUrl?: string; // Legacy field
   imagePath?: string; // New field for local storage path
+  isPending?: boolean; // True while waiting for DB save
 }

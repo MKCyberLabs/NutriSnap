@@ -33,7 +33,8 @@ export async function fetchUserLogs(userId: string) {
         fat: item.fat,
         fiber: item.fiber,
         saturatedFat: item.saturatedFat,
-        sugar: item.sugar
+        sugar: item.sugar,
+        rating: item.rating
       }))
     }));
   } catch (error) {
@@ -68,7 +69,8 @@ export async function saveMealLog(userId: string, logData: any, itemsData: any[]
             fat: item.fat,
             fiber: item.fiber,
             saturatedFat: item.saturatedFat,
-            sugar: item.sugar
+            sugar: item.sugar,
+            rating: item.rating
           }))
         }
       },
@@ -93,33 +95,35 @@ export async function deleteMealLog(logId: string) {
 
 export async function updateMealLogItems(logId: string, itemsData: any[], newTotals: any) {
   try {
-    await prisma.foodItem.deleteMany({ where: { mealLogId: logId } });
-    
-    await prisma.mealLog.update({
-      where: { id: logId },
-      data: {
-        totalCalories: newTotals.calories,
-        totalProtein: newTotals.protein,
-        totalCarbs: newTotals.carbs,
-        totalFat: newTotals.fat,
-        totalFiber: newTotals.fiber,
-        totalSatFat: newTotals.saturatedFat,
-        totalSugar: newTotals.sugar,
-        items: {
-          create: itemsData.map((item: any) => ({
-            name: item.name,
-            grams: item.grams,
-            calories: item.calories,
-            protein: item.protein,
-            carbs: item.carbs,
-            fat: item.fat,
-            fiber: item.fiber,
-            saturatedFat: item.saturatedFat,
-            sugar: item.sugar
-          }))
+    await prisma.$transaction([
+      prisma.foodItem.deleteMany({ where: { mealLogId: logId } }),
+      prisma.mealLog.update({
+        where: { id: logId },
+        data: {
+          totalCalories: newTotals.calories,
+          totalProtein: newTotals.protein,
+          totalCarbs: newTotals.carbs,
+          totalFat: newTotals.fat,
+          totalFiber: newTotals.fiber,
+          totalSatFat: newTotals.saturatedFat,
+          totalSugar: newTotals.sugar,
+          items: {
+            create: itemsData.map((item: any) => ({
+              name: item.name,
+              grams: item.grams,
+              calories: item.calories,
+              protein: item.protein,
+              carbs: item.carbs,
+              fat: item.fat,
+              fiber: item.fiber,
+              saturatedFat: item.saturatedFat,
+              sugar: item.sugar,
+              rating: item.rating
+            }))
+          }
         }
-      }
-    });
+      })
+    ]);
     return { success: true };
   } catch (error) {
     console.error("Failed to update meal log items:", error);
