@@ -10,3 +10,6 @@
 ## 2024-07-26 - [Missing ARIA Labels on Inline Action Buttons]
 **Learning:** Found more instances of icon-only buttons missing `aria-label` attributes across dashboard and settings views (e.g. inline confirmation and save reminder buttons).
 **Action:** When adding inline forms or state-modifying actions inside larger views, ensure any icon-only `<Button>` (even without `size="icon"` explicitly sometimes, but specifically those just holding an `<Icon />`) always have contextually accurate `aria-label`s.
+## 2024-05-19 - [Adding ARIA Labels to Icon-Only Buttons]
+**Learning:** Found several icon-only buttons (`ChevronLeft`, `ChevronRight`, `Pen`, `Trash2`) missing `aria-label`s on `HydrationPage`. Adding them dramatically improves screen reader navigability.
+**Action:** Always scan for un-labeled `<Button size="icon">` usages across Shadcn components and add descriptive `aria-label`s.
