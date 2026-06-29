@@ -415,6 +415,9 @@ bot.on('message', async (ctx) => {
       });
     } catch (error: any) {
       console.error("Analysis Error:", error);
+      if (error.message.includes('Failed to extract JSON')) {
+          console.error("Raw AI response was:", error.rawResponse);
+      }
       try { await ctx.api.setMessageReaction(ctx.chat!.id, ctx.msg!.message_id, []); } catch (e) {}
       
       if (error.name === 'NotFoodError') {
