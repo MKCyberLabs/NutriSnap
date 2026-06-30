@@ -195,10 +195,11 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
+          <Label htmlFor="meal-description" className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
             <FileText className="h-4 w-4 text-primary" /> Describe your meal
           </Label>
           <Textarea 
+            id="meal-description"
             placeholder="E.g., Grilled chicken with quinoa and steamed broccoli..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
