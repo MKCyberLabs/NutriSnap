@@ -48,7 +48,11 @@ export async function authenticateDbUser(email: string, password?: string) {
     
     if (password) {
       const isValid = await bcrypt.compare(password, user.password);
-      if (isValid) return user;
+      if (isValid) {
+        // Remove password field to prevent hash leak to frontend
+        const { password: _, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      }
     }
     
     return null;

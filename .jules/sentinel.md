@@ -22,3 +22,7 @@
 **Vulnerability:** A Genkit tool (`queryDatabase`) designed for the LLM to fetch database records allowed raw SQL strings to be constructed by the LLM and executed via `prisma.$queryRawUnsafe`. The only validation was checking if the string started with "SELECT". This allowed trivial SQL injection (e.g., prompt injection) to extract other users' sensitive data.
 **Learning:** LLMs cannot be trusted to generate safe raw SQL queries on the fly, and string validation on LLM output is a weak defense. Providing an LLM direct SQL execution access is inherently dangerous.
 **Prevention:** Remove arbitrary SQL execution tools for LLMs. Instead, fetch the required contextual data securely via parameterized ORM queries *before* passing the context to the LLM prompt.
+## 2024-06-23 - Pass-the-Hash and Password Hash Leak via Server Actions (Addendum)
+**Vulnerability:** A critical vulnerability existed in `src/ai/actions/db-admin.ts` and `src/ai/actions/db-users.ts` where server actions (`fetchAllUsers`, `createDbUser`, `updateDbUser`, `authenticateDbUser`) were returning full database user objects containing hashed passwords directly to the frontend.
+**Learning:** Returning full database objects from Next.js Server Actions implicitly exposes all properties to the client, leading to sensitive data leaks like password hashes.
+**Prevention:** Always omit sensitive fields (like `password`) from objects returned from Server Actions or API routes by explicitly picking non-sensitive fields or destructuring out the sensitive ones.

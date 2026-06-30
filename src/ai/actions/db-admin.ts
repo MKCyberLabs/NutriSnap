@@ -22,8 +22,13 @@ async function verifyAdmin() {
 export async function fetchAllUsers() {
   try {
     await verifyAdmin();
-    return await prisma.user.findMany({
+    const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' }
+    });
+    // Remove password field to prevent hash leak to frontend
+    return users.map(user => {
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
     });
   } catch (error) {
     console.error("Failed to fetch users:", error);
@@ -49,7 +54,9 @@ export async function createDbUser(userData: any) {
         onboarded: true,
       }
     });
-    return { success: true, user };
+    // Remove password field to prevent hash leak to frontend
+    const { password, ...userWithoutPassword } = user;
+    return { success: true, user: userWithoutPassword };
   } catch (error) {
     console.error("Failed to create user:", error);
     return { success: false };
@@ -73,7 +80,9 @@ export async function updateDbUser(userId: string, userData: any) {
       where: { id: userId },
       data: updateData
     });
-    return { success: true, user };
+    // Remove password field to prevent hash leak to frontend
+    const { password, ...userWithoutPassword } = user;
+    return { success: true, user: userWithoutPassword };
   } catch (error) {
     console.error("Failed to update user:", error);
     return { success: false };
