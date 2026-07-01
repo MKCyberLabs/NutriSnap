@@ -11,7 +11,7 @@ COPY prisma ./prisma/
 # Install dependencies and generate Prisma client
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --no-audit --no-fund
-RUN npx prisma generate
+RUN npx prisma@6 generate
 
 # Stage 2: Build the Next.js application
 FROM node:22-alpine AS builder
@@ -21,7 +21,7 @@ COPY . .
 
 # Build the project
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npx prisma generate
+RUN npx prisma@6 generate
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # Stage 3: Production server
@@ -49,7 +49,7 @@ COPY --from=builder /app/prisma ./prisma
 
 # Create a startup script that runs db push then starts the server
 RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'npx -y prisma db push --accept-data-loss' >> /app/start.sh && \
+    echo 'npx -y prisma@6 db push --accept-data-loss' >> /app/start.sh && \
     echo 'exec node server.js' >> /app/start.sh && \
     chmod +x /app/start.sh && \
     chown nextjs:nodejs /app/start.sh
