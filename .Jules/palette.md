@@ -10,3 +10,6 @@
 ## 2024-07-26 - [Missing ARIA Labels on Inline Action Buttons]
 **Learning:** Found more instances of icon-only buttons missing `aria-label` attributes across dashboard and settings views (e.g. inline confirmation and save reminder buttons).
 **Action:** When adding inline forms or state-modifying actions inside larger views, ensure any icon-only `<Button>` (even without `size="icon"` explicitly sometimes, but specifically those just holding an `<Icon />`) always have contextually accurate `aria-label`s.
+## 2024-07-01 - [Added missing aria-labels to hydration utility icon buttons]
+**Learning:** Utility icon buttons (e.g., date pagination, edit/delete actions) in dynamic pages (like the Hydration tracker) frequently miss `aria-label` attributes for screen readers.
+**Action:** Always ensure dynamic icon-only buttons include descriptive `aria-label` attributes that update appropriately with state (e.g., 'Previous day' vs 'Previous week').

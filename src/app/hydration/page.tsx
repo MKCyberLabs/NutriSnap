@@ -266,7 +266,8 @@ export default function HydrationPage() {
             <div className="flex items-center gap-2 bg-white rounded-xl p-1 shadow-sm border border-sky-100">
               <Button 
                 variant="ghost" 
-                size="icon" 
+                size="icon"
+                aria-label={activeTab === 'daily' ? "Previous day" : "Previous week"}
                 onClick={() => activeTab === 'daily' ? setDate(subDays(date, 1)) : setWeekStart(subDays(weekStart, 7))}
                 className="h-8 w-8 rounded-lg hover:bg-sky-50 text-sky-600"
               >
@@ -302,6 +303,7 @@ export default function HydrationPage() {
               <Button 
                 variant="ghost" 
                 size="icon"
+                aria-label={activeTab === 'daily' ? "Next day" : "Next week"}
                 disabled={activeTab === 'daily' ? isSameDay(date, new Date()) : isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))}
                 onClick={() => activeTab === 'daily' ? setDate(addDays(date, 1)) : setWeekStart(addDays(weekStart, 7))}
                 className="h-8 w-8 rounded-lg hover:bg-sky-50 text-sky-600"
@@ -464,10 +466,10 @@ export default function HydrationPage() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" onClick={() => openCustomModal(log)} className="h-8 w-8 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl">
+                                <Button variant="ghost" size="icon" aria-label="Edit hydration log" onClick={() => openCustomModal(log)} className="h-8 w-8 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl">
                                   <Pen className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={() => setDeleteId(log.id)} className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl">
+                                <Button variant="ghost" size="icon" aria-label="Delete hydration log" onClick={() => setDeleteId(log.id)} className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl">
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
