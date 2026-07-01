@@ -45,6 +45,7 @@ services:
       - "traefik.http.routers.nutrisnap.tls.certresolver=letsencrypt"
       # Since Next.js exposes port 9002 inside the Dockerfile
       - "traefik.http.services.nutrisnap.loadbalancer.server.port=3000"
+      - "traefik.docker.network=proxy"
     networks:
       - proxy
     security_opt:
