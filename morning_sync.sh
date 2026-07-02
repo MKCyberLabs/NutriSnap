@@ -2,9 +2,7 @@
 set -e
 
 BRANCHES=(
-  "palette-hydration-aria-labels-4380512428676255384"
   "palette/a11y-textarea-label-15138808250642729178"
-  "palette/hydration-aria-labels-12349171363389674913"
   "sentinel/fix-password-hash-leak-18065696023839456361"
 )
 
