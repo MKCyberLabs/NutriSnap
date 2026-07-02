@@ -16,6 +16,8 @@ for branch in "${BRANCHES[@]}"; do
   echo "=================================================="
   echo "Processing $branch..."
   
+  git restore tsconfig.tsbuildinfo || true
+  
   if ! git checkout "$branch" 2>/dev/null; then
      git checkout -b "$branch" "origin/$branch"
   fi
