@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession, saveAuthSession } from '@/lib/auth-mock';
-import { getReminders, saveReminder, toggleReminder, getUserTimezone, updateTimezone, getHydrationSetting, saveHydrationSetting } from './actions';
-import { getUserDailyWaterGoal, saveUserDailyWaterGoal } from '../hydration/actions';
+import { getReminders, saveReminder, toggleReminder, getUserTimezone, updateTimezone, getHydrationSetting, saveHydrationSetting } from '@/app/settings/actions';
+import { getUserDailyWaterGoal, saveUserDailyWaterGoal } from '@/app/hydration/actions';
 import { updateUserSettings } from '@/ai/actions/db-users';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,15 +16,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bell, Loader2, Save, KeyRound, MessageCircle, Clock, Target, Check, ChevronsUpDown, ShieldAlert, Activity, Settings2, Droplets } from 'lucide-react';
 import { User } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Dialog, DialogContent, DialogTrigger, DialogTitle } from '@/components/ui/dialog';
 
 const CATEGORIES = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 
 type Tab = 'account' | 'health' | 'notifications' | 'preferences';
 
-export default function SettingsPage() {
+export function SettingsModal({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
@@ -291,41 +292,43 @@ export default function SettingsPage() {
     setSavingSettings(false);
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
-  }
-
   const tabClasses = (tab: Tab) => 
-    `w-full justify-start text-left font-medium text-lg px-4 py-6 rounded-2xl transition-all ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30' : 'bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 text-foreground'}`;
+    `flex-1 justify-center items-center text-center font-medium text-sm md:text-base px-6 py-4 rounded-2xl transition-all whitespace-nowrap ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30' : 'bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 text-foreground/60 hover:text-foreground'}`;
 
-  const glassInputClasses = "rounded-xl bg-white/20 dark:bg-black/20 backdrop-blur-md focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all border border-white/30";
+  const glassInputClasses = "rounded-xl bg-white dark:bg-black/60 shadow-inner focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all border border-gray-200 dark:border-gray-800 text-foreground";
 
   return (
-    <div className="min-h-svh bg-gradient-to-br from-rose-50 via-slate-100 to-emerald-50 dark:from-slate-950 dark:via-rose-950/20 dark:to-emerald-950/20 font-sans">
-      <Navbar />
-      <main className="container mx-auto px-4 py-8 max-w-6xl relative z-10">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground mb-8">Settings</h1>
+    <Dialog>
+      <DialogTrigger asChild>
+        {children}
+      </DialogTrigger>
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-hidden glass-card bg-white/80 dark:bg-slate-950/80 backdrop-blur-3xl border-white/50 p-6 md:p-8 rounded-[2.5rem] !gap-0 shadow-2xl">
+        <DialogTitle className="text-4xl font-bold tracking-tight text-foreground mb-6 shrink-0">Settings</DialogTitle>
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-primary" /></div>
+        ) : (
+          <div className="w-full flex-1 min-h-0 flex flex-col">
         
-        <div className="flex flex-col md:flex-row gap-8">
-          {/* Left Column: Sidebar Navigation */}
-          <div className="w-full md:w-1/4 space-y-3">
+        <div className="flex flex-col gap-6 flex-1 min-h-0">
+          {/* Top Navigation */}
+          <div className="w-full flex gap-3 shrink-0 overflow-x-auto pb-2 custom-scrollbar">
             <Button variant="ghost" onClick={() => requestTabChange('account')} className={tabClasses('account')}>
-              <ShieldAlert className="mr-3 h-5 w-5" /> Account & Security
+              <ShieldAlert className="mr-2 h-5 w-5" /> Account & Security
             </Button>
             <Button variant="ghost" onClick={() => requestTabChange('health')} className={tabClasses('health')}>
-              <Activity className="mr-3 h-5 w-5" /> Health & Biometrics
+              <Activity className="mr-2 h-5 w-5" /> Health & Biometrics
             </Button>
             <Button variant="ghost" onClick={() => requestTabChange('notifications')} className={tabClasses('notifications')}>
-              <Bell className="mr-3 h-5 w-5" /> Notifications
+              <Bell className="mr-2 h-5 w-5" /> Notifications
             </Button>
             <Button variant="ghost" onClick={() => requestTabChange('preferences')} className={tabClasses('preferences')}>
-              <Settings2 className="mr-3 h-5 w-5" /> Preferences
+              <Settings2 className="mr-2 h-5 w-5" /> Preferences
             </Button>
           </div>
 
-          {/* Right Column: Content Area */}
-          <div className="w-full md:w-3/4">
-            <Card className="glass-card border-white/60 rounded-3xl overflow-hidden min-h-[500px]">
+          {/* Bottom Content Area */}
+          <div className="w-full flex-1 overflow-y-auto pb-8 pr-2 custom-scrollbar">
+            <Card className="glass-card border-white/60 rounded-3xl min-h-[500px]">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}
@@ -368,38 +371,6 @@ export default function SettingsPage() {
                       </CardHeader>
                       <CardContent className="space-y-8">
                         <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
-                          <h3 className="font-bold text-lg flex items-center gap-2"><Target className="h-5 w-5 text-primary" /> Daily Nutrition Goals</h3>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="calories">Calories (kcal)</Label>
-                              <Input id="calories" type="number" placeholder="2000" value={calGoal} onChange={e => setCalGoal(e.target.value)} className={glassInputClasses} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="protein">Protein (g)</Label>
-                              <Input id="protein" type="number" placeholder="150" value={proGoal} onChange={e => setProGoal(e.target.value)} className={glassInputClasses} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="carbs">Carbs (g)</Label>
-                              <Input id="carbs" type="number" placeholder="250" value={carbGoal} onChange={e => setCarbGoal(e.target.value)} className={glassInputClasses} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="fat">Fat (g)</Label>
-                              <Input id="fat" type="number" placeholder="65" value={fatGoal} onChange={e => setFatGoal(e.target.value)} className={glassInputClasses} />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
-                          <h3 className="font-bold text-lg flex items-center gap-2"><Droplets className="h-5 w-5 text-sky-500" /> Daily Hydration Goal</h3>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="waterGoal">Water (ml)</Label>
-                              <Input id="waterGoal" type="number" placeholder="2750" value={waterGoal} onChange={e => setWaterGoal(e.target.value)} className={glassInputClasses} />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
                           <h3 className="font-bold text-lg flex items-center gap-2"><Activity className="h-5 w-5 text-primary" /> Biometrics</h3>
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -428,6 +399,47 @@ export default function SettingsPage() {
                             </div>
                           </div>
                         </div>
+
+                        <Tabs defaultValue="nutrition" className="w-full">
+                          <TabsList className="grid w-full grid-cols-2 mb-4 bg-white/40 dark:bg-black/40 rounded-xl p-1 h-auto border border-white/20">
+                            <TabsTrigger value="nutrition" className="rounded-lg py-2 transition-opacity data-[state=inactive]:opacity-60 data-[state=inactive]:hover:opacity-100 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Nutrition Goals</TabsTrigger>
+                            <TabsTrigger value="hydration" className="rounded-lg py-2 transition-opacity data-[state=inactive]:opacity-60 data-[state=inactive]:hover:opacity-100 data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm">Hydration Goal</TabsTrigger>
+                          </TabsList>
+                          <TabsContent value="nutrition" className="mt-0 outline-none">
+                            <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
+                              <h3 className="font-bold text-lg flex items-center gap-2"><Target className="h-5 w-5 text-primary" /> Daily Nutrition Goals</h3>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="calories">Calories (kcal)</Label>
+                                  <Input id="calories" type="number" placeholder="2000" value={calGoal} onChange={e => setCalGoal(e.target.value)} className={glassInputClasses} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="protein">Protein (g)</Label>
+                                  <Input id="protein" type="number" placeholder="150" value={proGoal} onChange={e => setProGoal(e.target.value)} className={glassInputClasses} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="carbs">Carbs (g)</Label>
+                                  <Input id="carbs" type="number" placeholder="250" value={carbGoal} onChange={e => setCarbGoal(e.target.value)} className={glassInputClasses} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="fat">Fat (g)</Label>
+                                  <Input id="fat" type="number" placeholder="65" value={fatGoal} onChange={e => setFatGoal(e.target.value)} className={glassInputClasses} />
+                                </div>
+                              </div>
+                            </div>
+                          </TabsContent>
+                          <TabsContent value="hydration" className="mt-0 outline-none">
+                            <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
+                              <h3 className="font-bold text-lg flex items-center gap-2"><Droplets className="h-5 w-5 text-sky-500" /> Daily Hydration Goal</h3>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="waterGoal">Water (ml)</Label>
+                                  <Input id="waterGoal" type="number" placeholder="2750" value={waterGoal} onChange={e => setWaterGoal(e.target.value)} className={glassInputClasses} />
+                                </div>
+                              </div>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
 
                         <Button onClick={() => handleSaveSettings()} disabled={savingSettings} className="rounded-xl px-8 shadow-lg shadow-primary/20">
                           {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Health Data
@@ -463,141 +475,152 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        <div className="space-y-4 pt-4 border-t border-primary/10">
-                          <h3 className="font-bold text-lg flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Telegram Reminders</h3>
-                          <div className="space-y-4">
-                            {CATEGORIES.map((cat) => {
-                              const existing = reminders.find(r => r.category === cat);
-                              const isActive = existing ? existing.isActive : false;
-                              
-                              return (
-                                <div key={cat} className="p-4 rounded-xl bg-white/20 dark:bg-black/20 border border-white/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                  <div className="flex items-center gap-4">
+                        <Tabs defaultValue="nutrisnap" className="w-full">
+                          <TabsList className="grid w-full grid-cols-2 mb-4 bg-white/40 dark:bg-black/40 rounded-xl p-1 h-auto border border-white/20">
+                            <TabsTrigger value="nutrisnap" className="rounded-lg py-2 transition-opacity data-[state=inactive]:opacity-60 data-[state=inactive]:hover:opacity-100 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">NutriSnap Reminders</TabsTrigger>
+                            <TabsTrigger value="hydration" className="rounded-lg py-2 transition-opacity data-[state=inactive]:opacity-60 data-[state=inactive]:hover:opacity-100 data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm">Hydration Reminders</TabsTrigger>
+                          </TabsList>
+                          
+                          <TabsContent value="nutrisnap" className="mt-0 outline-none">
+                            <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
+                              <h3 className="font-bold text-lg flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Telegram Reminders</h3>
+                              <div className="space-y-4">
+                                {CATEGORIES.map((cat) => {
+                                  const existing = reminders.find(r => r.category === cat);
+                                  const isActive = existing ? existing.isActive : false;
+                                  
+                                  return (
+                                    <div key={cat} className="p-4 rounded-xl bg-white/20 dark:bg-black/20 border border-white/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                      <div className="flex items-center gap-4">
+                                        <Switch 
+                                          checked={isActive} 
+                                          onCheckedChange={() => {
+                                            if (existing) handleToggleReminder(existing.id, isActive);
+                                            else handleSaveReminder(cat);
+                                          }} 
+                                        />
+                                        <div>
+                                          <h4 className="font-bold">{cat}</h4>
+                                          <p className="text-xs text-muted-foreground">{isActive ? 'Active' : 'Disabled'}</p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-2">
+                                        <Input 
+                                          type="time" 
+                                          value={times[cat]} 
+                                          onChange={(e) => setTimes({ ...times, [cat]: e.target.value })}
+                                          className={`w-32 ${glassInputClasses}`}
+                                        />
+                                        <Button onClick={() => handleSaveReminder(cat)} disabled={savingReminder === cat} variant="secondary" size="icon" aria-label={`Save ${cat} reminder`} className="shrink-0 rounded-xl bg-white/40 hover:bg-white/60">
+                                          {savingReminder === cat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="hydration" className="mt-0 outline-none">
+                            <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
+                              <h3 className="font-bold text-lg flex items-center gap-2"><Droplets className="h-5 w-5 text-blue-500" /> Hydration Reminders</h3>
+                              {hydrationSetting && (
+                                <div className="p-4 rounded-xl bg-white/20 dark:bg-black/20 border border-white/30 backdrop-blur-md space-y-4">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <h4 className="font-bold">Telegram Hydration Alerts</h4>
+                                      <p className="text-xs text-muted-foreground">{hydrationSetting.isActive ? 'Active' : 'Disabled'}</p>
+                                    </div>
                                     <Switch 
-                                      checked={isActive} 
-                                      onCheckedChange={() => {
-                                        if (existing) handleToggleReminder(existing.id, isActive);
-                                        else handleSaveReminder(cat);
+                                      checked={hydrationSetting.isActive} 
+                                      onCheckedChange={async (checked) => {
+                                        const next = { ...hydrationSetting, isActive: checked };
+                                        setHydrationSetting(next);
+                                        if (user) await saveHydrationSetting(user.id, next);
                                       }} 
                                     />
-                                    <div>
-                                      <h4 className="font-bold">{cat}</h4>
-                                      <p className="text-xs text-muted-foreground">{isActive ? 'Active' : 'Disabled'}</p>
-                                    </div>
                                   </div>
                                   
-                                  <div className="flex items-center gap-2">
-                                    <Input 
-                                      type="time" 
-                                      value={times[cat]} 
-                                      onChange={(e) => setTimes({ ...times, [cat]: e.target.value })}
-                                      className={`w-32 ${glassInputClasses}`}
-                                    />
-                                    <Button onClick={() => handleSaveReminder(cat)} disabled={savingReminder === cat} variant="secondary" size="icon" aria-label={`Save ${cat} reminder`} className="shrink-0 rounded-xl bg-white/40 hover:bg-white/60">
-                                      {savingReminder === cat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                    </Button>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                      <Label>Wake Up Time</Label>
+                                      <Input 
+                                        type="time" 
+                                        value={hydrationSetting.startTime} 
+                                        onChange={(e) => setHydrationSetting({ ...hydrationSetting, startTime: e.target.value })}
+                                        className={glassInputClasses}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Sleep Time</Label>
+                                      <Input 
+                                        type="time" 
+                                        value={hydrationSetting.endTime} 
+                                        onChange={(e) => setHydrationSetting({ ...hydrationSetting, endTime: e.target.value })}
+                                        className={glassInputClasses}
+                                      />
+                                    </div>
+                                    <div className="space-y-2 col-span-2">
+                                      <Label>Reminder Interval</Label>
+                                      <Select 
+                                        value={String(hydrationSetting.intervalMinutes)}
+                                        onValueChange={(val) => setHydrationSetting({ ...hydrationSetting, intervalMinutes: parseInt(val) })}
+                                      >
+                                        <SelectTrigger className={glassInputClasses}>
+                                          <SelectValue placeholder="Select interval" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="30">30 minutes</SelectItem>
+                                          <SelectItem value="60">1 hour</SelectItem>
+                                          <SelectItem value="90">1.5 hours</SelectItem>
+                                          <SelectItem value="120">2 hours</SelectItem>
+                                          <SelectItem value="180">3 hours</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-2 col-span-2">
+                                      <Label className="mb-2 block">Active Days</Label>
+                                      <div className="flex items-center gap-2">
+                                        {['S','M','T','W','T','F','S'].map((dayLabel, idx) => {
+                                          const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+                                          const dayName = dayNames[idx];
+                                          const isActiveDay = hydrationSetting.activeDays.includes(dayName);
+                                          return (
+                                            <button
+                                              key={idx}
+                                              onClick={() => {
+                                                const newDays = isActiveDay 
+                                                  ? hydrationSetting.activeDays.filter((d: string) => d !== dayName)
+                                                  : [...hydrationSetting.activeDays, dayName];
+                                                setHydrationSetting({ ...hydrationSetting, activeDays: newDays });
+                                              }}
+                                              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${isActiveDay ? 'bg-sky-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'}`}
+                                            >
+                                              {dayLabel}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 pt-4 border-t border-primary/10">
-                          <h3 className="font-bold text-lg flex items-center gap-2"><Droplets className="h-5 w-5 text-blue-500" /> Hydration Reminders</h3>
-                          {hydrationSetting && (
-                            <div className="p-4 rounded-xl bg-white/20 dark:bg-black/20 border border-white/30 backdrop-blur-md space-y-4">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h4 className="font-bold">Telegram Hydration Alerts</h4>
-                                  <p className="text-xs text-muted-foreground">{hydrationSetting.isActive ? 'Active' : 'Disabled'}</p>
-                                </div>
-                                <Switch 
-                                  checked={hydrationSetting.isActive} 
-                                  onCheckedChange={async (checked) => {
-                                    const next = { ...hydrationSetting, isActive: checked };
-                                    setHydrationSetting(next);
-                                    if (user) await saveHydrationSetting(user.id, next);
-                                  }} 
-                                />
-                              </div>
-                              
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                  <Label>Wake Up Time</Label>
-                                  <Input 
-                                    type="time" 
-                                    value={hydrationSetting.startTime} 
-                                    onChange={(e) => setHydrationSetting({ ...hydrationSetting, startTime: e.target.value })}
-                                    className={glassInputClasses}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>Sleep Time</Label>
-                                  <Input 
-                                    type="time" 
-                                    value={hydrationSetting.endTime} 
-                                    onChange={(e) => setHydrationSetting({ ...hydrationSetting, endTime: e.target.value })}
-                                    className={glassInputClasses}
-                                  />
-                                </div>
-                                <div className="space-y-2 col-span-2">
-                                  <Label>Reminder Interval</Label>
-                                  <Select 
-                                    value={String(hydrationSetting.intervalMinutes)}
-                                    onValueChange={(val) => setHydrationSetting({ ...hydrationSetting, intervalMinutes: parseInt(val) })}
+                                  <Button 
+                                    onClick={async () => {
+                                      if (user) {
+                                        await saveHydrationSetting(user.id, hydrationSetting);
+                                        toast({ title: "Saved", description: "Hydration settings updated." });
+                                      }
+                                    }} 
+                                    className="w-full mt-4 bg-sky-500 hover:bg-sky-600 text-white"
                                   >
-                                    <SelectTrigger className={glassInputClasses}>
-                                      <SelectValue placeholder="Select interval" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="30">30 minutes</SelectItem>
-                                      <SelectItem value="60">1 hour</SelectItem>
-                                      <SelectItem value="90">1.5 hours</SelectItem>
-                                      <SelectItem value="120">2 hours</SelectItem>
-                                      <SelectItem value="180">3 hours</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                    Save Hydration Settings
+                                  </Button>
                                 </div>
-                                <div className="space-y-2 col-span-2">
-                                  <Label className="mb-2 block">Active Days</Label>
-                                  <div className="flex items-center gap-2">
-                                    {['S','M','T','W','T','F','S'].map((dayLabel, idx) => {
-                                      const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-                                      const dayName = dayNames[idx];
-                                      const isActiveDay = hydrationSetting.activeDays.includes(dayName);
-                                      return (
-                                        <button
-                                          key={idx}
-                                          onClick={() => {
-                                            const newDays = isActiveDay 
-                                              ? hydrationSetting.activeDays.filter((d: string) => d !== dayName)
-                                              : [...hydrationSetting.activeDays, dayName];
-                                            setHydrationSetting({ ...hydrationSetting, activeDays: newDays });
-                                          }}
-                                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${isActiveDay ? 'bg-sky-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'}`}
-                                        >
-                                          {dayLabel}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
-                              <Button 
-                                onClick={async () => {
-                                  if (user) {
-                                    await saveHydrationSetting(user.id, hydrationSetting);
-                                    toast({ title: "Saved", description: "Hydration settings updated." });
-                                  }
-                                }} 
-                                className="w-full mt-4 bg-sky-500 hover:bg-sky-600 text-white"
-                              >
-                                Save Hydration Settings
-                              </Button>
+                              )}
                             </div>
-                          )}
-                        </div>
+                          </TabsContent>
+                        </Tabs>
                       </CardContent>
                     </div>
                   )}
@@ -666,7 +689,7 @@ export default function SettingsPage() {
             </Card>
           </div>
         </div>
-
+        
         <AlertDialog open={!!pendingTab} onOpenChange={(open) => { if (!open) setPendingTab(null); }}>
           <AlertDialogContent className="glass-card border-white/40 sm:rounded-3xl">
             <AlertDialogHeader>
@@ -682,7 +705,9 @@ export default function SettingsPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-      </main>
-    </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

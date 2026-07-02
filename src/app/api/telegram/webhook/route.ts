@@ -214,15 +214,18 @@ bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
     await prisma.hydrationLog.create({
       data: {
         userId: user.id,
-        amountMl: 0,
-        drinkType: 'Eye Rest'
+        amountMl: 250
       }
     });
     
-    await ctx.answerCallbackQuery({ text: '✅ Eye rest logged!' });
+    await ctx.answerCallbackQuery();
     
     if (ctx.callbackQuery.message) {
-      await ctx.api.deleteMessage(ctx.callbackQuery.message.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+      await ctx.api.editMessageText(
+        ctx.callbackQuery.message.chat.id, 
+        ctx.callbackQuery.message.message_id, 
+        '✅ Logged 250ml of water! Keep it up 💧'
+      ).catch(() => {});
     }
     return;
   }
@@ -230,6 +233,9 @@ bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   
   if (amountStr === 'custom') {
+    if (ctx.callbackQuery.message) {
+      await ctx.api.deleteMessage(ctx.callbackQuery.message.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+    }
     return ctx.reply("Please reply to this message with the amount of water you drank (in ml), e.g. 300.", {
       reply_markup: { force_reply: true },
       parse_mode: 'Markdown'
@@ -246,9 +252,12 @@ bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
     });
     
     if (ctx.callbackQuery.message) {
-      await ctx.api.deleteMessage(ctx.callbackQuery.message.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+      await ctx.api.editMessageText(
+        ctx.callbackQuery.message.chat.id, 
+        ctx.callbackQuery.message.message_id, 
+        `✅ Logged ${amountMl}ml of water! Keep it up 💧`
+      ).catch(() => {});
     }
-    return ctx.reply(`✅ Logged ${amountMl}ml of water! Keep it up 💧`);
   }
 });
 
@@ -384,6 +393,64 @@ bot.on('message', async (ctx) => {
     // Ignore commands so they aren't processed as meals
     if (caption.startsWith('/')) return;
     
+    // Handle Force Replies
+    if (ctx.message!.reply_to_message) {
+      const replyText = ctx.message!.reply_to_message.text || '';
+      
+      // 1. Handle Custom Hydration Amount
+      if (replyText.includes('amount of water you drank')) {
+        const amount = parseInt(caption, 10);
+        if (!isNaN(amount)) {
+          const user = await prisma.user.findUnique({ where: { telegramId } });
+          if (user) {
+            await prisma.hydrationLog.create({
+              data: { userId: user.id, amountMl: amount }
+            });
+            // Delete the bot's prompt message
+            await ctx.api.deleteMessage(ctx.chat!.id, ctx.message!.reply_to_message.message_id).catch(() => {});
+            // Delete the user's reply message (e.g. "150") to keep chat clean
+            await ctx.api.deleteMessage(ctx.chat!.id, ctx.message!.message_id).catch(() => {});
+            
+            await ctx.reply(`✅ Logged ${amount}ml of water! Keep it up 💧`);
+          }
+        } else {
+          await ctx.reply("❌ Invalid amount. Please enter a number.");
+        }
+        return; // Skip AI analysis
+      }
+      
+      // 2. Handle Meal Reminder Setup
+      const match = replyText.match(/for your \*\*(.+)\*\* reminder/);
+      if (match) {
+        const category = match[1];
+        if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(caption.trim())) {
+          const user = await prisma.user.findUnique({ where: { telegramId } });
+          if (user) {
+            const existing = await prisma.reminder.findFirst({
+              where: { userId: user.id, category }
+            });
+            if (existing) {
+              await prisma.reminder.update({
+                where: { id: existing.id },
+                data: { time: caption.trim(), isActive: true }
+              });
+            } else {
+              await prisma.reminder.create({
+                data: { userId: user.id, category, time: caption.trim(), isActive: true }
+              });
+            }
+            await ctx.api.deleteMessage(ctx.chat!.id, ctx.message!.reply_to_message.message_id).catch(() => {});
+            await ctx.api.deleteMessage(ctx.chat!.id, ctx.message!.message_id).catch(() => {});
+            
+            await ctx.reply(`✅ **${category}** reminder set for ${caption.trim()}!`, { parse_mode: 'Markdown' });
+          }
+        } else {
+          await ctx.reply("❌ Invalid time format. Please use HH:MM (e.g. 08:00 or 14:30).");
+        }
+        return; // Skip AI analysis
+      }
+    }
+    
     // 1. Authenticate User
     const user = await prisma.user.findUnique({ where: { telegramId } });
     if (!user) {
@@ -504,50 +571,44 @@ bot.on('message', async (ctx) => {
     ).join('\n');
 
     // Calculate daily remaining
-    let goalsMsg = "";
-    if (user.dailyCaloriesGoal || user.dailyProteinGoal || user.dailyCarbsGoal || user.dailyFatGoal) {
-      // Find start and end of "today" in user's timezone
-      const nowTz = new TZDate(new Date(), user.timezone);
-      const startOfTodayIso = formatISO(startOfDay(nowTz));
-      const endOfTodayIso = formatISO(endOfDay(nowTz));
-      
-      const todaysMeals = await prisma.mealLog.findMany({
-        where: {
-          userId: user.id,
-          time: { gte: startOfTodayIso, lte: endOfTodayIso }
-        }
-      });
-      
-      let currentCals = 0;
-      let currentProtein = 0;
-      let currentCarbs = 0;
-      let currentFat = 0;
-      
-      todaysMeals.forEach((m: any) => {
-        currentCals += m.totalCalories;
-        currentProtein += m.totalProtein;
-        currentCarbs += m.totalCarbs;
-        currentFat += m.totalFat;
-      });
-      
-      goalsMsg = `\n\n📊 **Remaining Today (${user.timezone})**\n`;
-      if (user.dailyCaloriesGoal) {
-        const left = Math.max(0, user.dailyCaloriesGoal - Math.round(currentCals));
-        goalsMsg += `🔥 Calories: ${left} kcal left\n`;
+    const nowTz = new TZDate(new Date(), user.timezone);
+    const startOfTodayIso = formatISO(startOfDay(nowTz));
+    const endOfTodayIso = formatISO(endOfDay(nowTz));
+    
+    const todaysMeals = await prisma.mealLog.findMany({
+      where: {
+        userId: user.id,
+        time: { gte: startOfTodayIso, lte: endOfTodayIso }
       }
-      if (user.dailyProteinGoal) {
-        const left = Math.max(0, user.dailyProteinGoal - Math.round(currentProtein));
-        goalsMsg += `🍗 Protein: ${left}g left\n`;
-      }
-      if (user.dailyCarbsGoal) {
-        const left = Math.max(0, user.dailyCarbsGoal - Math.round(currentCarbs));
-        goalsMsg += `🍞 Carbs: ${left}g left\n`;
-      }
-      if (user.dailyFatGoal) {
-        const left = Math.max(0, user.dailyFatGoal - Math.round(currentFat));
-        goalsMsg += `🥑 Fat: ${left}g left\n`;
-      }
-    }
+    });
+    
+    let currentCals = 0;
+    let currentProtein = 0;
+    let currentCarbs = 0;
+    let currentFat = 0;
+    let currentSugar = 0;
+    
+    todaysMeals.forEach((m: any) => {
+      currentCals += m.totalCalories || 0;
+      currentProtein += m.totalProtein || 0;
+      currentCarbs += m.totalCarbs || 0;
+      currentFat += m.totalFat || 0;
+      currentSugar += m.totalSugar || 0;
+    });
+
+    const defaults = calculateNutrientTargets(user);
+    const gCal = user.dailyCaloriesGoal || defaults.calories;
+    const gPro = user.dailyProteinGoal || defaults.protein;
+    const gCarb = user.dailyCarbsGoal || defaults.carbs;
+    const gFat = user.dailyFatGoal || defaults.fat;
+    const gSugar = defaults.sugar;
+    
+    let goalsMsg = `\n\n📊 **Remaining Today (${user.timezone})**\n`;
+    goalsMsg += `🔥 Calories: ${Math.max(0, gCal - Math.round(currentCals))} kcal left\n`;
+    goalsMsg += `🍗 Protein: ${Math.max(0, gPro - Math.round(currentProtein))}g left\n`;
+    goalsMsg += `🍞 Carbs: ${Math.max(0, gCarb - Math.round(currentCarbs))}g left\n`;
+    goalsMsg += `🥑 Fat: ${Math.max(0, gFat - Math.round(currentFat))}g left\n`;
+    goalsMsg += `🍭 Sugar: ${Math.max(0, gSugar - Math.round(currentSugar))}g left\n`;
 
     const successText = `✅ Meal logged successfully!
 Overall Health Rating: ${mealStars} (${avgRating}/5)

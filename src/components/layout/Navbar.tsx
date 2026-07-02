@@ -7,6 +7,7 @@ import { LogOut, UserCircle, Settings, Droplets } from 'lucide-react';
 import { getAuthSession, clearAuthSession } from '@/lib/auth-mock';
 import { useEffect, useState } from 'react';
 import { User } from '@/lib/types';
+import { SettingsModal } from '@/components/SettingsModal';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -49,12 +50,12 @@ export function Navbar() {
         {showToggle && (
           <div className="hidden md:flex bg-white rounded-full p-1 shadow-sm border border-gray-100">
             <Link href="/dashboard">
-              <button className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              <button className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}>
                 NutriSnap
               </button>
             </Link>
             <Link href="/hydration">
-              <button className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              <button className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}>
                 Hydration Hub
               </button>
             </Link>
@@ -75,11 +76,11 @@ export function Navbar() {
             <span className="max-w-[100px] truncate">{user?.name || 'User'}</span>
           </div>
           
-          <Link href="/settings">
+          <SettingsModal>
             <Button variant="outline" size="icon" aria-label="Settings" className={`rounded-full h-10 w-10 border-white/40 hover:bg-white/40 ${isHydration ? 'text-sky-500' : 'text-primary'}`}>
               <Settings className="h-4 w-4" />
             </Button>
-          </Link>
+          </SettingsModal>
 
           <Button variant="outline" size="icon" aria-label="Log out" onClick={handleLogout} className="rounded-full h-10 w-10 border-white/40 hover:bg-white/40">
             <LogOut className="h-4 w-4" />

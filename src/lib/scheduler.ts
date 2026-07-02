@@ -6,6 +6,8 @@ import { format, startOfDay } from 'date-fns';
 
 let isStarted = false;
 
+const lastHydrationMessageMap = new Map<string, number>();
+
 export function startScheduler() {
   if (isStarted) return;
   isStarted = true;
@@ -116,32 +118,42 @@ export function startScheduler() {
         if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
           const diffMinutes = currentMinutes - startMinutes;
           if (diffMinutes % setting.intervalMinutes === 0) {
-            // Include InlineKeyboard from grammy if not already imported (wait, we must use the already imported Bot, maybe need to import InlineKeyboard? Yes, it's not imported in scheduler.ts)
-            // Let's just use raw inline_keyboard array to avoid changing imports, or import it.
-            // Wait, we can just use the raw Telegram API format for inline keyboards to avoid needing InlineKeyboard import.
             const inline_keyboard = [
               [
-                { text: '👁️ Done', callback_data: 'hyd_done' }
+                { text: '💧 250ml', callback_data: 'hyd_250' },
+                { text: '💧 500ml', callback_data: 'hyd_500' }
+              ],
+              [
+                { text: 'Custom Amount', callback_data: 'hyd_custom' }
               ]
             ];
 
             try {
+              // Delete the previous reminder if it still exists
+              const oldMessageId = lastHydrationMessageMap.get(setting.user.id);
+              if (oldMessageId && setting.user.telegramId) {
+                bot.api.deleteMessage(setting.user.telegramId, oldMessageId).catch(() => {});
+              }
+
               const msg = await bot.api.sendMessage(
                 setting.user.telegramId,
-                `👁️ **Time for an eye rest!**\n\nTake a quick break and look away.`,
+                `💧 **Time to hydrate!**\n\nTake a quick break and drink some water.`,
                 { 
                   parse_mode: 'Markdown', 
                   reply_markup: { inline_keyboard } 
                 }
               );
-              console.log(`Sent eye rest reminder to user ${setting.user.id}`);
+              console.log(`Sent hydration reminder to user ${setting.user.id}`);
+              
+              // Track the new message
+              lastHydrationMessageMap.set(setting.user.id, msg.message_id);
 
-              // Auto-delete after 5 minutes
+              // Auto-delete after 60 minutes (1 hour)
               setTimeout(() => {
                 if (setting.user.telegramId && msg.message_id) {
                   bot.api.deleteMessage(setting.user.telegramId, msg.message_id).catch(() => {});
                 }
-              }, 5 * 60 * 1000);
+              }, 60 * 60 * 1000);
             } catch (telegramErr) {
               console.error(`Failed to send eye rest reminder to ${setting.user.telegramId}:`, telegramErr);
             }
