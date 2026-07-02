@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MealCategory } from '@/lib/types';
@@ -24,7 +24,7 @@ interface MealCategoryCardProps {
   totalCalories: number;
 }
 
-export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }: MealCategoryCardProps) {
+export const MealCategoryCard = memo(function MealCategoryCard({ category, onAnalysisComplete, totalCalories }: MealCategoryCardProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
   const Icon = CATEGORY_ICONS[category];
@@ -118,4 +118,4 @@ export function MealCategoryCard({ category, onAnalysisComplete, totalCalories }
       </CardContent>
     </Card>
   );
-}
+});
