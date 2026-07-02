@@ -202,11 +202,32 @@ bot.callbackQuery(/^rem_(.+)$/, async (ctx) => {
 
 bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
   const amountStr = ctx.match[1];
-  await ctx.answerCallbackQuery();
   
   const telegramId = String(ctx.from!.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
-  if (!user) return ctx.reply("Access Denied.");
+  if (!user) {
+    await ctx.answerCallbackQuery();
+    return ctx.reply("Access Denied.");
+  }
+  
+  if (amountStr === 'done') {
+    await prisma.hydrationLog.create({
+      data: {
+        userId: user.id,
+        amountMl: 0,
+        drinkType: 'Eye Rest'
+      }
+    });
+    
+    await ctx.answerCallbackQuery({ text: '✅ Eye rest logged!' });
+    
+    if (ctx.callbackQuery.message) {
+      await ctx.api.deleteMessage(ctx.callbackQuery.message.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+    }
+    return;
+  }
+  
+  await ctx.answerCallbackQuery();
   
   if (amountStr === 'custom') {
     return ctx.reply("Please reply to this message with the amount of water you drank (in ml), e.g. 300.", {
@@ -223,6 +244,10 @@ bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
         amountMl: amountMl
       }
     });
+    
+    if (ctx.callbackQuery.message) {
+      await ctx.api.deleteMessage(ctx.callbackQuery.message.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+    }
     return ctx.reply(`✅ Logged ${amountMl}ml of water! Keep it up 💧`);
   }
 });

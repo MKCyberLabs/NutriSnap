@@ -121,27 +121,29 @@ export function startScheduler() {
             // Wait, we can just use the raw Telegram API format for inline keyboards to avoid needing InlineKeyboard import.
             const inline_keyboard = [
               [
-                { text: '💧 250ml', callback_data: 'hyd_250' },
-                { text: '💧 500ml', callback_data: 'hyd_500' }
-              ],
-              [
-                { text: '💧 750ml', callback_data: 'hyd_750' },
-                { text: '✏️ Custom', callback_data: 'hyd_custom' }
+                { text: '👁️ Done', callback_data: 'hyd_done' }
               ]
             ];
 
             try {
-              await bot.api.sendMessage(
+              const msg = await bot.api.sendMessage(
                 setting.user.telegramId,
-                `🚰 **Time to hydrate!**\n\nHow much water did you drink?`,
+                `👁️ **Time for an eye rest!**\n\nTake a quick break and look away.`,
                 { 
                   parse_mode: 'Markdown', 
                   reply_markup: { inline_keyboard } 
                 }
               );
-              console.log(`Sent hydration reminder to user ${setting.user.id}`);
+              console.log(`Sent eye rest reminder to user ${setting.user.id}`);
+
+              // Auto-delete after 5 minutes
+              setTimeout(() => {
+                if (setting.user.telegramId && msg.message_id) {
+                  bot.api.deleteMessage(setting.user.telegramId, msg.message_id).catch(() => {});
+                }
+              }, 5 * 60 * 1000);
             } catch (telegramErr) {
-              console.error(`Failed to send hydration reminder to ${setting.user.telegramId}:`, telegramErr);
+              console.error(`Failed to send eye rest reminder to ${setting.user.telegramId}:`, telegramErr);
             }
           }
         }
