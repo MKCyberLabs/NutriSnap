@@ -2,7 +2,6 @@
 set -e
 
 BRANCHES=(
-  "palette-aria-labels-hydration-12106253325917748777"
   "palette-hydration-aria-labels-4380512428676255384"
   "palette/a11y-textarea-label-15138808250642729178"
   "palette/hydration-aria-labels-12349171363389674913"
@@ -22,6 +21,12 @@ for branch in "${BRANCHES[@]}"; do
      git checkout -b "$branch" "origin/$branch"
   fi
   git pull origin "$branch"
+  
+  echo "Merging main into branch to get latest fixes..."
+  git merge main --no-edit || {
+    echo "FAILED: Merge conflict when merging main into $branch"
+    exit 1
+  }
   
   echo "Typechecking branch $branch..."
   rm -rf .next
