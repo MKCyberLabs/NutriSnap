@@ -7,7 +7,7 @@ import { getAuthSession } from '@/lib/auth-mock';
 import { getHydrationLogs, getWeeklyHydrationData, logHydration, deleteHydrationLog, updateHydrationLog, getUserDailyWaterGoal } from './actions';
 import { User, HydrationEntry, DrinkType } from '@/lib/types';
 import { format, subDays, addDays, startOfWeek, endOfWeek, differenceInDays, parseISO, isSameDay, startOfDay } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList } from 'recharts';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -228,11 +228,11 @@ export default function HydrationPage() {
     return <Icon className="h-5 w-5 text-white" />;
   };
 
-  const containerVariants: any = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.1 } }
   };
-  const itemVariants: any = {
+  const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
   };
