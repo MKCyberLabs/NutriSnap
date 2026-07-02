@@ -19,8 +19,8 @@ import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analy
 
 // ⚡ Bolt Optimization: Extracted static arrays outside the component
 // Prevents O(N) re-allocations of 72 elements on every keystroke when user types in the description box.
-const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
-const minuteOptions = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+const HOURS = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
 
 interface MealAnalysisToolProps {
   category: MealCategory;
@@ -152,7 +152,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                   <SelectValue placeholder="Hour" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-primary/10">
-                  {hours.map((h) => (
+                  {HOURS.map((h) => (
                     <SelectItem key={h} value={h} className="focus:bg-primary/10 focus:text-primary rounded-lg">
                       {h}
                     </SelectItem>
@@ -165,7 +165,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                   <SelectValue placeholder="Min" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-primary/10 max-h-[300px]">
-                  {minuteOptions.map((m) => (
+                  {MINUTE_OPTIONS.map((m) => (
                     <SelectItem key={m} value={m} className="focus:bg-primary/10 focus:text-primary rounded-lg">
                       {m}
                     </SelectItem>

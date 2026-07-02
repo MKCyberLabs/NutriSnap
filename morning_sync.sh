@@ -2,7 +2,6 @@
 set -e
 
 BRANCHES=(
-  "bolt-performance-optimizations-6181482580546618020"
   "palette-aria-labels-hydration-12106253325917748777"
   "palette-hydration-aria-labels-4380512428676255384"
   "palette/a11y-textarea-label-15138808250642729178"
