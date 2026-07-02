@@ -2,20 +2,24 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { TZDate } from '@date-fns/tz';
+import { startOfDay, endOfDay } from 'date-fns';
 
 export async function getHydrationLogs(userId: string, date: Date) {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+  const tz = user?.timezone || 'UTC';
   
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  // Use TZDate to compute the start and end of the day in the user's timezone
+  const localDate = new TZDate(date, tz);
+  const dayStart = startOfDay(localDate);
+  const dayEnd = endOfDay(localDate);
 
   const logs = await prisma.hydrationLog.findMany({
     where: {
       userId,
       createdAt: {
-        gte: startOfDay,
-        lte: endOfDay
+        gte: dayStart,
+        lte: dayEnd
       }
     },
     orderBy: { createdAt: 'desc' }
@@ -30,17 +34,20 @@ export async function getHydrationLogs(userId: string, date: Date) {
 }
 
 export async function getWeeklyHydrationData(userId: string, startDate: Date, endDate: Date) {
-  const start = new Date(startDate);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(endDate);
-  end.setHours(23, 59, 59, 999);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+  const tz = user?.timezone || 'UTC';
+
+  const localStart = new TZDate(startDate, tz);
+  const localEnd = new TZDate(endDate, tz);
+  const weekStart = startOfDay(localStart);
+  const weekEnd = endOfDay(localEnd);
 
   const logs = await prisma.hydrationLog.findMany({
     where: {
       userId,
       createdAt: {
-        gte: start,
-        lte: end
+        gte: weekStart,
+        lte: weekEnd
       }
     },
     orderBy: { createdAt: 'asc' }

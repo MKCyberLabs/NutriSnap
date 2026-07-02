@@ -143,7 +143,9 @@ export async function telegramMealNutritionalAnalysis(
 
   const jsonMatch = data.response.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error('Failed to extract JSON from Python AI response.');
+    const err: any = new Error('Failed to extract JSON from Python AI response.');
+    err.rawResponse = data.response;
+    throw err;
   }
 
   const parsedData = JSON.parse(jsonMatch[0]);

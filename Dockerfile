@@ -1,5 +1,5 @@
 # Stage 1: Install dependencies and generate Prisma Client
-FROM node:18-alpine AS deps
+FROM node:24-alpine AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
@@ -11,21 +11,21 @@ COPY prisma ./prisma/
 # Install dependencies and generate Prisma client
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --no-audit --no-fund
-RUN npx prisma generate
+RUN npx prisma@6 generate
 
 # Stage 2: Build the Next.js application
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build the project
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npx prisma generate
+RUN npx prisma@6 generate
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # Stage 3: Production server
-FROM node:18-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
@@ -49,7 +49,7 @@ COPY --from=builder /app/prisma ./prisma
 
 # Create a startup script that runs db push then starts the server
 RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'npx -y prisma db push --accept-data-loss' >> /app/start.sh && \
+    echo 'npx -y prisma@6 db push --accept-data-loss' >> /app/start.sh && \
     echo 'exec node server.js' >> /app/start.sh && \
     chmod +x /app/start.sh && \
     chown nextjs:nodejs /app/start.sh

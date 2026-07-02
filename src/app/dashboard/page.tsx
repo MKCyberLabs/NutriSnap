@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
@@ -290,7 +290,7 @@ export default function DashboardPage() {
 
   const userTargets = useMemo(() => calculateNutrientTargets(user), [user]);
 
-  const handleMealCardComplete = async (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
+  const handleMealCardComplete = useCallback(async (data: MealNutritionalAnalysisOutput, category: MealCategory, mealTime: string, imagePath?: string) => {
     const logTimestamp = new Date(selectedDate);
     if (mealTime && mealTime.includes(':')) {
       const [hours, minutes] = mealTime.split(':').map(Number);
@@ -323,7 +323,11 @@ export default function DashboardPage() {
       isPending: true
     };
 
-    saveLogsToStorage([newLog, ...logs]);
+    setLogs(prev => {
+      const newLogs = [newLog, ...prev];
+      localStorage.setItem('nutrisnap_logs', JSON.stringify(newLogs));
+      return newLogs;
+    });
     
     // Save to Postgres and update local ID
     const res = await saveMealLog(user?.id || '', newLog, newLog.items);
@@ -334,7 +338,7 @@ export default function DashboardPage() {
         return updated;
       });
     }
-  };
+  }, [selectedDate, user?.id]);
 
   const handleUpdateItemGrams = (logId: string, itemId: string, newGramsStr: string) => {
     const newGrams = parseFloat(newGramsStr);
@@ -708,7 +712,7 @@ export default function DashboardPage() {
                     <MealCategoryCard 
                       category={cat} 
                       totalCalories={byCategory[cat]}
-                      onAnalysisComplete={(data, category, mealTime, imagePath) => handleMealCardComplete(data, category, mealTime, imagePath)} 
+                      onAnalysisComplete={handleMealCardComplete}
                     />
                   </motion.div>
                 ))}

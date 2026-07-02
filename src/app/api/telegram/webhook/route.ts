@@ -34,16 +34,18 @@ function calculateNutrientTargets(user: any) {
   };
 }
 
-// Register commands with Telegram so they appear in the autocomplete menu
-bot.api.setMyCommands([
-  { command: 'help', description: 'Show all available commands' },
-  { command: 'goals', description: 'View your daily nutrition goals and remaining limits' },
-  { command: 'summary', description: 'View your daily nutrition progress and biometric targets' },
-  { command: 'setgoal', description: 'Set a daily macro limit (e.g., /setgoal calories 2000)' },
-  { command: 'settimezone', description: 'Set your local timezone (e.g., /settimezone America/New_York)' },
-  { command: 'ask', description: 'Ask the AI about your nutritional habits' },
-  { command: 'reminder', description: 'Set meal reminders' }
-]).catch(console.error);
+if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN !== 'mock') {
+  // Register commands with Telegram so they appear in the autocomplete menu
+  bot.api.setMyCommands([
+    { command: 'help', description: 'Show all available commands' },
+    { command: 'goals', description: 'View your daily nutrition goals and remaining limits' },
+    { command: 'summary', description: 'View your daily nutrition progress and biometric targets' },
+    { command: 'setgoal', description: 'Set a daily macro limit (e.g., /setgoal calories 2000)' },
+    { command: 'settimezone', description: 'Set your local timezone (e.g., /settimezone America/New_York)' },
+    { command: 'ask', description: 'Ask the AI about your nutritional habits' },
+    { command: 'reminder', description: 'Set meal reminders' }
+  ]).catch(console.error);
+}
 
 bot.command('help', async (ctx) => {
   const msg = `🤖 **NutriSnap Bot Commands**
@@ -415,6 +417,9 @@ bot.on('message', async (ctx) => {
       });
     } catch (error: any) {
       console.error("Analysis Error:", error);
+      if (error.message.includes('Failed to extract JSON')) {
+          console.error("Raw AI response was:", error.rawResponse);
+      }
       try { await ctx.api.setMessageReaction(ctx.chat!.id, ctx.msg!.message_id, []); } catch (e) {}
       
       if (error.name === 'NotFoodError') {
