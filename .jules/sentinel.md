@@ -26,3 +26,8 @@
 **Vulnerability:** A critical vulnerability existed in `src/ai/actions/db-admin.ts` and `src/ai/actions/db-users.ts` where server actions (`fetchAllUsers`, `createDbUser`, `updateDbUser`, `authenticateDbUser`) were returning full database user objects containing hashed passwords directly to the frontend.
 **Learning:** Returning full database objects from Next.js Server Actions implicitly exposes all properties to the client, leading to sensitive data leaks like password hashes.
 **Prevention:** Always omit sensitive fields (like `password`) from objects returned from Server Actions or API routes by explicitly picking non-sensitive fields or destructuring out the sensitive ones.
+
+## 2024-05-24 - [IDOR in Next.js Server Actions]
+**Vulnerability:** Next.js Server Actions modifying user data and logs (in `db-users.ts` and `db-logs.ts`) took generic arguments like `userId` or `logId` directly from the client without verifying if the caller owned those records. This allowed IDOR (Insecure Direct Object Reference) / Authorization Bypass where any user could modify another's data.
+**Learning:** Next.js Server Actions are essentially public API endpoints. Just because they are defined on the server and called seamlessly from the client does not mean they inherit the client's context or permissions securely by default.
+**Prevention:** Always extract authentication state (e.g., via cookies) *inside* the Server Action and authorize the action by validating that the authenticated user owns the resource they are trying to manipulate, rather than trusting IDs passed as arguments.
