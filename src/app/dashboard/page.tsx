@@ -584,6 +584,7 @@ export default function DashboardPage() {
       Dinner: 0,
       Snacks: 0,
     };
+    const logRatings: Record<string, number> = {};
 
     filteredLogs.forEach(log => {
       protein += Number(log.totalNutrients.protein || 0);
@@ -596,11 +597,23 @@ export default function DashboardPage() {
       if (log.category && byCategory[log.category] !== undefined) {
         byCategory[log.category] += logCals;
       }
+
+      // Pre-calculate average rating for each log to avoid O(N*M) reduce in render loop
+      let ratingSum = 0;
+      const itemCount = log.items.length;
+      if (itemCount > 0) {
+        for (const item of log.items) {
+          ratingSum += item.rating || 3;
+        }
+        logRatings[log.id] = Math.round(ratingSum / itemCount);
+      } else {
+        logRatings[log.id] = 3;
+      }
     });
-    return { protein, carbs, fat, sugar, calories, byCategory };
+    return { protein, carbs, fat, sugar, calories, byCategory, logRatings };
   }, [filteredLogs]);
 
-  const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals, byCategory } = dailyTotals;
+  const { protein: totalP, carbs: totalC, fat: totalF, sugar: totalS, calories: totalCals, byCategory, logRatings } = dailyTotals;
 
   // ⚡ Bolt Optimization: Memoize and consolidate weekly total aggregations
   // Replaces 4 separate O(N) array reductions (one in weeklyAvgCalories, three in render)
@@ -743,7 +756,7 @@ export default function DashboardPage() {
                                   <div className="flex items-center gap-2">
                                     <Badge variant="secondary" className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold">{log.category}</Badge>
                                     <span className="text-xs">
-                                      {'⭐'.repeat(log.items.length > 0 ? Math.round(log.items.reduce((s, i) => s + (i.rating || 3), 0) / log.items.length) : 3)}
+                                      {'⭐'.repeat(logRatings[log.id] ?? 3)}
                                     </span>
                                   </div>
                                   <span className="text-xs text-muted-foreground font-medium">{format(parseISO(log.timestamp), 'h:mm a')}</span>
