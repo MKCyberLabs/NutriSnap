@@ -25,3 +25,7 @@
 ## 2025-02-28 - [State Stability for Memoized Components]
 **Learning:** Wrapping a complex component in `React.memo` is ineffective if its callback props are constantly recreated. In `DashboardPage`, `handleMealCardComplete` was un-memoized and depended on the `logs` state, causing it (and `MealCategoryCard`) to re-render on every log update. Furthermore, using inline arrow functions like `onAnalysisComplete={(data, ...) => handleMealCardComplete(...)}` destroys memoization.
 **Action:** Use `useCallback` for functions passed to memoized components, avoid depending on arrays that change frequently by using functional state updates (e.g., `setLogs(prev => [...prev])`), and never pass inline arrow functions as props to memoized child components.
+
+## 2025-02-28 - [Avoid invariant date computations inside loops]
+**Learning:** Found `startOfDay(weekStart)` inside a `weeklyLogs.forEach` loop in `src/app/hydration/page.tsx`'s `weeklyStats` memoization block. Since `weekStart` is constant for the duration of the loop, parsing it inside causes redundant object allocations and redundant date math on every iteration. This leads to an O(N) performance cost where O(1) was possible.
+**Action:** Hoist invariant computations (like standardising a boundary date) out of loop bodies. Calculate it once before iterating over lists, and reference the stored variable inside the loop.
