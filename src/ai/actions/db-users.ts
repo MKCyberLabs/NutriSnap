@@ -1,9 +1,20 @@
 'use server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { cookies } from 'next/headers';
+
+async function verifyAuth(userId: string) {
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
+  if (!sessionId || sessionId !== userId) {
+    throw new Error('Unauthorized');
+  }
+}
+
 
 export async function updateUserMetrics(userId: string, metrics: any) {
   try {
+    await verifyAuth(userId);
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -23,6 +34,7 @@ export async function updateUserMetrics(userId: string, metrics: any) {
 
 export async function resetDbUserPassword(userId: string, newPassword: string) {
   try {
+    await verifyAuth(userId);
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: userId },
@@ -64,6 +76,7 @@ export async function authenticateDbUser(email: string, password?: string) {
 
 export async function updateUserSettings(userId: string, data: { telegramId?: string, password?: string, timezone?: string, dailyCaloriesGoal?: number, dailyProteinGoal?: number, dailyCarbsGoal?: number, dailyFatGoal?: number, age?: number, weight?: number, height?: number, gender?: string }) {
   try {
+    await verifyAuth(userId);
     const updateData: any = {};
     if (data.telegramId !== undefined) {
       updateData.telegramId = data.telegramId || null;

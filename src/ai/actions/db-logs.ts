@@ -1,8 +1,34 @@
 'use server';
 import { prisma } from '@/lib/prisma';
+import { cookies } from 'next/headers';
+
+async function verifyAuth(userId: string) {
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
+  if (!sessionId || sessionId !== userId) {
+    throw new Error('Unauthorized');
+  }
+}
+
+async function verifyLogOwner(logId: string) {
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
+  if (!sessionId) throw new Error('Unauthorized');
+
+  const log = await prisma.mealLog.findUnique({
+    where: { id: logId },
+    select: { userId: true }
+  });
+
+  if (!log || log.userId !== sessionId) {
+    throw new Error('Unauthorized');
+  }
+}
+
 
 export async function fetchUserLogs(userId: string) {
   try {
+    await verifyAuth(userId);
     const logs = await prisma.mealLog.findMany({
       where: { userId },
       include: { items: true },
@@ -45,6 +71,7 @@ export async function fetchUserLogs(userId: string) {
 
 export async function saveMealLog(userId: string, logData: any, itemsData: any[]) {
   try {
+    await verifyAuth(userId);
     const newLog = await prisma.mealLog.create({
       data: {
         userId,
@@ -85,6 +112,7 @@ export async function saveMealLog(userId: string, logData: any, itemsData: any[]
 
 export async function deleteMealLog(logId: string) {
   try {
+    await verifyLogOwner(logId);
     await prisma.mealLog.delete({ where: { id: logId } });
     return { success: true };
   } catch (error) {
@@ -95,6 +123,7 @@ export async function deleteMealLog(logId: string) {
 
 export async function updateMealLogItems(logId: string, itemsData: any[], newTotals: any) {
   try {
+    await verifyLogOwner(logId);
     await prisma.$transaction([
       prisma.foodItem.deleteMany({ where: { mealLogId: logId } }),
       prisma.mealLog.update({
