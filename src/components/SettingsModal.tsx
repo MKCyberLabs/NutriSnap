@@ -293,7 +293,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
   };
 
   const tabClasses = (tab: Tab) => 
-    `flex-1 justify-center items-center text-center font-medium text-sm md:text-base px-6 py-4 rounded-2xl transition-all whitespace-nowrap ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30' : 'bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 text-foreground/60 hover:text-foreground'}`;
+    `flex w-full items-center justify-center md:justify-start text-center md:text-left font-medium text-sm md:text-base px-6 py-4 rounded-2xl transition-all whitespace-nowrap ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30' : 'bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 text-foreground/60 hover:text-foreground'}`;
 
   const glassInputClasses = "rounded-xl bg-white dark:bg-black/60 shadow-inner focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all border border-gray-200 dark:border-gray-800 text-foreground";
 
@@ -309,25 +309,25 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
         ) : (
           <div className="w-full flex-1 min-h-0 flex flex-col">
         
-        <div className="flex flex-col gap-6 flex-1 min-h-0">
-          {/* Top Navigation */}
-          <div className="w-full flex gap-3 shrink-0 overflow-x-auto pb-2 custom-scrollbar">
+        <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
+          {/* Navigation */}
+          <div className="w-full md:w-64 flex md:flex-col gap-3 shrink-0 overflow-x-auto md:overflow-y-auto pb-2 md:pb-0 custom-scrollbar border-b md:border-b-0 md:border-r border-white/20 md:pr-4">
             <Button variant="ghost" onClick={() => requestTabChange('account')} className={tabClasses('account')}>
-              <ShieldAlert className="mr-2 h-5 w-5" /> Account & Security
+              <ShieldAlert className="mr-2 h-5 w-5 shrink-0" /> Account & Security
             </Button>
             <Button variant="ghost" onClick={() => requestTabChange('health')} className={tabClasses('health')}>
-              <Activity className="mr-2 h-5 w-5" /> Health & Biometrics
+              <Activity className="mr-2 h-5 w-5 shrink-0" /> Health & Biometrics
             </Button>
             <Button variant="ghost" onClick={() => requestTabChange('notifications')} className={tabClasses('notifications')}>
-              <Bell className="mr-2 h-5 w-5" /> Notifications
+              <Bell className="mr-2 h-5 w-5 shrink-0" /> Notifications
             </Button>
             <Button variant="ghost" onClick={() => requestTabChange('preferences')} className={tabClasses('preferences')}>
-              <Settings2 className="mr-2 h-5 w-5" /> Preferences
+              <Settings2 className="mr-2 h-5 w-5 shrink-0" /> Preferences
             </Button>
           </div>
 
-          {/* Bottom Content Area */}
-          <div className="w-full flex-1 overflow-y-auto pb-8 pr-2 custom-scrollbar">
+          {/* Content Area */}
+          <div className="flex-1 min-w-0 overflow-y-auto pb-8 pr-2 custom-scrollbar">
             <Card className="glass-card border-white/60 rounded-3xl min-h-[500px]">
               <AnimatePresence mode="wait">
                 <motion.div
@@ -400,46 +400,31 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                           </div>
                         </div>
 
-                        <Tabs defaultValue="nutrition" className="w-full">
-                          <TabsList className="grid w-full grid-cols-2 mb-4 bg-white/40 dark:bg-black/40 rounded-xl p-1 h-auto border border-white/20">
-                            <TabsTrigger value="nutrition" className="rounded-lg py-2 transition-opacity data-[state=inactive]:opacity-60 data-[state=inactive]:hover:opacity-100 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">Nutrition Goals</TabsTrigger>
-                            <TabsTrigger value="hydration" className="rounded-lg py-2 transition-opacity data-[state=inactive]:opacity-60 data-[state=inactive]:hover:opacity-100 data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm">Hydration Goal</TabsTrigger>
-                          </TabsList>
-                          <TabsContent value="nutrition" className="mt-0 outline-none">
-                            <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
-                              <h3 className="font-bold text-lg flex items-center gap-2"><Target className="h-5 w-5 text-primary" /> Daily Nutrition Goals</h3>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="calories">Calories (kcal)</Label>
-                                  <Input id="calories" type="number" placeholder="2000" value={calGoal} onChange={e => setCalGoal(e.target.value)} className={glassInputClasses} />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="protein">Protein (g)</Label>
-                                  <Input id="protein" type="number" placeholder="150" value={proGoal} onChange={e => setProGoal(e.target.value)} className={glassInputClasses} />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="carbs">Carbs (g)</Label>
-                                  <Input id="carbs" type="number" placeholder="250" value={carbGoal} onChange={e => setCarbGoal(e.target.value)} className={glassInputClasses} />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="fat">Fat (g)</Label>
-                                  <Input id="fat" type="number" placeholder="65" value={fatGoal} onChange={e => setFatGoal(e.target.value)} className={glassInputClasses} />
-                                </div>
-                              </div>
+                        <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40 mt-6">
+                          <h3 className="font-bold text-lg flex items-center gap-2"><Target className="h-5 w-5 text-primary" /> Daily Goals</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="calories">Calories (kcal)</Label>
+                              <Input id="calories" type="number" placeholder="2000" value={calGoal} onChange={e => setCalGoal(e.target.value)} className={glassInputClasses} />
                             </div>
-                          </TabsContent>
-                          <TabsContent value="hydration" className="mt-0 outline-none">
-                            <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
-                              <h3 className="font-bold text-lg flex items-center gap-2"><Droplets className="h-5 w-5 text-sky-500" /> Daily Hydration Goal</h3>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="waterGoal">Water (ml)</Label>
-                                  <Input id="waterGoal" type="number" placeholder="2750" value={waterGoal} onChange={e => setWaterGoal(e.target.value)} className={glassInputClasses} />
-                                </div>
-                              </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="protein">Protein (g)</Label>
+                              <Input id="protein" type="number" placeholder="150" value={proGoal} onChange={e => setProGoal(e.target.value)} className={glassInputClasses} />
                             </div>
-                          </TabsContent>
-                        </Tabs>
+                            <div className="space-y-2">
+                              <Label htmlFor="carbs">Carbs (g)</Label>
+                              <Input id="carbs" type="number" placeholder="250" value={carbGoal} onChange={e => setCarbGoal(e.target.value)} className={glassInputClasses} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="fat">Fat (g)</Label>
+                              <Input id="fat" type="number" placeholder="65" value={fatGoal} onChange={e => setFatGoal(e.target.value)} className={glassInputClasses} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="waterGoal" className="text-sky-500 flex items-center gap-1"><Droplets className="h-3 w-3" /> Water (ml)</Label>
+                              <Input id="waterGoal" type="number" placeholder="2750" value={waterGoal} onChange={e => setWaterGoal(e.target.value)} className={glassInputClasses} />
+                            </div>
+                          </div>
+                        </div>
 
                         <Button onClick={() => handleSaveSettings()} disabled={savingSettings} className="rounded-xl px-8 shadow-lg shadow-primary/20">
                           {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Health Data
@@ -484,14 +469,14 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                           <TabsContent value="nutrisnap" className="mt-0 outline-none">
                             <div className="space-y-4 p-5 rounded-2xl bg-white/30 dark:bg-black/20 border border-white/40">
                               <h3 className="font-bold text-lg flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Telegram Reminders</h3>
-                              <div className="space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {CATEGORIES.map((cat) => {
                                   const existing = reminders.find(r => r.category === cat);
                                   const isActive = existing ? existing.isActive : false;
                                   
                                   return (
-                                    <div key={cat} className="p-4 rounded-xl bg-white/20 dark:bg-black/20 border border-white/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                      <div className="flex items-center gap-4">
+                                    <div key={cat} className="p-4 rounded-xl bg-white/20 dark:bg-black/20 border border-white/30 backdrop-blur-md flex flex-col justify-between gap-4">
+                                      <div className="flex items-center gap-3">
                                         <Switch 
                                           checked={isActive} 
                                           onCheckedChange={() => {
@@ -500,8 +485,8 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                           }} 
                                         />
                                         <div>
-                                          <h4 className="font-bold">{cat}</h4>
-                                          <p className="text-xs text-muted-foreground">{isActive ? 'Active' : 'Disabled'}</p>
+                                          <h4 className="font-bold leading-none">{cat}</h4>
+                                          <p className="text-xs text-muted-foreground mt-1">{isActive ? 'Active' : 'Disabled'}</p>
                                         </div>
                                       </div>
                                       
@@ -510,7 +495,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                           type="time" 
                                           value={times[cat]} 
                                           onChange={(e) => setTimes({ ...times, [cat]: e.target.value })}
-                                          className={`w-32 ${glassInputClasses}`}
+                                          className={`flex-1 ${glassInputClasses}`}
                                         />
                                         <Button onClick={() => handleSaveReminder(cat)} disabled={savingReminder === cat} variant="secondary" size="icon" aria-label={`Save ${cat} reminder`} className="shrink-0 rounded-xl bg-white/40 hover:bg-white/60">
                                           {savingReminder === cat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
