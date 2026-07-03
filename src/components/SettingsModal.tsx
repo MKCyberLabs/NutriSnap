@@ -590,13 +590,16 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                           return (
                                             <button
                                               key={idx}
+                                              type="button"
+                                              aria-label={dayName}
+                                              aria-pressed={isActiveDay}
                                               onClick={() => {
                                                 const newDays = isActiveDay 
                                                   ? hydrationSetting.activeDays.filter((d: string) => d !== dayName)
                                                   : [...hydrationSetting.activeDays, dayName];
                                                 setHydrationSetting({ ...hydrationSetting, activeDays: newDays });
                                               }}
-                                              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${isActiveDay ? 'bg-sky-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'}`}
+                                              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950 ${isActiveDay ? 'bg-sky-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'}`}
                                             >
                                               {dayLabel}
                                             </button>
