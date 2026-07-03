@@ -35,13 +35,10 @@ export function startScheduler() {
         const userTimezone = reminder.user.timezone || 'UTC';
         const nowInTz = new TZDate(new Date(), userTimezone);
         
-        // Current time in HH:mm in user's timezone using native Intl API
-        const currentTimeString = new Intl.DateTimeFormat('en-GB', { 
-          timeZone: userTimezone, 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          hour12: false 
-        }).format(new Date());
+        // Current time in HH:mm in user's timezone
+        const hours = String(nowInTz.getHours()).padStart(2, '0');
+        const minutes = String(nowInTz.getMinutes()).padStart(2, '0');
+        const currentTimeString = `${hours}:${minutes}`;
 
         if (currentTimeString === reminder.time) {
           // It is exactly the minute of the reminder.
@@ -95,21 +92,19 @@ export function startScheduler() {
 
         const userTimezone = setting.user.timezone || 'UTC';
         const now = new Date();
+        const nowInTz = new TZDate(now, userTimezone);
         
-        // Check day of week in user's timezone
-        const currentDay = new Intl.DateTimeFormat('en-US', { timeZone: userTimezone, weekday: 'long' }).format(now);
+        // Check day of week in user's timezone using date-fns formatting
+        const currentDay = format(nowInTz, 'EEEE');
         
         if (!setting.activeDays.includes(currentDay)) {
           continue;
         }
 
-        // Current time in user timezone
-        const currentTimeString = new Intl.DateTimeFormat('en-GB', { 
-          timeZone: userTimezone, 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          hour12: false 
-        }).format(now);
+        // Current time in user timezone (HH:mm)
+        const hours = String(nowInTz.getHours()).padStart(2, '0');
+        const minutes = String(nowInTz.getMinutes()).padStart(2, '0');
+        const currentTimeString = `${hours}:${minutes}`;
 
         const currentMinutes = parseInt(currentTimeString.split(':')[0]) * 60 + parseInt(currentTimeString.split(':')[1]);
         const startMinutes = parseInt(setting.startTime.split(':')[0]) * 60 + parseInt(setting.startTime.split(':')[1]);

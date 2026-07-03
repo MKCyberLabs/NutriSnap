@@ -336,11 +336,14 @@ bot.on('message', async (ctx, next) => {
     const user = await prisma.user.findUnique({ where: { telegramId } });
     if (!user) return;
 
-    const text = ctx.message.text?.trim() || "";
+    const hasPhoto = ctx.message.photo && ctx.message.photo.length > 0;
+    const text = (hasPhoto ? ctx.message.caption : ctx.message.text)?.trim() || "";
     // extract category from replied message text: "for your Snack reminder."
-    // Note: ctx.message.reply_to_message.text strips markdown, so '**Snack**' becomes 'Snack'.
-    const match = ctx.message.reply_to_message.text.match(/for your ([A-Za-z]+) reminder/);
-    if (!match) return;
+    // Handle both plain text and potential left-over markdown asterisks
+    const match = ctx.message.reply_to_message.text.match(/for your [\*]*([A-Za-z]+)[\*]* reminder/);
+    if (!match) {
+      return ctx.reply("❌ Could not parse the reminder category from the message.");
+    }
     
     // index 1 is the actual category because of the regex group
     const category = match[1];
@@ -349,12 +352,24 @@ bot.on('message', async (ctx, next) => {
       return ctx.reply("❌ Invalid format. Please use HH:MM format (e.g. 08:00 or 14:30).");
     }
 
-    const existing = await prisma.reminder.findFirst({ where: { userId: user.id, category } });
-    if (existing) {
-      await prisma.reminder.update({ where: { id: existing.id }, data: { time: text, isActive: true } });
-    } else {
-      await prisma.reminder.create({ data: { userId: user.id, category, time: text, isActive: true } });
-    }
+    await prisma.reminder.upsert({
+      where: {
+        userId_category: {
+          userId: user.id,
+          category
+        }
+      },
+      update: {
+        time: text,
+        isActive: true
+      },
+      create: {
+        userId: user.id,
+        category,
+        time: text,
+        isActive: true
+      }
+    });
     
     return ctx.reply(`✅ Your ${category} reminder is set to ${text}!`);
   } else if (ctx.message?.reply_to_message && ctx.message.reply_to_message.text?.includes("amount of water you drank (in ml)")) {
@@ -419,36 +434,7 @@ bot.on('message', async (ctx) => {
         return; // Skip AI analysis
       }
       
-      // 2. Handle Meal Reminder Setup
-      const match = replyText.match(/for your \*\*(.+)\*\* reminder/);
-      if (match) {
-        const category = match[1];
-        if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(caption.trim())) {
-          const user = await prisma.user.findUnique({ where: { telegramId } });
-          if (user) {
-            const existing = await prisma.reminder.findFirst({
-              where: { userId: user.id, category }
-            });
-            if (existing) {
-              await prisma.reminder.update({
-                where: { id: existing.id },
-                data: { time: caption.trim(), isActive: true }
-              });
-            } else {
-              await prisma.reminder.create({
-                data: { userId: user.id, category, time: caption.trim(), isActive: true }
-              });
-            }
-            await ctx.api.deleteMessage(ctx.chat!.id, ctx.message!.reply_to_message.message_id).catch(() => {});
-            await ctx.api.deleteMessage(ctx.chat!.id, ctx.message!.message_id).catch(() => {});
-            
-            await ctx.reply(`✅ **${category}** reminder set for ${caption.trim()}!`, { parse_mode: 'Markdown' });
-          }
-        } else {
-          await ctx.reply("❌ Invalid time format. Please use HH:MM (e.g. 08:00 or 14:30).");
-        }
-        return; // Skip AI analysis
-      }
+
     }
     
     // 1. Authenticate User

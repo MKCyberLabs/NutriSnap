@@ -11,20 +11,24 @@ export async function getReminders(userId: string) {
 }
 
 export async function saveReminder(userId: string, category: string, time: string, isActive: boolean = true) {
-  const existing = await prisma.reminder.findFirst({
-    where: { userId, category }
+  await prisma.reminder.upsert({
+    where: {
+      userId_category: {
+        userId,
+        category
+      }
+    },
+    update: {
+      time,
+      isActive
+    },
+    create: {
+      userId,
+      category,
+      time,
+      isActive
+    }
   });
-
-  if (existing) {
-    await prisma.reminder.update({
-      where: { id: existing.id },
-      data: { time, isActive }
-    });
-  } else {
-    await prisma.reminder.create({
-      data: { userId, category, time, isActive }
-    });
-  }
 
   revalidatePath('/settings');
   return { success: true };
