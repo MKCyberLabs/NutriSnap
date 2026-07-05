@@ -108,6 +108,7 @@ function EditGramsPopover({ item, logId, onUpdate }: { item: FoodItem, logId: st
         <div className="flex items-center gap-2">
           <Input
             type="number"
+            aria-label="Item amount in grams"
             className="h-8 text-xs rounded-lg"
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -147,6 +148,7 @@ function AddItemPopover({ logId, onAdd, isAdding }: { logId: string, onAdd: (log
           <div className="space-y-3">
             <Input
               placeholder="e.g., 2 Large Eggs"
+              aria-label="Describe new item"
               className="h-10 text-sm bg-white/20 border-white/40 rounded-xl"
               value={text}
               onChange={(e) => setText(e.target.value)}

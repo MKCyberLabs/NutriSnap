@@ -16,3 +16,6 @@
 ## 2024-10-25 - [Missing ARIA Labels on Custom Toggle Buttons]
 **Learning:** Found custom button groups (like the day of the week selector in `SettingsModal.tsx`) missing important accessibility attributes. They lacked contextually descriptive `aria-label`s, the `aria-pressed` state to indicate selection, and `type="button"` which is a best practice. Furthermore, they did not implement `focus-visible` styles which hurts keyboard navigation usability.
 **Action:** Always add full-text `aria-label` (e.g. "Monday" instead of "M"), `aria-pressed`, `type="button"`, and explicit `focus-visible` classes (like `focus-visible:ring-2`) to custom interactive UI elements used as toggles or checkboxes to ensure screen readers and keyboard users can effectively operate them.
+## 2024-03-24 - [Missing ARIA Labels on Unlabelled Inputs]
+**Learning:** Found instances where input fields (like the number input for item grams or the text input for new items in popovers, and the custom range slider) lacked explicit `<label>` elements or `aria-label` attributes. This leaves screen reader users without context of what the input is for.
+**Action:** When creating form inputs that do not have a corresponding visual `<label>`, always use the `aria-label` attribute to explicitly describe the input's purpose and expected value.
