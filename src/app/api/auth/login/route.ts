@@ -18,8 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { email, password } = result.data;
-    const ip = req.headers.get('x-forwarded-for') || 'local';
-    const identifier = `${ip}:${email}`;
+    const identifier = email.toLowerCase();
 
     // Rate Limiting Check
     const attempts = loginAttempts.get(identifier);
