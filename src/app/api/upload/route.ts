@@ -9,6 +9,12 @@ import path from 'path';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Security Enhancement: Validate authentication cookie
+    const sessionId = request.cookies.get('nutrisnap_session_id')?.value;
+    if (!sessionId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
