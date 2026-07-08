@@ -16,3 +16,7 @@
 ## 2024-10-25 - [Missing ARIA Labels on Custom Toggle Buttons]
 **Learning:** Found custom button groups (like the day of the week selector in `SettingsModal.tsx`) missing important accessibility attributes. They lacked contextually descriptive `aria-label`s, the `aria-pressed` state to indicate selection, and `type="button"` which is a best practice. Furthermore, they did not implement `focus-visible` styles which hurts keyboard navigation usability.
 **Action:** Always add full-text `aria-label` (e.g. "Monday" instead of "M"), `aria-pressed`, `type="button"`, and explicit `focus-visible` classes (like `focus-visible:ring-2`) to custom interactive UI elements used as toggles or checkboxes to ensure screen readers and keyboard users can effectively operate them.
+
+## 2024-05-16 - [Hydration Hub]
+**Learning:** Added `aria-label` attributes to the quick-add buttons and custom drink type selection buttons. Improved accessibility for screen readers.
+**Action:** Ensure icon-only buttons always have `aria-label` attributes for accessibility.
