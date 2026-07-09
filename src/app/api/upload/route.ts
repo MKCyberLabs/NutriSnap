@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { prisma } from '@/lib/prisma';
 
 /**
  * API Route to handle local file uploads for meal photos.
@@ -9,6 +10,20 @@ import path from 'path';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Security Enhancement: Ensure user is authenticated before allowing upload
+    const sessionId = request.cookies.get('nutrisnap_session_id')?.value;
+    if (!sessionId) {
+      console.warn('Unauthorized upload attempt');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Validate session against database to ensure it's a real user
+    const user = await prisma.user.findUnique({ where: { id: sessionId } });
+    if (!user) {
+      console.warn('Invalid session upload attempt');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
