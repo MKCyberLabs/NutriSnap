@@ -399,28 +399,28 @@ export default function HydrationPage() {
                 <>
                   {/* Quick Add Grid */}
                   <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <button onClick={() => handleQuickAdd(250)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
+                    <button aria-label="Add 250 ml" onClick={() => handleQuickAdd(250)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
                         <GlassWater className="h-7 w-7" />
                       </div>
                       <span className="font-bold text-slate-700">250 ml</span>
                     </button>
                     
-                    <button onClick={() => handleQuickAdd(500)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
+                    <button aria-label="Add 500 ml" onClick={() => handleQuickAdd(500)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
                         <Droplets className="h-7 w-7" />
                       </div>
                       <span className="font-bold text-slate-700">500 ml</span>
                     </button>
                     
-                    <button onClick={() => handleQuickAdd(750)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
+                    <button aria-label="Add 750 ml" onClick={() => handleQuickAdd(750)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
                         <Wine className="h-7 w-7" />
                       </div>
                       <span className="font-bold text-slate-700">750 ml</span>
                     </button>
                     
-                    <button onClick={() => openCustomModal()} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 border-dashed border-2 border-sky-200 bg-sky-50/30">
+                    <button aria-label="Add custom amount" onClick={() => openCustomModal()} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 border-dashed border-2 border-sky-200 bg-sky-50/30">
                       <div className="w-14 h-14 rounded-2xl bg-white border border-sky-200 flex items-center justify-center text-sky-500 group-hover:bg-sky-50 transition-colors">
                         <Plus className="h-7 w-7" />
                       </div>

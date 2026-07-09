@@ -100,7 +100,7 @@ function EditGramsPopover({ item, logId, onUpdate }: { item: FoodItem, logId: st
       if (isOpen) setValue(item.grams.toString());
     }}>
       <PopoverTrigger asChild>
-        <button className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors">
+        <button aria-label="Edit weight" className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold hover:text-primary transition-colors">
           {item.grams}g <Edit2 className="h-2.5 w-2.5 text-primary/60" />
         </button>
       </PopoverTrigger>
