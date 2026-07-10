@@ -31,3 +31,8 @@
 **Vulnerability:** Next.js Server Actions modifying user data and logs (in `db-users.ts` and `db-logs.ts`) took generic arguments like `userId` or `logId` directly from the client without verifying if the caller owned those records. This allowed IDOR (Insecure Direct Object Reference) / Authorization Bypass where any user could modify another's data.
 **Learning:** Next.js Server Actions are essentially public API endpoints. Just because they are defined on the server and called seamlessly from the client does not mean they inherit the client's context or permissions securely by default.
 **Prevention:** Always extract authentication state (e.g., via cookies) *inside* the Server Action and authorize the action by validating that the authenticated user owns the resource they are trying to manipulate, rather than trusting IDs passed as arguments.
+
+## 2024-06-23 - [Unauthenticated File Uploads]
+**Vulnerability:** The file upload endpoint (`src/app/api/upload/route.ts`) allowed any user to upload files to the server without authentication. This could lead to a denial-of-service (DoS) attack by exhausting disk space or allowing unauthorized hosting of files.
+**Learning:** All endpoints that accept data from users, especially file uploads, must verify the user's authentication and authorization before processing the request.
+**Prevention:** Always require and validate a session (e.g., `nutrisnap_session_id` cookie) before processing file uploads or accepting user input on API routes.
