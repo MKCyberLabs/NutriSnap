@@ -619,14 +619,20 @@ export default function DashboardPage() {
   // Replaces 4 separate O(N) array reductions (one in weeklyAvgCalories, three in render)
   // with a single O(N) pass to reduce redundant iteration over dynamicWeeklyData.
   const weeklyTotals = useMemo(() => {
-    let protein = 0, carbs = 0, fat = 0, calories = 0;
+    let protein = 0, carbs = 0, fat = 0, calories = 0, peakCalories = 0, trackedDays = 0;
     for (const day of dynamicWeeklyData) {
       protein += day.protein;
       carbs += day.carbs;
       fat += day.fat;
       calories += day.calories;
+      if (day.calories > peakCalories) {
+        peakCalories = day.calories;
+      }
+      if (day.calories > 0) {
+        trackedDays++;
+      }
     }
-    return { protein, carbs, fat, calories };
+    return { protein, carbs, fat, calories, peakCalories, trackedDays };
   }, [dynamicWeeklyData]);
 
   const weeklyAvgCalories = useMemo(() => {
@@ -989,8 +995,8 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[ 
                   { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, 
-                  { icon: BarChart3, val: dynamicWeeklyData.length > 0 ? Math.max(...dynamicWeeklyData.map(d => d.calories)) : 0, label: 'Peak Day' }, 
-                  { icon: History, val: dynamicWeeklyData.filter(d => d.calories > 0).length, label: 'Tracked Days' } 
+                  { icon: BarChart3, val: weeklyTotals.peakCalories, label: 'Peak Day' },
+                  { icon: History, val: weeklyTotals.trackedDays, label: 'Tracked Days' }
                 ].map((s, i) => (
                   <motion.div key={i} variants={itemVariants} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ type: 'spring' as const, stiffness: 400, damping: 17 }}>
                     <Card className="glass-card border-white/60 rounded-2xl"><CardContent className="pt-6 text-center"><div className="flex justify-center mb-2"><s.icon className="h-6 w-6 text-primary" /></div><p className="text-2xl font-bold text-foreground">{s.val}</p><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{s.label}</p></CardContent></Card>

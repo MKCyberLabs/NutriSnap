@@ -25,3 +25,6 @@
 ## 2025-02-28 - [State Stability for Memoized Components]
 **Learning:** Wrapping a complex component in `React.memo` is ineffective if its callback props are constantly recreated. In `DashboardPage`, `handleMealCardComplete` was un-memoized and depended on the `logs` state, causing it (and `MealCategoryCard`) to re-render on every log update. Furthermore, using inline arrow functions like `onAnalysisComplete={(data, ...) => handleMealCardComplete(...)}` destroys memoization.
 **Action:** Use `useCallback` for functions passed to memoized components, avoid depending on arrays that change frequently by using functional state updates (e.g., `setLogs(prev => [...prev])`), and never pass inline arrow functions as props to memoized child components.
+## 2025-03-05 - Avoid inline O(N) operations in render components
+**Learning:** Found inline array operations (`Math.max(...array.map())` and `array.filter().length`) inside the JSX render block in `DashboardPage`. This causes multiple O(N) array passes and unnecessary object allocations on every render.
+**Action:** Consolidate these operations into an existing O(N) `useMemo` block that iterates over the same array to calculate aggregates.
