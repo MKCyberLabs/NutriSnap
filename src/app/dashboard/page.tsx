@@ -107,6 +107,7 @@ function EditGramsPopover({ item, logId, onUpdate }: { item: FoodItem, logId: st
       <PopoverContent className="glass-card w-40 p-3 rounded-xl border-none shadow-xl" align="start">
         <div className="flex items-center gap-2">
           <Input
+            aria-label="Edit portion in grams"
             type="number"
             className="h-8 text-xs rounded-lg"
             value={value}
@@ -146,6 +147,7 @@ function AddItemPopover({ logId, onAdd, isAdding }: { logId: string, onAdd: (log
           <h4 className="font-bold text-sm text-foreground">Add new item</h4>
           <div className="space-y-3">
             <Input
+              aria-label="New food item name or description"
               placeholder="e.g., 2 Large Eggs"
               className="h-10 text-sm bg-white/20 border-white/40 rounded-xl"
               value={text}
