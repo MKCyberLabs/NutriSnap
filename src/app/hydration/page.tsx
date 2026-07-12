@@ -683,6 +683,7 @@ export default function HydrationPage() {
                   step="50"
                   value={customMl}
                   onChange={(e) => setCustomMl(Number(e.target.value))}
+                  aria-label="Custom hydration amount in milliliters"
                   className="w-full accent-sky-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" 
                 />
                 <div className="flex justify-between mt-2 text-xs font-bold text-slate-400">
