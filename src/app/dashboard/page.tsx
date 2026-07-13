@@ -165,6 +165,7 @@ function EditGramsPopover({
           <Input
             aria-label="Edit portion in grams"
             type="number"
+            aria-label="Item amount in grams"
             className="h-8 text-xs rounded-lg"
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -225,6 +226,7 @@ function AddItemPopover({
             <Input
               aria-label="New food item name or description"
               placeholder="e.g., 2 Large Eggs"
+              aria-label="Describe new item"
               className="h-10 text-sm bg-white/20 border-white/40 rounded-xl"
               value={text}
               onChange={(e) => setText(e.target.value)}
