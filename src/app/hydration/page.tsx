@@ -31,6 +31,98 @@ const DRINK_TYPES = [
   { type: 'Smoothie', emoji: '🥤', icon: CupSoda },
 ];
 
+
+
+// ⚡ Bolt Optimization: Localized state for the custom drink dialog to prevent the slider
+// from re-rendering the entire page on every single value change during drag.
+function CustomDrinkDialog({
+  open,
+  onOpenChange,
+  editingLog,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editingLog: HydrationEntry | null;
+  onSave: (ml: number, type: DrinkType, logId: string | null) => Promise<void>;
+}) {
+  const [customMl, setCustomMl] = useState<number>(250);
+  const [customType, setCustomType] = useState<DrinkType>('Water');
+
+  useEffect(() => {
+    if (open) {
+      if (editingLog) {
+        setCustomMl(editingLog.amountMl);
+        setCustomType(editingLog.drinkType as DrinkType);
+      } else {
+        setCustomMl(250);
+        setCustomType('Water');
+      }
+    }
+  }, [open, editingLog]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md rounded-[2rem] p-6 border-0 shadow-2xl">
+        <DialogHeader className="mb-4">
+          <DialogTitle className="text-2xl font-bold text-center">
+            {editingLog ? 'Edit Drink' : 'Log Custom Drink'}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-8 py-2">
+          <div>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest text-center mb-4">Select Drink Type</p>
+            <div className="flex justify-center gap-2 flex-wrap">
+              {DRINK_TYPES.map((dt) => (
+                <button
+                  key={dt.type}
+                  onClick={() => setCustomType(dt.type as DrinkType)}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${customType === dt.type ? 'bg-sky-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                >
+                  <span className="text-2xl">{dt.emoji}</span>
+                  <span className="text-xs font-semibold">{dt.type}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest text-center mb-2">Amount</p>
+            <div className="text-center mb-4">
+              <span className="text-4xl font-extrabold text-sky-600">{customMl}</span>
+              <span className="text-xl font-bold text-sky-400 ml-1">ml</span>
+            </div>
+
+            <div className="px-4">
+              <input
+                type="range"
+                min="50"
+                max="2000"
+                step="50"
+                value={customMl}
+                onChange={(e) => setCustomMl(Number(e.target.value))}
+                className="w-full accent-sky-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <div className="flex justify-between mt-2 text-xs font-bold text-slate-400">
+                <span>50 ml</span>
+                <span>2000 ml</span>
+              </div>
+            </div>
+          </div>
+
+          <Button
+            onClick={() => onSave(customMl, customType, editingLog ? editingLog.id : null)}
+            className="w-full h-14 rounded-2xl text-lg font-bold bg-sky-500 hover:bg-sky-600 shadow-lg shadow-sky-500/30"
+          >
+            {editingLog ? 'Update Entry' : 'Log Drink'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function HydrationPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -50,9 +142,7 @@ export default function HydrationPage() {
 
   // Custom log modal state
   const [customDialogOpen, setCustomDialogOpen] = useState(false);
-  const [customMl, setCustomMl] = useState<number>(250);
-  const [customType, setCustomType] = useState<DrinkType>('Water');
-  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editingLog, setEditingLog] = useState<HydrationEntry | null>(null);
 
   // Delete modal state
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -108,15 +198,15 @@ export default function HydrationPage() {
     }
   };
 
-  const handleSaveCustom = async () => {
+  const handleSaveCustom = async (ml: number, type: DrinkType, logId: string | null) => {
     if (!user) return;
     try {
-      if (editingLogId) {
-        await updateHydrationLog(editingLogId, customMl, customType);
+      if (logId) {
+        await updateHydrationLog(logId, ml, type);
         toast({ title: 'Updated!', description: 'Hydration entry updated.' });
       } else {
-        await logHydration(user.id, customMl, customType);
-        toast({ title: 'Logged!', description: `Added ${customMl}ml of ${customType}.` });
+        await logHydration(user.id, ml, type);
+        toast({ title: 'Logged!', description: `Added ${ml}ml of ${type}.` });
       }
       setCustomDialogOpen(false);
       refreshData();
@@ -138,15 +228,7 @@ export default function HydrationPage() {
   };
 
   const openCustomModal = (log?: HydrationEntry) => {
-    if (log) {
-      setEditingLogId(log.id);
-      setCustomMl(log.amountMl);
-      setCustomType(log.drinkType as DrinkType);
-    } else {
-      setEditingLogId(null);
-      setCustomMl(250);
-      setCustomType('Water');
-    }
+    setEditingLog(log || null);
     setCustomDialogOpen(true);
   };
 
@@ -647,67 +729,12 @@ export default function HydrationPage() {
       </main>
 
       {/* Custom Log Dialog */}
-      <Dialog open={customDialogOpen} onOpenChange={setCustomDialogOpen}>
-        <DialogContent className="sm:max-w-md rounded-[2rem] p-6 border-0 shadow-2xl">
-          <DialogHeader className="mb-4">
-            <DialogTitle className="text-2xl font-bold text-center">
-              {editingLogId ? 'Edit Drink' : 'Log Custom Drink'}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-8 py-2">
-            <div>
-              <p className="text-sm font-bold text-slate-500 uppercase tracking-widest text-center mb-4">Select Drink Type</p>
-              <div className="flex justify-center gap-2 flex-wrap">
-                {DRINK_TYPES.map((dt) => (
-                  <button
-                    key={dt.type}
-                    aria-label={`Select ${dt.type} drink type`}
-                    onClick={() => setCustomType(dt.type as DrinkType)}
-                    className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${customType === dt.type ? 'bg-sky-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                  >
-                    <span className="text-2xl">{dt.emoji}</span>
-                    <span className="text-xs font-semibold">{dt.type}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="text-sm font-bold text-slate-500 uppercase tracking-widest text-center mb-2">Amount</p>
-              <div className="text-center mb-4">
-                <span className="text-4xl font-extrabold text-sky-600">{customMl}</span>
-                <span className="text-xl font-bold text-sky-400 ml-1">ml</span>
-              </div>
-              
-              <div className="px-4">
-                <input 
-                  type="range" 
-                  min="50" 
-                  max="2000" 
-                  step="50"
-                  value={customMl}
-                  onChange={(e) => setCustomMl(Number(e.target.value))}
-                  aria-label="Custom hydration amount in milliliters"
-                  className="w-full accent-sky-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" 
-                  aria-label="Custom drink amount in milliliters"
-                />
-                <div className="flex justify-between mt-2 text-xs font-bold text-slate-400">
-                  <span>50 ml</span>
-                  <span>2000 ml</span>
-                </div>
-              </div>
-            </div>
-
-            <Button 
-              onClick={handleSaveCustom} 
-              className="w-full h-14 rounded-2xl text-lg font-bold bg-sky-500 hover:bg-sky-600 shadow-lg shadow-sky-500/30"
-            >
-              {editingLogId ? 'Update Entry' : 'Log Drink'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CustomDrinkDialog
+        open={customDialogOpen}
+        onOpenChange={setCustomDialogOpen}
+        editingLog={editingLog}
+        onSave={handleSaveCustom}
+      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
