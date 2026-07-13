@@ -11,19 +11,21 @@ import { cookies } from 'next/headers';
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🛡️ Sentinel: Enforce Authentication for File Uploads
     const cookieStore = await cookies();
     const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
 
     if (!sessionId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized: Missing session token' }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
       where: { id: sessionId },
+      select: { id: true }, // Only fetch ID to minimize payload
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized: Invalid session token' }, { status: 401 });
     }
 
     const formData = await request.formData();

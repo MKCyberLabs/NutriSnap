@@ -492,6 +492,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                       
                                       <div className="flex items-center gap-2">
                                         <Input 
+                                          aria-label={`${cat} reminder time`}
                                           type="time" 
                                           value={times[cat]} 
                                           onChange={(e) => setTimes({ ...times, [cat]: e.target.value })}
@@ -632,6 +633,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                             <PopoverContent className="w-[300px] p-0 rounded-xl border-none shadow-xl glass-card">
                               <div className="flex flex-col">
                                 <Input
+                                  aria-label="Search timezone"
                                   placeholder="Search timezone..."
                                   value={tzSearch}
                                   onChange={(e) => setTzSearch(e.target.value)}
