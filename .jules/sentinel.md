@@ -51,3 +51,8 @@
 **Vulnerability:** An unauthenticated file upload vulnerability existed in `src/app/api/upload/route.ts`. The endpoint allowed anyone to upload files to the `public/uploads` directory without verifying if they were authenticated or authorized to do so.
 **Learning:** Publicly accessible upload endpoints, even if intended for internal use, can be abused by attackers to store unauthorized content, potentially leading to storage exhaustion or hosting malicious files if not properly restricted.
 **Prevention:** Always enforce authentication and authorization checks on all API endpoints that accept file uploads or modify system state. Validate the session token (e.g., `nutrisnap_session_id`) against the database before processing the request.
+
+## 2026-07-20 - [Unauthenticated API Route Access]
+**Vulnerability:** A critical vulnerability existed in `src/app/api/analyze-meal/route.ts` where the `POST` endpoint handled AI image processing logic without checking if the requester was authenticated. The endpoint exposed expensive and computationally heavy Genkit AI flows (`mealNutritionalAnalysis`) to unauthenticated users, leading to possible Denial-of-Service and bill exhaustion by malicious actors.
+**Learning:** Next.js API Routes do not inherit the calling client's authorization context. Just because an API is only called from within the client's logged-in dashboard does not mean the API itself is secure from outside, direct access.
+**Prevention:** Always explicitly check authentication state (e.g., verifying a valid `nutrisnap_session_id` session cookie against the database) at the very beginning of *every* API route handler before executing any sensitive logic or calling external/expensive services.
