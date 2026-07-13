@@ -32,6 +32,16 @@
 **Learning:** Next.js Server Actions are essentially public API endpoints. Just because they are defined on the server and called seamlessly from the client does not mean they inherit the client's context or permissions securely by default.
 **Prevention:** Always extract authentication state (e.g., via cookies) *inside* the Server Action and authorize the action by validating that the authenticated user owns the resource they are trying to manipulate, rather than trusting IDs passed as arguments.
 
+## 2024-07-03 - [Server Action IDOR]
+**Vulnerability:** Next.js Server Actions act as public endpoints and do not implicitly inherit secure client context. The Server Actions in `src/app/settings/actions.ts` and `src/app/hydration/actions.ts` were taking `userId` or resource IDs as arguments without verifying if the requested resource belonged to the currently authenticated user (via `nutrisnap_session_id` cookie). This allowed Insecure Direct Object Reference (IDOR) attacks, meaning a user could modify or view other users' settings, reminders, and hydration logs by manipulating the arguments.
+**Learning:** Next.js Server Actions are public RPC endpoints, not secure server-only functions. Client-side authentication checks or routing do not protect server actions.
+**Prevention:** Always implement explicit authorization checks (e.g., verifying a secure session cookie against the requested resource's owner) at the beginning of *every* exported Server Action. Do not trust arguments provided to a server action.
+
+## 2024-07-04 - Stored XSS via SVG File Uploads
+**Vulnerability:** A Stored XSS vulnerability existed in the file upload route (`src/app/api/upload/route.ts`) because `.svg` files were allowed. SVG files can contain embedded `<script>` tags, which execute when the file is served and viewed by a user, potentially compromising their session.
+**Learning:** Permitting arbitrary SVG uploads on the same origin as the main application creates a severe Stored XSS risk. Validation must strictly whitelist safe raster image formats.
+**Prevention:** Never include `.svg` in the allowed extensions list for user uploads without extremely robust, server-side SVG sanitization (which is difficult and error-prone). Only allow safe formats like `.jpg`, `.png`, `.webp`, or `.gif`.
+
 ## 2026-07-06 - Rate Limiting Bypass via Spoofed IP Header
 **Vulnerability:** A critical vulnerability existed in `src/app/api/auth/login/route.ts` where the rate limiter's identifier was constructed using the highly spoofable `x-forwarded-for` header. This allowed an attacker to bypass rate limiting for a single account by changing their spoofed IP address, making the application susceptible to unlimited brute-force password guessing attacks.
 **Learning:** Relying on easily spoofable HTTP headers like `x-forwarded-for` for rate limiting is insecure and can lead to bypasses, especially for critical endpoints like authentication.
@@ -41,8 +51,3 @@
 **Vulnerability:** An unauthenticated file upload vulnerability existed in `src/app/api/upload/route.ts`. The endpoint allowed anyone to upload files to the `public/uploads` directory without verifying if they were authenticated or authorized to do so.
 **Learning:** Publicly accessible upload endpoints, even if intended for internal use, can be abused by attackers to store unauthorized content, potentially leading to storage exhaustion or hosting malicious files if not properly restricted.
 **Prevention:** Always enforce authentication and authorization checks on all API endpoints that accept file uploads or modify system state. Validate the session token (e.g., `nutrisnap_session_id`) against the database before processing the request.
-
-## 2024-07-03 - [Server Action IDOR]
-**Vulnerability:** Next.js Server Actions act as public endpoints and do not implicitly inherit secure client context. The Server Actions in `src/app/settings/actions.ts` and `src/app/hydration/actions.ts` were taking `userId` or resource IDs as arguments without verifying if the requested resource belonged to the currently authenticated user (via `nutrisnap_session_id` cookie). This allowed Insecure Direct Object Reference (IDOR) attacks, meaning a user could modify or view other users' settings, reminders, and hydration logs by manipulating the arguments.
-**Learning:** Next.js Server Actions are public RPC endpoints, not secure server-only functions. Client-side authentication checks or routing do not protect server actions.
-**Prevention:** Always implement explicit authorization checks (e.g., verifying a secure session cookie against the requested resource's owner) at the beginning of *every* exported Server Action. Do not trust arguments provided to a server action.

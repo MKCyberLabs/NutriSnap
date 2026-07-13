@@ -52,7 +52,8 @@ export async function POST(request: NextRequest) {
     const fileExtension = path.extname(file.name).toLowerCase() || '.png';
 
     // Security Enhancement: Validate file extension
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg', '.gif'];
+    // Excluded '.svg' to prevent Stored XSS vulnerabilities
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
     if (!allowedExtensions.includes(fileExtension)) {
       return NextResponse.json({ error: 'Unsupported file type. Only images are allowed.' }, { status: 400 });
     }
