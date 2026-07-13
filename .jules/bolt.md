@@ -26,9 +26,9 @@
 **Learning:** Wrapping a complex component in `React.memo` is ineffective if its callback props are constantly recreated. In `DashboardPage`, `handleMealCardComplete` was un-memoized and depended on the `logs` state, causing it (and `MealCategoryCard`) to re-render on every log update. Furthermore, using inline arrow functions like `onAnalysisComplete={(data, ...) => handleMealCardComplete(...)}` destroys memoization.
 **Action:** Use `useCallback` for functions passed to memoized components, avoid depending on arrays that change frequently by using functional state updates (e.g., `setLogs(prev => [...prev])`), and never pass inline arrow functions as props to memoized child components.
 
-## 2025-02-28 - Avoid redundant Date calculations inside loops
-**Learning:** Found an instance in `src/app/hydration/page.tsx` where `startOfDay(weekStart)` was being repeatedly calculated for every item in `weeklyLogs` array within an iteration loop, causing redundant O(N) date recalculations which incurs unnecessary CPU overhead during renders.
-**Action:** Always compute stable dates or expensive object derivations based on dependencies *outside* the inner loop and reuse the cached variable inside.
+## 2025-02-28 - [Avoid invariant date computations inside loops]
+**Learning:** Found `startOfDay(weekStart)` inside a `weeklyLogs.forEach` loop in `src/app/hydration/page.tsx`'s `weeklyStats` memoization block. Since `weekStart` is constant for the duration of the loop, parsing it inside causes redundant object allocations and redundant date math on every iteration. This leads to an O(N) performance cost where O(1) was possible.
+**Action:** Hoist invariant computations (like standardising a boundary date) out of loop bodies. Calculate it once before iterating over lists, and reference the stored variable inside the loop.
 
 ## 2024-03-12 - [Avoid Inline Array Allocations for Metrics in JSX]
 **Learning:** Using `Math.max(...array.map())` and `array.filter().length` directly in the JSX render function causes unnecessary O(N) memory allocations and redundant iterations on every re-render.
