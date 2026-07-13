@@ -175,13 +175,16 @@ export default function HydrationPage() {
     const dayTotals = new Array(7).fill(0);
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     
+    // ⚡ Bolt Optimization: Cache redundant Date calculation outside the loop to avoid O(N) recalculations
+    const startOfWeekDate = startOfDay(weekStart);
+
     weeklyLogs.forEach(log => {
       if (log.drinkType === 'Water') totalWater += log.amountMl;
       else totalOther += log.amountMl;
       
       const logDate = new Date(log.createdAt);
       // get day index relative to weekStart
-      const dayIndex = differenceInDays(startOfDay(logDate), startOfDay(weekStart));
+      const dayIndex = differenceInDays(startOfDay(logDate), startOfWeekDate);
       if (dayIndex >= 0 && dayIndex < 7) {
         dayTotals[dayIndex] += log.amountMl;
       }
