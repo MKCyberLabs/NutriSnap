@@ -210,6 +210,7 @@ export default function AdminPage() {
             <div className="relative w-full md:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
+                aria-label="Search directory"
                 placeholder="Search directory..." 
                 className="pl-10 rounded-2xl bg-white/20 border-white/40 focus:bg-white" 
                 value={searchTerm}

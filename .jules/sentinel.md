@@ -36,3 +36,8 @@
 **Vulnerability:** A critical vulnerability existed in `src/app/api/auth/login/route.ts` where the rate limiter's identifier was constructed using the highly spoofable `x-forwarded-for` header. This allowed an attacker to bypass rate limiting for a single account by changing their spoofed IP address, making the application susceptible to unlimited brute-force password guessing attacks.
 **Learning:** Relying on easily spoofable HTTP headers like `x-forwarded-for` for rate limiting is insecure and can lead to bypasses, especially for critical endpoints like authentication.
 **Prevention:** When rate limiting authentication endpoints, use reliable and non-spoofable identifiers, such as the target user's email address (normalized, e.g., using `toLowerCase()`), to ensure brute-force protection is enforced consistently against the account being targeted.
+
+## 2026-07-12 - [Unauthenticated File Upload Vulnerability]
+**Vulnerability:** An unauthenticated file upload vulnerability existed in `src/app/api/upload/route.ts`. The endpoint allowed anyone to upload files to the `public/uploads` directory without verifying if they were authenticated or authorized to do so.
+**Learning:** Publicly accessible upload endpoints, even if intended for internal use, can be abused by attackers to store unauthorized content, potentially leading to storage exhaustion or hosting malicious files if not properly restricted.
+**Prevention:** Always enforce authentication and authorization checks on all API endpoints that accept file uploads or modify system state. Validate the session token (e.g., `nutrisnap_session_id`) against the database before processing the request.

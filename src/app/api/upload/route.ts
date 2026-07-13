@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { prisma } from '@/lib/prisma';
 
 /**
  * API Route to handle local file uploads for meal photos.
@@ -9,6 +10,21 @@ import path from 'path';
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🛡️ Sentinel: Enforce Authentication for File Uploads
+    const sessionId = request.cookies.get('nutrisnap_session_id')?.value;
+    if (!sessionId) {
+      return NextResponse.json({ error: 'Unauthorized: Missing session token' }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: sessionId },
+      select: { id: true }, // Only fetch ID to minimize payload
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid session token' }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
