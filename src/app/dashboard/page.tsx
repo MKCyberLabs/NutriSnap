@@ -1501,12 +1501,6 @@ export default function DashboardPage() {
                 </Card>
               </motion.div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-<<<<<<< HEAD
-                {[ 
-                  { icon: Flame, val: weeklyAvgCalories, label: 'Avg Kcal' }, 
-                  { icon: BarChart3, val: weeklyTotals.peakCalories, label: 'Peak Day' },
-                  { icon: History, val: weeklyTotals.trackedDays, label: 'Tracked Days' }
-=======
                 {[
                   { icon: Flame, val: weeklyAvgCalories, label: "Avg Kcal" },
                   {
@@ -1519,7 +1513,6 @@ export default function DashboardPage() {
                     val: weeklyTotals.trackedDays,
                     label: "Tracked Days",
                   },
->>>>>>> main
                 ].map((s, i) => (
                   <motion.div
                     key={i}
