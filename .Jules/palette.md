@@ -21,6 +21,10 @@
 **Learning:** Found an `input` element with `type="range"` in `src/app/hydration/page.tsx` for custom hydration amounts that was lacking an explicit `aria-label`. Since it's a standalone input used as a slider, it's critical for screen readers to have a descriptive `aria-label` to announce its purpose.
 **Action:** Always verify that native `<input>` elements (especially range sliders and checkboxes) without explicit visual `<label>` tags have an appropriate `aria-label` attached for screen reader accessibility.
 
+## 2024-05-16 - [Hydration Hub]
+**Learning:** Added `aria-label` attributes to the quick-add buttons and custom drink type selection buttons. Improved accessibility for screen readers.
+**Action:** Ensure icon-only buttons always have `aria-label` attributes for accessibility.
+
 ## 2024-05-24 - [ARIA Labels for Quick-Add Buttons]
 **Learning:** Found multiple instances where interactive elements (e.g. quick hydration buttons) used visual labels inside `<span>` tags (like "250 ml") alongside icons, but lacked explicit descriptive ARIA labels on the `<button>` itself, which would provide better context (like "Add 250 ml") for screen readers instead of just reading the literal text.
 **Action:** Always add descriptive `aria-label` attributes to action buttons that rely on icons + brief literal text, ensuring screen readers announce the intended action, not just the text value.

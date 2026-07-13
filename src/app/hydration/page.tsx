@@ -403,28 +403,28 @@ export default function HydrationPage() {
                 <>
                   {/* Quick Add Grid */}
                   <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <button aria-label="Add 250 ml" onClick={() => handleQuickAdd(250)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
+                    <button aria-label="Quick add 250 milliliters of water" onClick={() => handleQuickAdd(250)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
                         <GlassWater className="h-7 w-7" />
                       </div>
                       <span className="font-bold text-slate-700">250 ml</span>
                     </button>
                     
-                    <button aria-label="Add 500 ml" onClick={() => handleQuickAdd(500)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
+                    <button aria-label="Quick add 500 milliliters of water" onClick={() => handleQuickAdd(500)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
                         <Droplets className="h-7 w-7" />
                       </div>
                       <span className="font-bold text-slate-700">500 ml</span>
                     </button>
                     
-                    <button aria-label="Add 750 ml" onClick={() => handleQuickAdd(750)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
+                    <button aria-label="Quick add 750 milliliters of water" onClick={() => handleQuickAdd(750)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
                         <Wine className="h-7 w-7" />
                       </div>
                       <span className="font-bold text-slate-700">750 ml</span>
                     </button>
                     
-                    <button aria-label="Add custom amount" onClick={() => openCustomModal()} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 border-dashed border-2 border-sky-200 bg-sky-50/30">
+                    <button aria-label="Log custom drink entry" onClick={() => openCustomModal()} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 border-dashed border-2 border-sky-200 bg-sky-50/30">
                       <div className="w-14 h-14 rounded-2xl bg-white border border-sky-200 flex items-center justify-center text-sky-500 group-hover:bg-sky-50 transition-colors">
                         <Plus className="h-7 w-7" />
                       </div>
@@ -662,6 +662,7 @@ export default function HydrationPage() {
                 {DRINK_TYPES.map((dt) => (
                   <button
                     key={dt.type}
+                    aria-label={`Select ${dt.type} drink type`}
                     onClick={() => setCustomType(dt.type as DrinkType)}
                     className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${customType === dt.type ? 'bg-sky-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                   >
@@ -689,6 +690,7 @@ export default function HydrationPage() {
                   onChange={(e) => setCustomMl(Number(e.target.value))}
                   aria-label="Custom hydration amount in milliliters"
                   className="w-full accent-sky-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" 
+                  aria-label="Custom drink amount in milliliters"
                 />
                 <div className="flex justify-between mt-2 text-xs font-bold text-slate-400">
                   <span>50 ml</span>
