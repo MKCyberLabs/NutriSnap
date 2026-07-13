@@ -19,3 +19,11 @@
 ## 2024-03-24 - [Missing ARIA Labels on Unlabelled Inputs]
 **Learning:** Found instances where input fields (like the number input for item grams or the text input for new items in popovers, and the custom range slider) lacked explicit `<label>` elements or `aria-label` attributes. This leaves screen reader users without context of what the input is for.
 **Action:** When creating form inputs that do not have a corresponding visual `<label>`, always use the `aria-label` attribute to explicitly describe the input's purpose and expected value.
+
+## 2024-03-05 - [Range Input Accessibility]
+**Learning:** Found an `input` element with `type="range"` in `src/app/hydration/page.tsx` for custom hydration amounts that was lacking an explicit `aria-label`. Since it's a standalone input used as a slider, it's critical for screen readers to have a descriptive `aria-label` to announce its purpose.
+**Action:** Always verify that native `<input>` elements (especially range sliders and checkboxes) without explicit visual `<label>` tags have an appropriate `aria-label` attached for screen reader accessibility.
+
+## 2024-05-24 - [ARIA Labels for Quick-Add Buttons]
+**Learning:** Found multiple instances where interactive elements (e.g. quick hydration buttons) used visual labels inside `<span>` tags (like "250 ml") alongside icons, but lacked explicit descriptive ARIA labels on the `<button>` itself, which would provide better context (like "Add 250 ml") for screen readers instead of just reading the literal text.
+**Action:** Always add descriptive `aria-label` attributes to action buttons that rely on icons + brief literal text, ensuring screen readers announce the intended action, not just the text value.
