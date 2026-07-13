@@ -13,15 +13,18 @@ export async function POST(request: NextRequest) {
     // 🛡️ Sentinel: Enforce Authentication for File Uploads
     const sessionId = request.cookies.get('nutrisnap_session_id')?.value;
     if (!sessionId) {
+      console.warn('Unauthorized upload attempt');
       return NextResponse.json({ error: 'Unauthorized: Missing session token' }, { status: 401 });
     }
 
+    // Validate session against database to ensure it's a real user
     const user = await prisma.user.findUnique({
       where: { id: sessionId },
       select: { id: true }, // Only fetch ID to minimize payload
     });
 
     if (!user) {
+      console.warn('Invalid session upload attempt');
       return NextResponse.json({ error: 'Unauthorized: Invalid session token' }, { status: 401 });
     }
 
