@@ -4,8 +4,34 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { TZDate } from '@date-fns/tz';
 import { startOfDay, endOfDay } from 'date-fns';
+import { cookies } from 'next/headers';
+
+async function verifyAuth(userId: string) {
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
+  if (!sessionId || sessionId !== userId) {
+    throw new Error('Unauthorized');
+  }
+}
+
+async function verifyLogOwner(logId: string) {
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
+  if (!sessionId) throw new Error('Unauthorized');
+
+  const log = await prisma.hydrationLog.findUnique({
+    where: { id: logId },
+    select: { userId: true }
+  });
+
+  if (!log || log.userId !== sessionId) {
+    throw new Error('Unauthorized');
+  }
+}
+
 
 export async function getHydrationLogs(userId: string, date: Date) {
+  await verifyAuth(userId);
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
   const tz = user?.timezone || 'UTC';
   
@@ -34,6 +60,7 @@ export async function getHydrationLogs(userId: string, date: Date) {
 }
 
 export async function getWeeklyHydrationData(userId: string, startDate: Date, endDate: Date) {
+  await verifyAuth(userId);
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
   const tz = user?.timezone || 'UTC';
 
@@ -62,6 +89,7 @@ export async function getWeeklyHydrationData(userId: string, startDate: Date, en
 }
 
 export async function logHydration(userId: string, amountMl: number, drinkType: string = 'Water') {
+  await verifyAuth(userId);
   await prisma.hydrationLog.create({
     data: {
       userId,
@@ -75,6 +103,7 @@ export async function logHydration(userId: string, amountMl: number, drinkType: 
 
 export async function deleteHydrationLog(logId: string) {
   try {
+    await verifyLogOwner(logId);
     await prisma.hydrationLog.delete({ where: { id: logId } });
     revalidatePath('/hydration');
     return { success: true };
@@ -86,6 +115,7 @@ export async function deleteHydrationLog(logId: string) {
 
 export async function updateHydrationLog(logId: string, amountMl: number, drinkType: string) {
   try {
+    await verifyLogOwner(logId);
     await prisma.hydrationLog.update({
       where: { id: logId },
       data: { amountMl, drinkType }
@@ -99,6 +129,7 @@ export async function updateHydrationLog(logId: string, amountMl: number, drinkT
 }
 
 export async function getUserDailyWaterGoal(userId: string): Promise<number> {
+  await verifyAuth(userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { dailyWaterGoal: true }
@@ -107,6 +138,7 @@ export async function getUserDailyWaterGoal(userId: string): Promise<number> {
 }
 
 export async function saveUserDailyWaterGoal(userId: string, goal: number) {
+  await verifyAuth(userId);
   await prisma.user.update({
     where: { id: userId },
     data: { dailyWaterGoal: goal }
