@@ -29,3 +29,7 @@
 ## 2025-02-28 - Avoid redundant Date calculations inside loops
 **Learning:** Found an instance in `src/app/hydration/page.tsx` where `startOfDay(weekStart)` was being repeatedly calculated for every item in `weeklyLogs` array within an iteration loop, causing redundant O(N) date recalculations which incurs unnecessary CPU overhead during renders.
 **Action:** Always compute stable dates or expensive object derivations based on dependencies *outside* the inner loop and reuse the cached variable inside.
+
+## 2024-03-12 - [Avoid Inline Array Allocations for Metrics in JSX]
+**Learning:** Using `Math.max(...array.map())` and `array.filter().length` directly in the JSX render function causes unnecessary O(N) memory allocations and redundant iterations on every re-render.
+**Action:** Consolidate calculation of derived metrics (like peak values or conditional counts) into an existing parent `useMemo` block that already iterates over the array, calculating them in a single O(N) pass.
