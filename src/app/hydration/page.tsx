@@ -258,7 +258,7 @@ export default function HydrationPage() {
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     
     // ⚡ Bolt Optimization: Calculate start of week date once outside the loop
-    // to avoid allocating Date objects and calling startOfDay thousands of times
+    // to avoid allocating Date objects, O(N) recalculations, and calling startOfDay thousands of times
     const startOfWeekDate = startOfDay(weekStart);
 
     weeklyLogs.forEach(log => {

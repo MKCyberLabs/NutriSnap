@@ -28,3 +28,7 @@
 ## 2025-02-28 - [Avoid Page-Wide Re-renders on Slider Drag]
 **Learning:** When inputs inside heavy components (like a custom hydration slider in `HydrationPage`) hold their state (e.g. `customMl`) in the massive parent component, rapid events like dragging the slider (which triggers `onChange` hundreds of times) cause the entire page to re-render, including Recharts, Framer Motion elements, and complex SVG animations. This leads to significant input lag, CPU spikes, and a poor user experience.
 **Action:** Always localize form control state (like slider values or text inputs) into standalone child components (e.g., `CustomDrinkDialog`) to isolate the state updates. Pass the finalized state back to the parent only on submit (`onSave`).
+
+## 2025-02-28 - Avoid redundant Date calculations inside loops
+**Learning:** Found an instance in `src/app/hydration/page.tsx` where `startOfDay(weekStart)` was being repeatedly calculated for every item in `weeklyLogs` array within an iteration loop, causing redundant O(N) date recalculations which incurs unnecessary CPU overhead during renders.
+**Action:** Always compute stable dates or expensive object derivations based on dependencies *outside* the inner loop and reuse the cached variable inside.
