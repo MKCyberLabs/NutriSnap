@@ -148,7 +148,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
           <div className="flex items-center gap-2">
             <div className="flex-1 grid grid-cols-2 gap-2">
               <Select value={hour12} onValueChange={setHour12}>
-                <SelectTrigger className="border-primary/20 focus:ring-primary h-10 rounded-xl bg-background">
+                <SelectTrigger aria-label="Hour" className="border-primary/20 focus:ring-primary h-10 rounded-xl bg-background">
                   <SelectValue placeholder="Hour" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-primary/10">
@@ -161,7 +161,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
               </Select>
 
               <Select value={minutes} onValueChange={setMinutes}>
-                <SelectTrigger className="border-primary/20 focus:ring-primary h-10 rounded-xl bg-background">
+                <SelectTrigger aria-label="Minute" className="border-primary/20 focus:ring-primary h-10 rounded-xl bg-background">
                   <SelectValue placeholder="Min" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-primary/10 max-h-[300px]">

@@ -31,3 +31,7 @@
 ## 2024-05-24 - [ARIA Labels for Quick-Add Buttons]
 **Learning:** Found multiple instances where interactive elements (e.g. quick hydration buttons) used visual labels inside `<span>` tags (like "250 ml") alongside icons, but lacked explicit descriptive ARIA labels on the `<button>` itself, which would provide better context (like "Add 250 ml") for screen readers instead of just reading the literal text.
 **Action:** Always add descriptive `aria-label` attributes to action buttons that rely on icons + brief literal text, ensuring screen readers announce the intended action, not just the text value.
+
+## 2024-08-14 - [Missing ARIA Labels on Select Triggers]
+**Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) lacked explicit `aria-label` attributes. Even if they have a placeholder, screen readers might not announce their purpose clearly without an explicit label.
+**Action:** When creating custom select dropdowns, especially for picking values like time (hours/minutes), always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users.

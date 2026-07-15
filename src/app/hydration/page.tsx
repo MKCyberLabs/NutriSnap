@@ -96,6 +96,7 @@ function CustomDrinkDialog({
 
             <div className="px-4">
               <input
+                aria-label="Custom hydration amount in milliliters"
                 type="range"
                 min="50"
                 max="2000"
