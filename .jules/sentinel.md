@@ -56,3 +56,8 @@
 **Vulnerability:** A critical vulnerability existed in `src/app/api/analyze-meal/route.ts` where the `POST` endpoint handled AI image processing logic without checking if the requester was authenticated. The endpoint exposed expensive and computationally heavy Genkit AI flows (`mealNutritionalAnalysis`) to unauthenticated users, leading to possible Denial-of-Service and bill exhaustion by malicious actors.
 **Learning:** Next.js API Routes do not inherit the calling client's authorization context. Just because an API is only called from within the client's logged-in dashboard does not mean the API itself is secure from outside, direct access.
 **Prevention:** Always explicitly check authentication state (e.g., verifying a valid `nutrisnap_session_id` session cookie against the database) at the very beginning of *every* API route handler before executing any sensitive logic or calling external/expensive services.
+
+## 2024-08-01 - [Information Leakage via 500 Error Responses]
+**Vulnerability:** A medium-priority information leakage vulnerability existed in `src/app/api/analyze-meal/route.ts` where internal server errors were passing the raw `error.message` detail directly to the client in the JSON response payload.
+**Learning:** Exposing raw error strings from backend components (such as failed API requests, missing tokens, or trace exceptions) to the frontend can provide attackers with sensitive context about the internal environment or third-party service dependencies.
+**Prevention:** Catch statements on API endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Internal Server Error") to the client.

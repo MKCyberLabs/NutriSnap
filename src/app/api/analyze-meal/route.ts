@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     // Log the specific error to the server console for debugging
     console.error('Health Matrix API Logic Failure:', error);
 
-    // Surface the actual error message to the frontend for better debugging (e.g., "API Key not found")
-    return NextResponse.json({ error: 'Health Matrix Analysis Failed', details: error.message }, { status: 500 });
+    // Prevent information leakage by removing details from error response
+    return NextResponse.json({ error: 'Health Matrix Analysis Failed' }, { status: 500 });
   }
 }
