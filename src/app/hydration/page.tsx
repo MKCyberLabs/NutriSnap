@@ -77,8 +77,10 @@ function CustomDrinkDialog({
               {DRINK_TYPES.map((dt) => (
                 <button
                   key={dt.type}
+                  type="button"
+                  aria-pressed={customType === dt.type}
                   onClick={() => setCustomType(dt.type as DrinkType)}
-                  className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${customType === dt.type ? 'bg-sky-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${customType === dt.type ? 'bg-sky-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                 >
                   <span className="text-2xl">{dt.emoji}</span>
                   <span className="text-xs font-semibold">{dt.type}</span>
