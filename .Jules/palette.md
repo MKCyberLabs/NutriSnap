@@ -35,3 +35,7 @@
 ## 2024-08-14 - [Missing ARIA Labels on Select Triggers]
 **Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) lacked explicit `aria-label` attributes. Even if they have a placeholder, screen readers might not announce their purpose clearly without an explicit label.
 **Action:** When creating custom select dropdowns, especially for picking values like time (hours/minutes), always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users.
+
+## 2024-11-20 - [Missing ARIA Labels on Select Triggers in Forms]
+**Learning:** Discovered unlabelled `SelectTrigger` components in custom forms (like those in user admin settings, onboarding metrics, and hydration reminder settings). While they may have placeholders, without an explicit `aria-label`, screen readers may not announce the field's purpose clearly, leading to accessibility issues in forms.
+**Action:** When building forms using custom select dropdowns (e.g. Shadcn UI `Select`), always add an `aria-label` to the `SelectTrigger` component to explicitly communicate the field's purpose to assistive technologies.
