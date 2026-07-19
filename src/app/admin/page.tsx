@@ -166,7 +166,7 @@ export default function AdminPage() {
                 <div className="space-y-2">
                   <Label>System Role</Label>
                   <Select value={currentUser.role || 'USER'} onValueChange={val => setCurrentUser({...currentUser, role: val as UserRole})}>
-                    <SelectTrigger className="rounded-xl">
+                    <SelectTrigger aria-label="System role" className="rounded-xl">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
@@ -327,7 +327,7 @@ export default function AdminPage() {
               <div className="space-y-2">
                 <Label>Identity Role</Label>
                 <Select value={currentUser.role || 'USER'} onValueChange={val => setCurrentUser({...currentUser, role: val as UserRole})}>
-                  <SelectTrigger className="rounded-xl">
+                  <SelectTrigger aria-label="Identity role" className="rounded-xl">
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
