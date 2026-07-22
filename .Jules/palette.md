@@ -35,3 +35,6 @@
 ## 2024-08-14 - [Missing ARIA Labels on Select Triggers]
 **Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) lacked explicit `aria-label` attributes. Even if they have a placeholder, screen readers might not announce their purpose clearly without an explicit label.
 **Action:** When creating custom select dropdowns, especially for picking values like time (hours/minutes), always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users.
+## 2024-05-18 - [Missing Accessibility Attributes on Custom Radio Buttons]
+**Learning:** Found custom interactive elements (e.g. custom drink type selection buttons in `src/app/hydration/page.tsx`) being used as a single-select radio group but lacking essential accessibility attributes such as `aria-pressed`, `aria-label`, and `type="button"`. Also lacked `focus-visible` states.
+**Action:** Always ensure that elements acting as custom toggles or radio options have `type="button"`, proper `aria-pressed` states, descriptive `aria-label`s, and explicit keyboard focus styles (`focus-visible`). Additionally, add `aria-hidden="true"` to decorative elements like emojis within these interactive components.
