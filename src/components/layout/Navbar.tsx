@@ -49,15 +49,11 @@ export function Navbar() {
         {/* Center: NutriSnap / Hydration Hub Toggle */}
         {showToggle && (
           <div className="hidden md:flex bg-white rounded-full p-1 shadow-sm border border-gray-100">
-            <Link href="/dashboard">
-              <button className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}>
-                NutriSnap
-              </button>
+            <Link href="/dashboard" className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`} aria-current={!isHydration ? 'page' : undefined}>
+              NutriSnap
             </Link>
-            <Link href="/hydration">
-              <button className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}>
-                Hydration Hub
-              </button>
+            <Link href="/hydration" className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`} aria-current={isHydration ? 'page' : undefined}>
+              Hydration Hub
             </Link>
           </div>
         )}
