@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
@@ -120,10 +120,18 @@ export default function AdminPage() {
     }
   };
 
-  const filteredUsers = managedUsers.filter(u => 
-    u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // ⚡ Bolt Optimization: Memoize the filtered user list to prevent O(N) array filtering
+  // on every single re-render of this heavy admin page.
+  // Additionally, hoist the invariant `searchTerm.toLowerCase()` outside of the filter
+  // loop to reduce redundant string allocations from O(2N) to O(1).
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return managedUsers;
+    const lowerTerm = searchTerm.toLowerCase();
+    return managedUsers.filter(u =>
+      u.name.toLowerCase().includes(lowerTerm) ||
+      u.email.toLowerCase().includes(lowerTerm)
+    );
+  }, [managedUsers, searchTerm]);
 
   return (
     <div className="min-h-svh bg-slate-50 dark:bg-slate-950 font-sans">

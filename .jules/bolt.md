@@ -36,3 +36,7 @@
 ## 2024-03-12 - [Avoid Inline Array Allocations for Metrics in JSX]
 **Learning:** Using `Math.max(...array.map())` and `array.filter().length` directly in the JSX render function causes unnecessary O(N) memory allocations and redundant iterations on every re-render.
 **Action:** Consolidate calculation of derived metrics (like peak values or conditional counts) into an existing parent `useMemo` block that already iterates over the array, calculating them in a single O(N) pass.
+
+## 2025-03-01 - [Avoid Unmemoized Filter Loops & Invariant String Operations in Render]
+**Learning:** Found an unmemoized `.filter()` loop in `src/app/admin/page.tsx` that ran on every render. Because the search input `searchTerm` is held at the parent page level, every keystroke triggers a full re-render, executing the filter array operation O(N) times and executing `searchTerm.toLowerCase()` 2*N times inside the loop body.
+**Action:** Always wrap expensive list filtering logic in `useMemo`. Furthermore, hoist invariant operations (like standardizing the `searchTerm` casing) outside the loop body so it executes O(1) times instead of O(N) times per calculation.
