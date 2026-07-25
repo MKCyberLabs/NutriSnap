@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { getAuthSession } from '@/lib/auth-mock';
@@ -120,10 +120,15 @@ export default function AdminPage() {
     }
   };
 
-  const filteredUsers = managedUsers.filter(u => 
-    u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // ⚡ Bolt Optimization: Memoize filteredUsers and hoist lowercase conversion
+  // Prevents O(N) operations on every keystroke by not recalculating unless users or search term changes.
+  const filteredUsers = useMemo(() => {
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return managedUsers.filter(u =>
+      u.name.toLowerCase().includes(lowerSearchTerm) ||
+      u.email.toLowerCase().includes(lowerSearchTerm)
+    );
+  }, [managedUsers, searchTerm]);
 
   return (
     <div className="min-h-svh bg-slate-50 dark:bg-slate-950 font-sans">
