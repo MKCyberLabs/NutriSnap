@@ -35,3 +35,7 @@
 ## 2024-08-14 - [Missing ARIA Labels on Select Triggers]
 **Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) lacked explicit `aria-label` attributes. Even if they have a placeholder, screen readers might not announce their purpose clearly without an explicit label.
 **Action:** When creating custom select dropdowns, especially for picking values like time (hours/minutes), always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users.
+
+## 2024-11-20 - [Invalid Nested Button Links]
+**Learning:** Found instances where `<button>` elements were directly nested inside Next.js `<Link>` components (e.g. toggle navigation in `Navbar.tsx`). This generates invalid HTML, can confuse screen readers, and is generally bad practice.
+**Action:** When styling Next.js navigation links to look like buttons, always apply the styles (including `focus-visible` classes) directly to the `<Link>` element instead of wrapping a `<button>`. Add `aria-current="page"` to semantically indicate the active view.
