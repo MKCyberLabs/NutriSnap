@@ -36,3 +36,7 @@
 ## 2024-03-12 - [Avoid Inline Array Allocations for Metrics in JSX]
 **Learning:** Using `Math.max(...array.map())` and `array.filter().length` directly in the JSX render function causes unnecessary O(N) memory allocations and redundant iterations on every re-render.
 **Action:** Consolidate calculation of derived metrics (like peak values or conditional counts) into an existing parent `useMemo` block that already iterates over the array, calculating them in a single O(N) pass.
+
+## 2024-05-24 - [Avoid Unmemoized Filter Loops in Render]
+**Learning:** In Next.js App Router applications, placing array operations like `.filter()` with string manipulation (e.g., `.toLowerCase()`) directly inside the component's render body can cause O(N) recalculations on every unrelated state update (like typing in a search box). This is a common performance anti-pattern.
+**Action:** Always wrap array filtering derived from state inside a `useMemo` hook, and hoist invariant operations (like converting a search term to lowercase) outside the filter loop callback to avoid redundant computations.
