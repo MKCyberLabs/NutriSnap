@@ -36,3 +36,6 @@
 ## 2024-03-12 - [Avoid Inline Array Allocations for Metrics in JSX]
 **Learning:** Using `Math.max(...array.map())` and `array.filter().length` directly in the JSX render function causes unnecessary O(N) memory allocations and redundant iterations on every re-render.
 **Action:** Consolidate calculation of derived metrics (like peak values or conditional counts) into an existing parent `useMemo` block that already iterates over the array, calculating them in a single O(N) pass.
+## 2024-05-24 - [Avoid O(N) String Operations in React Array Filters]
+**Learning:** Found an anti-pattern in `src/app/admin/page.tsx` where `.toLowerCase()` was being called on `searchTerm` directly inside a `.filter` method loop on a large array in the main render body. This forces the engine to recalculate and allocate new lowercase strings for the invariant `searchTerm` on *every single item iteration* during *every single render*.
+**Action:** When filtering arrays in React components, always wrap the filtering logic in `useMemo`. Critically, hoist invariant operations (like string lowercasing or complex regex generation) *outside* of the filter loop but *inside* the `useMemo` callback so they are only computed once per dependency change rather than O(N) times per render.
