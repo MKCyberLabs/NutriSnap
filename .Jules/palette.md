@@ -35,3 +35,7 @@
 ## 2024-08-14 - [Missing ARIA Labels on Select Triggers]
 **Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) lacked explicit `aria-label` attributes. Even if they have a placeholder, screen readers might not announce their purpose clearly without an explicit label.
 **Action:** When creating custom select dropdowns, especially for picking values like time (hours/minutes), always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users.
+
+## 2024-07-26 - [Nesting Buttons inside Links]
+**Learning:** Found instances where `<button>` elements were directly nested inside `<Link>` components (e.g., in `Navbar.tsx`). This generates invalid HTML because interactive elements should not be nested, and it negatively impacts accessibility and standard keyboard navigation. Furthermore, active links often lacked `aria-current="page"` and `focus-visible` styles.
+**Action:** Always apply button-like styles directly to the `<Link>` element instead of nesting a `<button>` inside. When modifying navigation links, ensure they use `aria-current="page"` to semantically indicate the active view and include explicit `focus-visible` classes (like `focus-visible:outline-none focus-visible:ring-2`) to ensure keyboard accessibility. When wrapping Shadcn UI components (like `<Button>`) around a `<Link>`, always use the `asChild` prop on the component.
