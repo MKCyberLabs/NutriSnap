@@ -35,3 +35,7 @@
 ## 2024-08-14 - [Missing ARIA Labels on Select Triggers]
 **Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) lacked explicit `aria-label` attributes. Even if they have a placeholder, screen readers might not announce their purpose clearly without an explicit label.
 **Action:** When creating custom select dropdowns, especially for picking values like time (hours/minutes), always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users.
+
+## 2024-09-02 - [Missing ARIA Labels on More Select Triggers]
+**Learning:** Found more instances across `SettingsModal.tsx`, `admin/page.tsx`, and `onboarding/page.tsx` where custom dropdown triggers (`SelectTrigger`) lacked explicit `aria-label` attributes for selecting intervals, roles, and gender. Although they have visual labels nearby, explicitly linking them or using `aria-label` provides better context.
+**Action:** Consistently ensure that all `SelectTrigger` components, regardless of the view, have an `aria-label` attribute to describe their specific purpose for screen reader users.
