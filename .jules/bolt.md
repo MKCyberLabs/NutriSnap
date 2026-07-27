@@ -36,3 +36,7 @@
 ## 2024-03-12 - [Avoid Inline Array Allocations for Metrics in JSX]
 **Learning:** Using `Math.max(...array.map())` and `array.filter().length` directly in the JSX render function causes unnecessary O(N) memory allocations and redundant iterations on every re-render.
 **Action:** Consolidate calculation of derived metrics (like peak values or conditional counts) into an existing parent `useMemo` block that already iterates over the array, calculating them in a single O(N) pass.
+
+## 2023-10-27 - [Avoid redundant allocations in string searches]
+**Learning:** Found string filters repeatedly allocating new strings inside render loops for long arrays. Calling `searchTerm.toLowerCase()` inside a `.filter` block over an array runs O(N) times and allocates N new strings per re-render, creating needless GC pressure and high CPU load for large lists.
+**Action:** Extract the `.toLowerCase()` call outside the loop to calculate once, and memoize the overall filter with `useMemo` so it recalculates only when inputs change.
