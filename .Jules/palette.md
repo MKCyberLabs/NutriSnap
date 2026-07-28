@@ -35,3 +35,7 @@
 ## 2024-08-14 - [Missing ARIA Labels on Select Triggers]
 **Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) lacked explicit `aria-label` attributes. Even if they have a placeholder, screen readers might not announce their purpose clearly without an explicit label.
 **Action:** When creating custom select dropdowns, especially for picking values like time (hours/minutes), always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users.
+
+## 2024-11-20 - [Missing ARIA Labels on Select Triggers]
+**Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) used for generic forms lacked explicit `aria-label` attributes. When a visual `<Label>` isn't explicitly linked to the trigger via `htmlFor` and `id`, screen readers might not announce their purpose clearly, even if they have a placeholder.
+**Action:** When creating custom select dropdowns, especially for picking values like roles, intervals, and genders, always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users when explicit linking isn't used.
