@@ -61,3 +61,8 @@
 **Vulnerability:** A medium-priority information leakage vulnerability existed in `src/app/api/analyze-meal/route.ts` where internal server errors were passing the raw `error.message` detail directly to the client in the JSON response payload.
 **Learning:** Exposing raw error strings from backend components (such as failed API requests, missing tokens, or trace exceptions) to the frontend can provide attackers with sensitive context about the internal environment or third-party service dependencies.
 **Prevention:** Catch statements on API endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Internal Server Error") to the client.
+
+## 2024-08-02 - [Information Leakage via Webhook Error Responses]
+**Vulnerability:** A medium-priority information leakage vulnerability existed in `src/app/api/telegram/webhook/route.ts` where internal server errors were passing the raw `err.message` detail directly to the client in the JSON response payload.
+**Learning:** Exposing raw error strings from backend components to the frontend can provide attackers with sensitive context about the internal environment or third-party service dependencies.
+**Prevention:** Catch statements on API endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Internal Server Error") to the client.
