@@ -39,3 +39,6 @@
 ## 2024-11-20 - [Missing ARIA Labels on Select Triggers in Forms]
 **Learning:** Discovered unlabelled `SelectTrigger` components in custom forms (like those in user admin settings, onboarding metrics, and hydration reminder settings). While they may have placeholders, without an explicit `aria-label`, screen readers may not announce the field's purpose clearly, leading to accessibility issues in forms.
 **Action:** When building forms using custom select dropdowns (e.g. Shadcn UI `Select`), always add an `aria-label` to the `SelectTrigger` component to explicitly communicate the field's purpose to assistive technologies.
+## 2024-11-20 - [Missing aria-pressed on Custom Toggle Buttons]
+**Learning:** Found custom button groups for drink type selection in the Hydration Hub that acted like single-select toggles (radio behavior) but lacked `aria-pressed` states and `type="button"`. They also lacked focus-visible states for keyboard accessibility.
+**Action:** When creating custom interactive UI elements used as toggles or single-select groups, always ensure they have `type="button"`, explicit `aria-pressed` attributes matching their active state, and explicit `focus-visible` classes (like `focus-visible:ring-2`) to ensure screen readers and keyboard users can effectively operate them.
