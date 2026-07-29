@@ -554,7 +554,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                         value={String(hydrationSetting.intervalMinutes)}
                                         onValueChange={(val) => setHydrationSetting({ ...hydrationSetting, intervalMinutes: parseInt(val) })}
                                       >
-                                        <SelectTrigger className={glassInputClasses}>
+                                        <SelectTrigger aria-label="Reminder interval" className={glassInputClasses}>
                                           <SelectValue placeholder="Select interval" />
                                         </SelectTrigger>
                                         <SelectContent>
