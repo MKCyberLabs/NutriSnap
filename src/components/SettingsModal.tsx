@@ -79,10 +79,23 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ⚡ Bolt Optimization: Pre-compute lowercased timezones to prevent O(N) string allocation
+  // on every keystroke when searching through 400+ timezones.
+  const timezonesWithLower = useMemo(() => {
+    return allTimezones.map(tz => ({
+      original: tz,
+      lower: tz.toLowerCase()
+    }));
+  }, [allTimezones]);
+
   const filteredTimezones = useMemo(() => {
     if (!tzSearch) return allTimezones;
-    return allTimezones.filter(tz => tz.toLowerCase().includes(tzSearch.toLowerCase()));
-  }, [allTimezones, tzSearch]);
+    // ⚡ Bolt Optimization: Hoist invariant tzSearch.toLowerCase() out of the .filter() loop
+    const term = tzSearch.toLowerCase();
+    return timezonesWithLower
+      .filter(item => item.lower.includes(term))
+      .map(item => item.original);
+  }, [timezonesWithLower, tzSearch, allTimezones]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!initialState) return false;
