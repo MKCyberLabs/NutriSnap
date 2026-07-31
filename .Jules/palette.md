@@ -45,3 +45,7 @@
 ## 2024-11-20 - [Missing aria-pressed on Custom Toggle Buttons]
 **Learning:** Found custom button groups for drink type selection in the Hydration Hub that acted like single-select toggles (radio behavior) but lacked `aria-pressed` states and `type="button"`. They also lacked focus-visible states for keyboard accessibility.
 **Action:** When creating custom interactive UI elements used as toggles or single-select groups, always ensure they have `type="button"`, explicit `aria-pressed` attributes matching their active state, and explicit `focus-visible` classes (like `focus-visible:ring-2`) to ensure screen readers and keyboard users can effectively operate them.
+
+## 2024-05-18 - [Invalid HTML and Accessibility in Links]
+**Learning:** Next.js `<Link>` elements should not wrap `<button>` elements directly inside them, as this generates invalid HTML and breaks semantic a11y tooling. Navigation links should be actual anchor tags (styled like buttons if desired).
+**Action:** Remove nested `<button>` inside `<Link>`. Apply button-like styling and `focus-visible` classes directly to the `<Link>`. Use `aria-current="page"` instead of `aria-pressed` for active navigation states.
