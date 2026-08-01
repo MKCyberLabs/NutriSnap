@@ -45,3 +45,7 @@
 ## 2024-11-20 - [Missing aria-pressed on Custom Toggle Buttons]
 **Learning:** Found custom button groups for drink type selection in the Hydration Hub that acted like single-select toggles (radio behavior) but lacked `aria-pressed` states and `type="button"`. They also lacked focus-visible states for keyboard accessibility.
 **Action:** When creating custom interactive UI elements used as toggles or single-select groups, always ensure they have `type="button"`, explicit `aria-pressed` attributes matching their active state, and explicit `focus-visible` classes (like `focus-visible:ring-2`) to ensure screen readers and keyboard users can effectively operate them.
+
+## 2025-02-18 - [Invalid HTML Next.js Link Nesting]
+**Learning:** Found an accessibility issue pattern specific to this app's components where `<button>` elements were placed inside Next.js `<Link>` elements. This creates invalid HTML and disrupts screen reader focus and navigation.
+**Action:** When creating accessible links that look like buttons (e.g. for navigation toggles), apply button styles directly to the `<Link>` element instead of nesting them. Use `aria-current="page"` to semantically indicate the active tab rather than `aria-pressed`. If using Shadcn UI custom components (like `<Button>`), use the `asChild` prop (e.g. `<Button asChild><Link .../></Button>`) to ensure correct rendering.
