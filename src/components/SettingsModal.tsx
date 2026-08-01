@@ -66,6 +66,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
   const [isTzOpen, setIsTzOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // ⚡ Bolt Optimization: Pre-compute lowercase values for timezones to prevent O(N) allocations on every keystroke
   const allTimezones = useMemo(() => {
     try {
       const tzs = Intl.supportedValuesOf('timeZone');
@@ -73,15 +74,17 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
         tzs.push('Asia/Kolkata');
         tzs.sort();
       }
-      return tzs;
+      return tzs.map(tz => ({ value: tz, lower: tz.toLowerCase() }));
     } catch (e) {
-      return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
+      return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'].map(tz => ({ value: tz, lower: tz.toLowerCase() }));
     }
   }, []);
 
+  // ⚡ Bolt Optimization: Hoist invariant search term lowercasing outside the filter loop
   const filteredTimezones = useMemo(() => {
     if (!tzSearch) return allTimezones;
-    return allTimezones.filter(tz => tz.toLowerCase().includes(tzSearch.toLowerCase()));
+    const term = tzSearch.toLowerCase();
+    return allTimezones.filter(tz => tz.lower.includes(term));
   }, [allTimezones, tzSearch]);
 
   const hasUnsavedChanges = useMemo(() => {
@@ -646,19 +649,19 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                     <div className="p-1">
                                       {filteredTimezones.map((tz) => (
                                         <div
-                                          key={tz}
+                                          key={tz.value}
                                           onClick={() => {
-                                            setTimezone(tz);
+                                            setTimezone(tz.value);
                                             setIsTzOpen(false);
                                           }}
-                                          className={`relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none hover:bg-primary/10 hover:text-primary ${timezone === tz ? "bg-primary/10 font-medium text-primary" : ""}`}
+                                          className={`relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none hover:bg-primary/10 hover:text-primary ${timezone === tz.value ? "bg-primary/10 font-medium text-primary" : ""}`}
                                         >
-                                          {timezone === tz && (
+                                          {timezone === tz.value && (
                                             <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
                                               <Check className="h-4 w-4" />
                                             </span>
                                           )}
-                                          {tz}
+                                          {tz.value}
                                         </div>
                                       ))}
                                     </div>
