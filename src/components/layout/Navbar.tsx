@@ -49,27 +49,31 @@ export function Navbar() {
         {/* Center: NutriSnap / Hydration Hub Toggle */}
         {showToggle && (
           <div className="hidden md:flex bg-white rounded-full p-1 shadow-sm border border-gray-100">
-            <Link href="/dashboard">
-              <button type="button" aria-pressed={!isHydration} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}>
-                NutriSnap
-              </button>
+            <Link
+              href="/dashboard"
+              aria-current={!isHydration ? "page" : undefined}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary inline-flex items-center justify-center ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}
+            >
+              NutriSnap
             </Link>
-            <Link href="/hydration">
-              <button type="button" aria-pressed={isHydration} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}>
-                Hydration Hub
-              </button>
+            <Link
+              href="/hydration"
+              aria-current={isHydration ? "page" : undefined}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 inline-flex items-center justify-center ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}
+            >
+              Hydration Hub
             </Link>
           </div>
         )}
 
         <div className="flex items-center gap-4">
           {user?.role === 'ADMIN' && (
-            <Link href="/admin">
-              <Button variant="ghost" className="hidden md:flex gap-2 rounded-xl">
+            <Button variant="ghost" className="hidden md:flex gap-2 rounded-xl" asChild>
+              <Link href="/admin">
                 <Settings className="h-4 w-4" />
                 Admin
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           )}
           <div className="flex items-center gap-2 rounded-full border border-white/40 bg-white/20 px-4 py-1.5 text-sm font-medium backdrop-blur-sm">
             <UserCircle className="h-4 w-4 text-muted-foreground" />
