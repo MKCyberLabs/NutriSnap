@@ -45,3 +45,7 @@
 ## 2024-11-20 - [Missing aria-pressed on Custom Toggle Buttons]
 **Learning:** Found custom button groups for drink type selection in the Hydration Hub that acted like single-select toggles (radio behavior) but lacked `aria-pressed` states and `type="button"`. They also lacked focus-visible states for keyboard accessibility.
 **Action:** When creating custom interactive UI elements used as toggles or single-select groups, always ensure they have `type="button"`, explicit `aria-pressed` attributes matching their active state, and explicit `focus-visible` classes (like `focus-visible:ring-2`) to ensure screen readers and keyboard users can effectively operate them.
+
+## 2026-08-02 - [Missing ARIA Labels on Form Inputs and Hidden Decorative Icons]
+**Learning:** Discovered that input components on the Login page (e.g. Email and Password) lacked explicit `aria-label` attributes despite having `htmlFor` labels, which is a required pattern for NutriSnap UI components. Additionally, found that decorative icons like spinners (`Loader2`) and arrows within submit buttons were missing `aria-hidden="true"`, causing redundant screen reader announcements.
+**Action:** Always ensure that form inputs have explicit `aria-label` attributes even if a visible label exists nearby. Furthermore, decorative icons or loading spinners within action buttons must include `aria-hidden="true"` to provide a cleaner screen reader experience.
