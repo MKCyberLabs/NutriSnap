@@ -40,3 +40,7 @@
 ## 2025-02-28 - [Hoist Invariant Operations from Render Loops]
 **Learning:** Found `.toLowerCase()` being called on the same `searchTerm` repeatedly inside an unmemoized `.filter()` over `managedUsers` on every render in `src/app/admin/page.tsx`. This causes redundant O(N) string allocations and performance degradation, especially during rapid state updates from user input (like typing in the search bar or in the create/edit forms).
 **Action:** Always wrap derived list computations in `useMemo` and hoist invariant operations (like standardizing a search term string) out of loop bodies. Calculate them once and reference the stored variable inside the loop to avoid O(N) overhead when O(1) is possible.
+
+## 2024-05-18 - [Optimizing String Filtering in Render]
+**Learning:** Placing invariant string operations (`.toLowerCase()`) inside `.filter()` loops within render bodies leads to O(N) operations and unnecessary string allocations on every render/keystroke.
+**Action:** Pre-compute lowercase labels for large static arrays on component mount and hoist the search term `toLowerCase()` operation outside of the loop.
