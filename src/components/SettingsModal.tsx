@@ -67,21 +67,30 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
   const [savingSettings, setSavingSettings] = useState(false);
 
   const allTimezones = useMemo(() => {
+    let tzs: string[] = [];
     try {
-      const tzs = Intl.supportedValuesOf('timeZone');
+      tzs = Intl.supportedValuesOf('timeZone');
       if (!tzs.includes('Asia/Kolkata')) {
         tzs.push('Asia/Kolkata');
         tzs.sort();
       }
-      return tzs;
     } catch (e) {
-      return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
+      tzs = ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
     }
+    // ⚡ Bolt Optimization: Pre-compute lowercase versions once on mount to avoid O(N) string allocations during filter.
+    return tzs.map(tz => ({
+      original: tz,
+      lower: tz.toLowerCase()
+    }));
   }, []);
 
   const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones;
-    return allTimezones.filter(tz => tz.toLowerCase().includes(tzSearch.toLowerCase()));
+    if (!tzSearch) return allTimezones.map(t => t.original);
+    // ⚡ Bolt Optimization: Hoist invariant search term `.toLowerCase()` out of the O(N) filter loop.
+    const term = tzSearch.toLowerCase();
+    return allTimezones
+      .filter(tz => tz.lower.includes(term))
+      .map(tz => tz.original);
   }, [allTimezones, tzSearch]);
 
   const hasUnsavedChanges = useMemo(() => {
