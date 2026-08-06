@@ -66,3 +66,7 @@
 **Vulnerability:** A medium-priority information leakage vulnerability existed in `src/app/api/telegram/webhook/route.ts` where internal server errors were passing the raw `err.message` detail directly to the client in the JSON response payload.
 **Learning:** Exposing raw error strings from backend components to the frontend can provide attackers with sensitive context about the internal environment or third-party service dependencies.
 **Prevention:** Catch statements on API endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Internal Server Error") to the client.
+## 2023-10-27 - [Hardcoded Database Credentials]
+**Vulnerability:** Hardcoded PostgreSQL credentials (`postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap`) were used as a fallback for `DATABASE_URL` in `src/lib/prisma.ts`.
+**Learning:** Developers sometimes use hardcoded credentials as a fallback for local development convenience, which risks exposing sensitive production credentials if the codebase is shared or compromised, or if the local credentials are inadvertently the same as production.
+**Prevention:** Always rely exclusively on `process.env.DATABASE_URL` for the database connection string. Never include hardcoded fallback credentials in the codebase (e.g., in `src/lib/prisma.ts`). Ensure local environments use `.env` files for configuration.
