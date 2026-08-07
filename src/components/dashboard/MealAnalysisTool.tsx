@@ -183,7 +183,8 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                   size="sm"
                   onClick={() => setPeriod(p)}
                   aria-pressed={period === p}
-                  className={`h-8 px-3 rounded-lg text-[10px] font-bold transition-all ${
+                  aria-label={`Set time to ${p}`}
+                  className={`h-8 px-3 rounded-lg text-[10px] font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                     period === p 
                       ? 'bg-primary text-primary-foreground shadow-sm' 
                       : 'text-muted-foreground hover:bg-primary/5 hover:text-primary'
