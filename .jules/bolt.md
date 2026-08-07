@@ -40,3 +40,6 @@
 ## 2025-02-28 - [Hoist Invariant Operations from Render Loops]
 **Learning:** Found `.toLowerCase()` being called on the same `searchTerm` repeatedly inside an unmemoized `.filter()` over `managedUsers` on every render in `src/app/admin/page.tsx`. This causes redundant O(N) string allocations and performance degradation, especially during rapid state updates from user input (like typing in the search bar or in the create/edit forms).
 **Action:** Always wrap derived list computations in `useMemo` and hoist invariant operations (like standardizing a search term string) out of loop bodies. Calculate them once and reference the stored variable inside the loop to avoid O(N) overhead when O(1) is possible.
+## 2026-08-07 - [Avoid structural breakage during optimizations]
+**Learning:** When structurally modifying data for performance optimizations (e.g., pre-computing array values into objects), always verify how the derived variables are rendered in the JSX.
+**Action:** Map the results back to their original structure (e.g., strings) to ensure UI rendering remains unbroken without requiring JSX changes.
