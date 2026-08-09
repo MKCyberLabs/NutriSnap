@@ -79,9 +79,12 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ⚡ Bolt Optimization: Memoize filtered list to prevent O(N) redundant string allocations
+  // by hoisting tzSearch.toLowerCase() outside the .filter() loop.
   const filteredTimezones = useMemo(() => {
     if (!tzSearch) return allTimezones;
-    return allTimezones.filter(tz => tz.toLowerCase().includes(tzSearch.toLowerCase()));
+    const term = tzSearch.toLowerCase();
+    return allTimezones.filter(tz => tz.toLowerCase().includes(term));
   }, [allTimezones, tzSearch]);
 
   const hasUnsavedChanges = useMemo(() => {
