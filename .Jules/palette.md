@@ -45,3 +45,6 @@
 ## 2024-11-20 - [Missing aria-pressed on Custom Toggle Buttons]
 **Learning:** Found custom button groups for drink type selection in the Hydration Hub that acted like single-select toggles (radio behavior) but lacked `aria-pressed` states and `type="button"`. They also lacked focus-visible states for keyboard accessibility.
 **Action:** When creating custom interactive UI elements used as toggles or single-select groups, always ensure they have `type="button"`, explicit `aria-pressed` attributes matching their active state, and explicit `focus-visible` classes (like `focus-visible:ring-2`) to ensure screen readers and keyboard users can effectively operate them.
+## 2024-11-20 - [Missing Keyboard Focus on Quick Add Buttons]
+**Learning:** Found custom action buttons (like the Quick Add water amounts in `hydration/page.tsx`) that lacked `type="button"` and `focus-visible` styles, relying only on hover effects for interactivity cues. While mouse users could see the hover state, keyboard users lacked a visual indicator of focus.
+**Action:** Always add `type="button"` and explicit `focus-visible` classes (like `focus-visible:ring-2`) to custom action buttons to ensure full accessibility for keyboard users, preventing accidental form submissions and ensuring clear focus indicators.
