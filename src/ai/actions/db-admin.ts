@@ -3,25 +3,26 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 
-async function verifyAdmin() {
+async function verifyAdmin(adminUserId?: string) {
   const cookieStore = await cookies();
-  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
+  const sessionId = cookieStore.get('nutrisnap_session_id')?.value || adminUserId;
   if (!sessionId) throw new Error('Unauthorized: No session token');
   
   const user = await prisma.user.findUnique({
     where: { id: sessionId },
-    select: { role: true }
+    select: { id: true, role: true }
   });
   
   if (!user || user.role !== 'ADMIN') {
     throw new Error('Forbidden: Requires ADMIN role');
   }
+  return user;
 }
 
 
-export async function fetchAllUsers() {
+export async function fetchAllUsers(adminUserId?: string) {
   try {
-    await verifyAdmin();
+    await verifyAdmin(adminUserId);
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' }
     });
@@ -36,9 +37,9 @@ export async function fetchAllUsers() {
   }
 }
 
-export async function createDbUser(userData: any) {
+export async function createDbUser(userData: any, adminUserId?: string) {
   try {
-    await verifyAdmin();
+    await verifyAdmin(adminUserId);
     const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
     if (!userData.password && !initialPassword) {
       throw new Error('No password provided and ADMIN_INITIAL_PASSWORD is not set');
@@ -57,15 +58,15 @@ export async function createDbUser(userData: any) {
     // Remove password field to prevent hash leak to frontend
     const { password, ...userWithoutPassword } = user;
     return { success: true, user: userWithoutPassword };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to create user:", error);
-    return { success: false };
+    return { success: false, error: error?.message || 'Failed to create user' };
   }
 }
 
-export async function updateDbUser(userId: string, userData: any) {
+export async function updateDbUser(userId: string, userData: any, adminUserId?: string) {
   try {
-    await verifyAdmin();
+    await verifyAdmin(adminUserId);
     const updateData: any = {
       email: userData.email,
       name: userData.name,
@@ -89,9 +90,9 @@ export async function updateDbUser(userId: string, userData: any) {
   }
 }
 
-export async function deleteDbUser(userId: string) {
+export async function deleteDbUser(userId: string, adminUserId?: string) {
   try {
-    await verifyAdmin();
+    await verifyAdmin(adminUserId);
     await prisma.user.delete({ where: { id: userId } });
     return { success: true };
   } catch (error) {
@@ -99,3 +100,4 @@ export async function deleteDbUser(userId: string) {
     return { success: false };
   }
 }
+

@@ -16,6 +16,11 @@
 # misc
 .DS_Store
 *.pem
+prisma/node_modules/
+
+# Docker Local Overrides
+docker-compose.local.yml
+docker-compose.override.yml
 
 # debug
 npm-debug.log*

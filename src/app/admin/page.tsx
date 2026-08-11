@@ -62,7 +62,7 @@ export default function AdminPage() {
       return;
     }
     setAdminUser(session);
-    fetchAllUsers().then(users => setManagedUsers(users as any));
+    fetchAllUsers(session.id).then(users => setManagedUsers(users as any));
   }, [router]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -75,7 +75,7 @@ export default function AdminPage() {
       role: currentUser.role || 'USER',
       telegramId: currentUser.telegramId || null,
       password: currentUser.password
-    });
+    }, adminUser?.id);
 
     if (res.success && res.user) {
       setManagedUsers([...managedUsers, res.user as any]);
@@ -83,7 +83,7 @@ export default function AdminPage() {
       setCurrentUser({});
       toast({ title: "User Created", description: `${res.user.name} has been added to the database.` });
     } else {
-      toast({ variant: "destructive", title: "Error", description: "Could not create user. Email may exist." });
+      toast({ variant: "destructive", title: "Error", description: res.error || "Could not create user." });
     }
   };
 
@@ -91,7 +91,7 @@ export default function AdminPage() {
     e.preventDefault();
     if (!currentUser.id) return;
 
-    const res = await updateDbUser(currentUser.id, currentUser);
+    const res = await updateDbUser(currentUser.id, currentUser, adminUser?.id);
     
     if (res.success && res.user) {
       const updated = managedUsers.map(u => u.id === currentUser.id ? res.user as any : u);
@@ -110,7 +110,8 @@ export default function AdminPage() {
       return;
     }
     
-    const res = await deleteDbUser(id);
+    const res = await deleteDbUser(id, adminUser?.id);
+
     if (res.success) {
       const updated = managedUsers.filter(u => u.id !== id);
       setManagedUsers(updated);

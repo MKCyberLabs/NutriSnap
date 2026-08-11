@@ -615,6 +615,10 @@ export default function DashboardPage() {
 
     const updatedLog = updatedLogs.find((l) => l.id === logId);
     if (updatedLog) {
+      if (updatedLog.items.length === 0) {
+        handleDeleteLog(logId);
+        return;
+      }
       updateMealLogItems(logId, updatedLog.items, updatedLog.totalNutrients);
     }
 
@@ -672,7 +676,8 @@ export default function DashboardPage() {
 
   const filteredLogs = useMemo(() => {
     if (!isValid(selectedDate)) return [];
-    return logsByDateStr.get(format(selectedDate, "yyyy-MM-dd")) || [];
+    const dateLogs = logsByDateStr.get(format(selectedDate, "yyyy-MM-dd")) || [];
+    return dateLogs.filter((log) => log.items && log.items.length > 0);
   }, [logsByDateStr, selectedDate]);
 
   const activeWeeklyRange = useMemo(() => {

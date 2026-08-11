@@ -47,9 +47,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 COPY --from=builder /app/prisma ./prisma
 
-# Create a startup script that runs db push then starts the server
+# Create a startup script that starts the Next.js standalone server instantly
 RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'npx -y prisma@6 db push --accept-data-loss' >> /app/start.sh && \
     echo 'exec node server.js' >> /app/start.sh && \
     chmod +x /app/start.sh && \
     chown nextjs:nodejs /app/start.sh

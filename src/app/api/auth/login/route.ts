@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     // Set HttpOnly cookies for server-side session verification
     response.cookies.set('nutrisnap_session_id', user.id, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.COOKIE_SECURE === 'true',
       sameSite: 'lax',
       path: '/'
     });
