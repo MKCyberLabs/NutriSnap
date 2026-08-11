@@ -98,11 +98,12 @@ bot.command('ask', async (ctx) => {
     // Replace eyes with blue tick (or thumbs up fallback if unsupported)
     try { await ctx.react('👍'); } catch (e) {}
     return ctx.reply(aiResponse, { parse_mode: 'Markdown' });
-  } catch (error) {
+  } catch (error: any) {
     try { await ctx.api.setMessageReaction(ctx.chat!.id, ctx.msg!.message_id, []); } catch (e) {}
     console.error("Ask flow error:", error);
-    return ctx.reply("Sorry, I had trouble answering that. Please try again later.");
+    return ctx.reply(`⚠️ **AI Assistant Error**\n\n${error?.message || 'Could not connect to Gemini AI. Please check GEMINI_API_KEY in .env.'}`);
   }
+
 });
 
 bot.command('setgoal', async (ctx) => {

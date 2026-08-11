@@ -60,6 +60,9 @@ export async function createDbUser(userData: any, adminUserId?: string) {
     return { success: true, user: userWithoutPassword };
   } catch (error: any) {
     console.error("Failed to create user:", error);
+    if (error.code === 'P2002' || error.message?.includes('Unique constraint')) {
+      return { success: false, error: 'A user with this email address already exists in the database.' };
+    }
     return { success: false, error: error?.message || 'Failed to create user' };
   }
 }

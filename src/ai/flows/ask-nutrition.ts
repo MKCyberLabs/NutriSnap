@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma';
 
 const ai = genkit({
   plugins: [googleAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY })],
-  model: 'googleai/gemini-2.5-flash',
+  model: 'googleai/gemini-2.0-flash',
 });
+
 
 export const askNutritionFlow = ai.defineFlow(
   {
