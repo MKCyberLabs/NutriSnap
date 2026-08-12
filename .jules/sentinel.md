@@ -66,3 +66,8 @@
 **Vulnerability:** A medium-priority information leakage vulnerability existed in `src/app/api/telegram/webhook/route.ts` where internal server errors were passing the raw `err.message` detail directly to the client in the JSON response payload.
 **Learning:** Exposing raw error strings from backend components to the frontend can provide attackers with sensitive context about the internal environment or third-party service dependencies.
 **Prevention:** Catch statements on API endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Internal Server Error") to the client.
+
+## 2024-08-05 - [Authorization Bypass in Admin Server Actions]
+**Vulnerability:** A critical authorization bypass vulnerability existed in `src/ai/actions/db-admin.ts`. The `verifyAdmin` function accepted an optional `adminUserId` argument from the client and used it as a fallback if the session cookie was absent (`cookieStore.get('nutrisnap_session_id')?.value || adminUserId`). This allowed any user (or unauthenticated attacker) to bypass admin authentication by simply providing a known or guessable admin ID as an argument to exported Server Actions like `fetchAllUsers`, `createDbUser`, `updateDbUser`, and `deleteDbUser`.
+**Learning:** Next.js Server Actions are public API endpoints. Never trust client-provided arguments for authentication or authorization fallback mechanisms.
+**Prevention:** Strictly enforce authentication by extracting the identity exclusively from secure server-side mechanisms, such as HTTP-only session cookies. Remove fallback arguments that allow client-controlled data to influence authentication flows.
