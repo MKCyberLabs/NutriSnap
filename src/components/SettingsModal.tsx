@@ -81,7 +81,9 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
 
   const filteredTimezones = useMemo(() => {
     if (!tzSearch) return allTimezones;
-    return allTimezones.filter(tz => tz.toLowerCase().includes(tzSearch.toLowerCase()));
+    // ⚡ Bolt Optimization: Hoist tzSearch.toLowerCase() to avoid O(N) string allocations inside filter loop
+    const term = tzSearch.toLowerCase();
+    return allTimezones.filter(tz => tz.toLowerCase().includes(term));
   }, [allTimezones, tzSearch]);
 
   const hasUnsavedChanges = useMemo(() => {

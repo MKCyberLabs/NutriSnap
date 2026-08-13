@@ -49,7 +49,9 @@ export function saveManagedUsers(users: ManagedUser[]) {
  */
 export function authenticateUser(email: string, password?: string): ManagedUser | null {
   const users = getManagedUsers();
-  const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  // ⚡ Bolt Optimization: Hoist email.toLowerCase() to avoid O(N) string allocations during authentication.
+  const emailLower = email.toLowerCase();
+  const user = users.find(u => u.email.toLowerCase() === emailLower);
   
   if (user && user.password === password) {
     return user;
