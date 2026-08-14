@@ -62,7 +62,7 @@ export default function AdminPage() {
       return;
     }
     setAdminUser(session);
-    fetchAllUsers(session.id).then(users => setManagedUsers(users as any));
+    fetchAllUsers().then(users => setManagedUsers(users as any));
   }, [router]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -75,7 +75,7 @@ export default function AdminPage() {
       role: currentUser.role || 'USER',
       telegramId: currentUser.telegramId || null,
       password: currentUser.password
-    }, adminUser?.id);
+    });
 
     if (res.success && res.user) {
       setManagedUsers([...managedUsers, res.user as any]);
@@ -91,7 +91,7 @@ export default function AdminPage() {
     e.preventDefault();
     if (!currentUser.id) return;
 
-    const res = await updateDbUser(currentUser.id, currentUser, adminUser?.id);
+    const res = await updateDbUser(currentUser.id, currentUser);
     
     if (res.success && res.user) {
       const updated = managedUsers.map(u => u.id === currentUser.id ? res.user as any : u);
@@ -110,7 +110,7 @@ export default function AdminPage() {
       return;
     }
     
-    const res = await deleteDbUser(id, adminUser?.id);
+    const res = await deleteDbUser(id);
 
     if (res.success) {
       const updated = managedUsers.filter(u => u.id !== id);
