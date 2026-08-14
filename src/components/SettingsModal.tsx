@@ -293,7 +293,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
   };
 
   const tabClasses = (tab: Tab) => 
-    `flex w-full items-center justify-center md:justify-start text-center md:text-left font-medium text-sm md:text-base px-6 py-4 rounded-2xl transition-all whitespace-nowrap ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30' : 'bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 text-foreground/60 hover:text-foreground'}`;
+    `flex w-full items-center justify-center md:justify-start text-center md:text-left font-medium text-sm md:text-base px-6 py-4 rounded-2xl transition-all whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30' : 'bg-white/40 dark:bg-black/20 hover:bg-white/60 dark:hover:bg-black/40 text-foreground/60 hover:text-foreground'}`;
 
   const glassInputClasses = "rounded-xl bg-white dark:bg-black/60 shadow-inner focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all border border-gray-200 dark:border-gray-800 text-foreground";
 
@@ -312,16 +312,16 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
           {/* Navigation */}
           <div className="w-full md:w-64 flex md:flex-col gap-3 shrink-0 overflow-x-auto md:overflow-y-auto pb-2 md:pb-0 custom-scrollbar border-b md:border-b-0 md:border-r border-white/20 md:pr-4">
-            <Button variant="ghost" onClick={() => requestTabChange('account')} className={tabClasses('account')}>
+            <Button variant="ghost" aria-pressed={activeTab === 'account'} onClick={() => requestTabChange('account')} className={tabClasses('account')}>
               <ShieldAlert className="mr-2 h-5 w-5 shrink-0" /> Account & Security
             </Button>
-            <Button variant="ghost" onClick={() => requestTabChange('health')} className={tabClasses('health')}>
+            <Button variant="ghost" aria-pressed={activeTab === 'health'} onClick={() => requestTabChange('health')} className={tabClasses('health')}>
               <Activity className="mr-2 h-5 w-5 shrink-0" /> Health & Biometrics
             </Button>
-            <Button variant="ghost" onClick={() => requestTabChange('notifications')} className={tabClasses('notifications')}>
+            <Button variant="ghost" aria-pressed={activeTab === 'notifications'} onClick={() => requestTabChange('notifications')} className={tabClasses('notifications')}>
               <Bell className="mr-2 h-5 w-5 shrink-0" /> Notifications
             </Button>
-            <Button variant="ghost" onClick={() => requestTabChange('preferences')} className={tabClasses('preferences')}>
+            <Button variant="ghost" aria-pressed={activeTab === 'preferences'} onClick={() => requestTabChange('preferences')} className={tabClasses('preferences')}>
               <Settings2 className="mr-2 h-5 w-5 shrink-0" /> Preferences
             </Button>
           </div>
