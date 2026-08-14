@@ -121,16 +121,28 @@ export default function AdminPage() {
     }
   };
 
-  // ⚡ Bolt Optimization: Memoize filtered list to prevent O(N) filtering on every render
-  // and hoist invariant searchTerm.toLowerCase() to avoid O(N) string allocations.
+  // ⚡ Bolt Optimization: Pre-compute lowercase string values on data fetch
+  // to avoid O(N) string allocations per keystroke during search filtering.
+  const mappedUsers = useMemo(() => {
+    return managedUsers.map(u => ({
+      original: u,
+      nameLower: (u.name || "").toLowerCase(),
+      emailLower: (u.email || "").toLowerCase(),
+    }));
+  }, [managedUsers]);
+
+  // ⚡ Bolt Optimization: Filter using pre-computed values and hoist invariant search term
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return managedUsers;
     const term = searchTerm.toLowerCase();
-    return managedUsers.filter(u =>
-      u.name.toLowerCase().includes(term) ||
-      u.email.toLowerCase().includes(term)
-    );
-  }, [managedUsers, searchTerm]);
+
+    return mappedUsers
+      .filter(u =>
+        u.nameLower.includes(term) ||
+        u.emailLower.includes(term)
+      )
+      .map(u => u.original);
+  }, [mappedUsers, managedUsers, searchTerm]);
 
   return (
     <div className="min-h-svh bg-slate-50 dark:bg-slate-950 font-sans">
