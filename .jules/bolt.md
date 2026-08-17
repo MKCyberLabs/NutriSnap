@@ -53,3 +53,7 @@
 ## 2024-02-17 - [Optimized UseMemo Filter Operations]
 **Learning:** In React `useMemo` hooks, if an invariant string manipulation (like `.toLowerCase()`) is placed inside an array `.filter()` block callback, the runtime redundantly executes string allocation operations equivalent to $O(N)$ times.
 **Action:** Always hoist invariant search terms out of mapping, filtering, or reducing iterations inside components and `useMemo` hooks to convert them to $O(1)$ evaluations, significantly cutting computation time in frontend searches (especially on moderately large sets like combobox selections).
+
+## 2023-11-09 - [Avoid Invariant Computations inside Array Render Iterations]
+**Learning:** Found `.toLowerCase()` being called on the same search term parameter repeatedly inside a `useMemo` `.filter()` on every input stroke inside `src/components/SettingsModal.tsx`.
+**Action:** Always wrap derived list computations in `useMemo` and hoist invariant operations (like standardizing a search term string) out of loop bodies. Calculate them once and reference the stored variable inside the loop to avoid O(N) string allocation overhead when O(1) is possible.
