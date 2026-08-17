@@ -97,3 +97,7 @@
 ## 2024-05-18 - [Anti-pattern: Invariant String Allocations in Filter Loops]
 **Learning:** Found an anti-pattern in the codebase where invariant string operations (like `.toLowerCase()`) and array filtering are nested inside render bodies or hook dependencies, causing O(N) string allocations and re-evaluations on every keystroke.
 **Action:** When reviewing or optimizing React components with large lists or searchable dropdowns, always ensure invariant transformations (like lowercase search terms) are hoisted outside the `.filter()` loop, and consider pre-computing lowercase values for large static source arrays (like timezones) on mount.
+
+## 2026-08-14 - [Anti-Optimization in React List Filtering]
+**Learning:** Pre-computing derived string values (like `.toLowerCase()`) via `.map()` inside a component's render flow (or a search-term-dependent `useMemo`) can cause severe O(N) memory allocations per keystroke, worsening performance compared to inline evaluation.
+**Action:** When pre-computing derived properties for filtering, explicitly separate the optimization into two steps: 1) a `useMemo` dependent ONLY on the source data to perform the `.map()`, and 2) a `useMemo` dependent on the mapped data and the search term to perform the fast `.filter()`.
