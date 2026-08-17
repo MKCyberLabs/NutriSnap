@@ -80,6 +80,8 @@ function CustomDrinkDialog({
                   type="button"
                   aria-label={dt.type}
                   aria-pressed={customType === dt.type}
+                  aria-pressed={customType === dt.type}
+                  aria-label={dt.type}
                   onClick={() => setCustomType(dt.type as DrinkType)}
                   className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 ${customType === dt.type ? 'bg-sky-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                 >
