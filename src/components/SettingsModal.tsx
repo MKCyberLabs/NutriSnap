@@ -66,17 +66,20 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
   const [isTzOpen, setIsTzOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // ⚡ Bolt Optimization: Pre-compute and store lowercased formatting for the large static
+  // array of timezones on component mount to avoid O(N) string allocations on every keystroke.
   const allTimezones = useMemo(() => {
+    let tzs: string[];
     try {
-      const tzs = Intl.supportedValuesOf('timeZone');
+      tzs = Intl.supportedValuesOf('timeZone');
       if (!tzs.includes('Asia/Kolkata')) {
         tzs.push('Asia/Kolkata');
         tzs.sort();
       }
-      return tzs;
     } catch (e) {
-      return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
+      tzs = ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
     }
+    return tzs.map(tz => ({ tz, searchKey: tz.toLowerCase() }));
   }, []);
 
   // ⚡ Bolt Optimization: Hoist tzSearch.toLowerCase() outside the filter loop
@@ -94,6 +97,14 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
     // to prevent redundant O(N) string allocations during timezone search.
     const searchLower = tzSearch.toLowerCase();
     return allTimezones.filter(tz => tz.toLowerCase().includes(searchLower));
+  // ⚡ Bolt Optimization: Hoist invariant search term lowercasing outside the filter loop
+  // and use O(1) property lookup instead of .toLowerCase() during the loop.
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch) return allTimezones.map(item => item.tz);
+    const searchLower = tzSearch.toLowerCase();
+    return allTimezones
+      .filter(item => item.searchKey.includes(searchLower))
+      .map(item => item.tz);
   }, [allTimezones, tzSearch]);
 
   const hasUnsavedChanges = useMemo(() => {
