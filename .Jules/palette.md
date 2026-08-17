@@ -75,3 +75,7 @@
 ## 2024-11-20 - [Invalid Nested HTML in Navigation Links]
 **Learning:** Found `<button>` elements nested directly inside `<Link>` components for navigation, which generates invalid HTML and violates accessibility guidelines. Standard React/Next.js navigational elements should not contain semantic `<button>` wrappers unless they execute a JavaScript action rather than navigating.
 **Action:** Always apply interactive button styling directly to the `<Link>` element or use the `asChild` pattern with Shadcn `<Button asChild><Link href="...">...</Link></Button>`. Use `aria-current="page"` to semantically denote active states for these navigational links instead of `aria-pressed`.
+
+## 2024-11-20 - [Missing Keyboard Focus on Quick Add Buttons]
+**Learning:** Found custom action buttons (like the Quick Add water amounts in `hydration/page.tsx`) that lacked `type="button"` and `focus-visible` styles, relying only on hover effects for interactivity cues. While mouse users could see the hover state, keyboard users lacked a visual indicator of focus.
+**Action:** Always add `type="button"` and explicit `focus-visible` classes (like `focus-visible:ring-2`) to custom action buttons to ensure full accessibility for keyboard users, preventing accidental form submissions and ensuring clear focus indicators.
