@@ -87,3 +87,7 @@
 ## 2026-08-07 - [Accessibility: ARIA Labels and Focus Visible on Time Period Toggle Buttons]
 **Learning:** Found custom AM/PM toggle buttons in `MealAnalysisTool.tsx` lacking `aria-label` attributes and explicit `focus-visible` classes, which hurts screen reader and keyboard accessibility.
 **Action:** When creating custom interactive UI elements used as toggles, always ensure they have descriptive `aria-label` attributes and explicit `focus-visible` classes (like `focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-primary focus-visible:ring-offset-2`) to ensure screen readers and keyboard users can effectively operate them.
+
+## 2024-11-20 - [Missing ARIA Labels on Select Triggers]
+**Learning:** Found instances where custom dropdown triggers (like `SelectTrigger` in Shadcn UI components) used for generic forms lacked explicit `aria-label` attributes. When a visual `<Label>` isn't explicitly linked to the trigger via `htmlFor` and `id`, screen readers might not announce their purpose clearly, even if they have a placeholder.
+**Action:** When creating custom select dropdowns, especially for picking values like roles, intervals, and genders, always ensure the `SelectTrigger` has an `aria-label` to provide context for screen reader users when explicit linking isn't used.
