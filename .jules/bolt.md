@@ -105,3 +105,7 @@
 ## 2024-05-24 - [Avoid O(N) String Operations in React Array Filters]
 **Learning:** Found an anti-pattern in `src/app/admin/page.tsx` where `.toLowerCase()` was being called on `searchTerm` directly inside a `.filter` method loop on a large array in the main render body. This forces the engine to recalculate and allocate new lowercase strings for the invariant `searchTerm` on *every single item iteration* during *every single render*.
 **Action:** When filtering arrays in React components, always wrap the filtering logic in `useMemo`. Critically, hoist invariant operations (like string lowercasing or complex regex generation) *outside* of the filter loop but *inside* the `useMemo` callback so they are only computed once per dependency change rather than O(N) times per render.
+
+## 2025-02-28 - [Hoist Invariant Operations from Render Loops in `SettingsModal`]
+**Learning:** Found `.toLowerCase()` being called on the same `tzSearch` repeatedly inside an unmemoized `.filter()` over `allTimezones` on every render in `src/components/SettingsModal.tsx`. This causes redundant O(N) string allocations and performance degradation, especially during rapid state updates from user input.
+**Action:** Always wrap derived list computations in `useMemo` and hoist invariant operations (like standardizing a search term string) out of loop bodies. Calculate them once and reference the stored variable inside the loop to avoid O(N) overhead when O(1) is possible.

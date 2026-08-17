@@ -161,6 +161,11 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
     return allTimezones
       .filter(tz => tz.lower.includes(term))
       .map(tz => tz.original);
+  // ⚡ Bolt Optimization: Hoist invariant tzSearch.toLowerCase() to avoid O(N) string allocations inside loop
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch) return allTimezones;
+    const searchLower = tzSearch.toLowerCase();
+    return allTimezones.filter(tz => tz.toLowerCase().includes(searchLower));
   }, [allTimezones, tzSearch]);
 
   const hasUnsavedChanges = useMemo(() => {
