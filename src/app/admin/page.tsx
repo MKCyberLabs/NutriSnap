@@ -136,6 +136,16 @@ export default function AdminPage() {
     return managedUsers.filter(u =>
       u.name.toLowerCase().includes(lowerSearchTerm) ||
       u.email.toLowerCase().includes(lowerSearchTerm)
+  // ⚡ Bolt Optimization: Memoize the filtered user list to prevent O(N) array filtering
+  // on every single re-render of this heavy admin page.
+  // Additionally, hoist the invariant `searchTerm.toLowerCase()` outside of the filter
+  // loop to reduce redundant string allocations from O(2N) to O(1).
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return managedUsers;
+    const lowerTerm = searchTerm.toLowerCase();
+    return managedUsers.filter(u =>
+      u.name.toLowerCase().includes(lowerTerm) ||
+      u.email.toLowerCase().includes(lowerTerm)
     );
   }, [managedUsers, searchTerm]);
 

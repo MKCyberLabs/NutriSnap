@@ -65,3 +65,7 @@
 ## 2025-02-28 - [Pre-computing Static Data & Hoisting Invariants in Filter Loops]
 **Learning:** In `src/components/SettingsModal.tsx`, a `useMemo` filter loop over 400+ timezones called `.toLowerCase()` on every timezone string and on the invariant `tzSearch` string for every keystroke. This causes O(N) redundant string allocations and slows down input responsiveness.
 **Action:** Pre-compute static list transformations (like lowercasing) into objects on component mount, and hoist invariant variables (like `tzSearch.toLowerCase()`) outside of filter loops to avoid redundant memory allocations.
+
+## 2025-03-01 - [Avoid Unmemoized Filter Loops & Invariant String Operations in Render]
+**Learning:** Found an unmemoized `.filter()` loop in `src/app/admin/page.tsx` that ran on every render. Because the search input `searchTerm` is held at the parent page level, every keystroke triggers a full re-render, executing the filter array operation O(N) times and executing `searchTerm.toLowerCase()` 2*N times inside the loop body.
+**Action:** Always wrap expensive list filtering logic in `useMemo`. Furthermore, hoist invariant operations (like standardizing the `searchTerm` casing) outside the loop body so it executes O(1) times instead of O(N) times per calculation.
