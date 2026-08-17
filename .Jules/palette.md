@@ -59,3 +59,7 @@
 ## 2024-05-18 - [Invalid HTML and Accessibility in Links]
 **Learning:** Next.js `<Link>` elements should not wrap `<button>` elements directly inside them, as this generates invalid HTML and breaks semantic a11y tooling. Navigation links should be actual anchor tags (styled like buttons if desired).
 **Action:** Remove nested `<button>` inside `<Link>`. Apply button-like styling and `focus-visible` classes directly to the `<Link>`. Use `aria-current="page"` instead of `aria-pressed` for active navigation states.
+
+## 2024-07-26 - [Nesting Buttons inside Links]
+**Learning:** Found instances where `<button>` elements were directly nested inside `<Link>` components (e.g., in `Navbar.tsx`). This generates invalid HTML because interactive elements should not be nested, and it negatively impacts accessibility and standard keyboard navigation. Furthermore, active links often lacked `aria-current="page"` and `focus-visible` styles.
+**Action:** Always apply button-like styles directly to the `<Link>` element instead of nesting a `<button>` inside. When modifying navigation links, ensure they use `aria-current="page"` to semantically indicate the active view and include explicit `focus-visible` classes (like `focus-visible:outline-none focus-visible:ring-2`) to ensure keyboard accessibility. When wrapping Shadcn UI components (like `<Button>`) around a `<Link>`, always use the `asChild` prop on the component.
