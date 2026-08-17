@@ -71,3 +71,7 @@
 ## 2026-08-02 - [Missing ARIA Labels on Form Inputs and Hidden Decorative Icons]
 **Learning:** Discovered that input components on the Login page (e.g. Email and Password) lacked explicit `aria-label` attributes despite having `htmlFor` labels, which is a required pattern for NutriSnap UI components. Additionally, found that decorative icons like spinners (`Loader2`) and arrows within submit buttons were missing `aria-hidden="true"`, causing redundant screen reader announcements.
 **Action:** Always ensure that form inputs have explicit `aria-label` attributes even if a visible label exists nearby. Furthermore, decorative icons or loading spinners within action buttons must include `aria-hidden="true"` to provide a cleaner screen reader experience.
+
+## 2024-11-20 - [Invalid Nested HTML in Navigation Links]
+**Learning:** Found `<button>` elements nested directly inside `<Link>` components for navigation, which generates invalid HTML and violates accessibility guidelines. Standard React/Next.js navigational elements should not contain semantic `<button>` wrappers unless they execute a JavaScript action rather than navigating.
+**Action:** Always apply interactive button styling directly to the `<Link>` element or use the `asChild` pattern with Shadcn `<Button asChild><Link href="...">...</Link></Button>`. Use `aria-current="page"` to semantically denote active states for these navigational links instead of `aria-pressed`.

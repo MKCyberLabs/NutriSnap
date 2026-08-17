@@ -69,6 +69,18 @@ export function Navbar() {
               NutriSnap
             </Link>
             <Link href="/hydration" className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`} aria-current={isHydration ? 'page' : undefined}>
+            <Link
+              href="/dashboard"
+              aria-current={!isHydration ? "page" : undefined}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}
+            >
+              NutriSnap
+            </Link>
+            <Link
+              href="/hydration"
+              aria-current={isHydration ? "page" : undefined}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}
+            >
               Hydration Hub
             </Link>
           </div>
@@ -77,6 +89,7 @@ export function Navbar() {
         <div className="flex items-center gap-4">
           {user?.role === 'ADMIN' && (
             <Button variant="ghost" className="hidden md:flex gap-2 rounded-xl" asChild>
+            <Button asChild variant="ghost" className="hidden md:flex gap-2 rounded-xl">
               <Link href="/admin">
                 <Settings className="h-4 w-4" />
                 Admin
