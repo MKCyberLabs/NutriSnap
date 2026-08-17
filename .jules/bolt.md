@@ -109,3 +109,7 @@
 ## 2025-02-28 - [Hoist Invariant Operations from Render Loops in `SettingsModal`]
 **Learning:** Found `.toLowerCase()` being called on the same `tzSearch` repeatedly inside an unmemoized `.filter()` over `allTimezones` on every render in `src/components/SettingsModal.tsx`. This causes redundant O(N) string allocations and performance degradation, especially during rapid state updates from user input.
 **Action:** Always wrap derived list computations in `useMemo` and hoist invariant operations (like standardizing a search term string) out of loop bodies. Calculate them once and reference the stored variable inside the loop to avoid O(N) overhead when O(1) is possible.
+
+## 2025-02-28 - [Hoist Invariant Operations from Render Loops]
+**Learning:** Found `.toLowerCase()` being called on the same `tzSearch` repeatedly inside an unmemoized `.filter()` over `allTimezones` on every render in `src/components/SettingsModal.tsx`. This causes redundant O(N) string allocations and performance degradation, especially during rapid state updates from user input (like typing in the search bar).
+**Action:** Always hoist invariant operations (like standardizing a search term string) out of loop bodies. Calculate them once and reference the stored variable inside the loop to avoid O(N) overhead when O(1) is possible.
