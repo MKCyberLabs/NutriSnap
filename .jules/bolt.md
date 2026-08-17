@@ -73,3 +73,7 @@
 ## 2026-08-07 - [Avoid structural breakage during optimizations]
 **Learning:** When structurally modifying data for performance optimizations (e.g., pre-computing array values into objects), always verify how the derived variables are rendered in the JSX.
 **Action:** Map the results back to their original structure (e.g., strings) to ensure UI rendering remains unbroken without requiring JSX changes.
+
+## 2024-05-18 - [Optimizing String Filtering in Render]
+**Learning:** Placing invariant string operations (`.toLowerCase()`) inside `.filter()` loops within render bodies leads to O(N) operations and unnecessary string allocations on every render/keystroke.
+**Action:** Pre-compute lowercase labels for large static arrays on component mount and hoist the search term `toLowerCase()` operation outside of the loop.
