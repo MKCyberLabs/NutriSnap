@@ -113,3 +113,7 @@
 ## 2025-02-28 - [Hoist Invariant Operations from Render Loops]
 **Learning:** Found `.toLowerCase()` being called on the same `tzSearch` repeatedly inside an unmemoized `.filter()` over `allTimezones` on every render in `src/components/SettingsModal.tsx`. This causes redundant O(N) string allocations and performance degradation, especially during rapid state updates from user input (like typing in the search bar).
 **Action:** Always hoist invariant operations (like standardizing a search term string) out of loop bodies. Calculate them once and reference the stored variable inside the loop to avoid O(N) overhead when O(1) is possible.
+
+## 2025-02-28 - [Performance] Hoisting Invariants and Pre-computing Filter Targets
+**Learning:** During rapid user input (e.g., searching), putting array element and search term formatting operations inside the `filter()` callback triggers multiple O(N) formatting ops. Calling `toLowerCase()` on a 400-item array inside a `.filter` block combined with an un-hoisted search term operation results in 800 unnecessary string allocations on every single keystroke.
+**Action:** When filtering static or large sets of strings against user input in React, use `useMemo` to pre-compute the target strings into their lowercased format (once per mount) and hoist the user input `toLowerCase()` formatting to occur strictly once *outside* the `filter()` callback.
