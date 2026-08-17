@@ -69,3 +69,7 @@
 ## 2025-03-01 - [Avoid Unmemoized Filter Loops & Invariant String Operations in Render]
 **Learning:** Found an unmemoized `.filter()` loop in `src/app/admin/page.tsx` that ran on every render. Because the search input `searchTerm` is held at the parent page level, every keystroke triggers a full re-render, executing the filter array operation O(N) times and executing `searchTerm.toLowerCase()` 2*N times inside the loop body.
 **Action:** Always wrap expensive list filtering logic in `useMemo`. Furthermore, hoist invariant operations (like standardizing the `searchTerm` casing) outside the loop body so it executes O(1) times instead of O(N) times per calculation.
+
+## 2026-08-07 - [Avoid structural breakage during optimizations]
+**Learning:** When structurally modifying data for performance optimizations (e.g., pre-computing array values into objects), always verify how the derived variables are rendered in the JSX.
+**Action:** Map the results back to their original structure (e.g., strings) to ensure UI rendering remains unbroken without requiring JSX changes.
