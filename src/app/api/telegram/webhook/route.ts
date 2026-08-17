@@ -639,6 +639,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: 'ok' });
   } catch (err: any) {
     console.error("Webhook Error:", err);
+    // 🛡️ Sentinel: Prevent Information Leakage in Error Responses
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
