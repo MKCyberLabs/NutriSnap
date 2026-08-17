@@ -86,6 +86,11 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
     // ⚡ Bolt Optimization: Hoist tzSearch.toLowerCase() to avoid O(N) string allocations inside filter loop
     const term = tzSearch.toLowerCase();
     return allTimezones.filter(tz => tz.toLowerCase().includes(term));
+  // ⚡ Bolt Optimization: Hoisted invariant tzSearch.toLowerCase() outside the loop to prevent O(N) string allocations on every keystroke.
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch) return allTimezones;
+    const searchLower = tzSearch.toLowerCase();
+    return allTimezones.filter(tz => tz.toLowerCase().includes(searchLower));
   }, [allTimezones, tzSearch]);
 
   const hasUnsavedChanges = useMemo(() => {
