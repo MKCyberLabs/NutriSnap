@@ -81,3 +81,7 @@
 ## 2025-02-28 - [Memoizing and Hoisting Operations in Filter Loops]
 **Learning:** Found an unmemoized `.filter()` loop in `src/app/admin/page.tsx` that contained an invariant `searchTerm.toLowerCase()` operation. This caused redundant O(N) array allocations and O(N) case conversions on every component render.
 **Action:** Always wrap derived filtered lists in `useMemo` and hoist invariant operations (like standardizing search terms) outside the loop to change O(N) string conversions into an O(1) operation.
+
+## 2023-10-27 - [Avoid redundant allocations in string searches]
+**Learning:** Found string filters repeatedly allocating new strings inside render loops for long arrays. Calling `searchTerm.toLowerCase()` inside a `.filter` block over an array runs O(N) times and allocates N new strings per re-render, creating needless GC pressure and high CPU load for large lists.
+**Action:** Extract the `.toLowerCase()` call outside the loop to calculate once, and memoize the overall filter with `useMemo` so it recalculates only when inputs change.
