@@ -61,3 +61,7 @@
 ## 2025-03-02 - [Avoid invariant computations in memoized list filters]
 **Learning:** Found `.toLowerCase()` being repeatedly called on strings (`tzSearch` and `tz`) inside an unmemoized `.filter()` loop for timezones inside `src/components/SettingsModal.tsx`. This causes redundant O(N) string allocations during typing.
 **Action:** Extract large static arrays (e.g., `Intl.supportedValuesOf('timeZone')`) to precompute their lowercased search strings once when mounting. Hoist the lowercased search term outside of the filter block to reduce filtering from O(N) allocations to O(1) matching.
+
+## 2025-02-28 - [Pre-computing Static Data & Hoisting Invariants in Filter Loops]
+**Learning:** In `src/components/SettingsModal.tsx`, a `useMemo` filter loop over 400+ timezones called `.toLowerCase()` on every timezone string and on the invariant `tzSearch` string for every keystroke. This causes O(N) redundant string allocations and slows down input responsiveness.
+**Action:** Pre-compute static list transformations (like lowercasing) into objects on component mount, and hoist invariant variables (like `tzSearch.toLowerCase()`) outside of filter loops to avoid redundant memory allocations.
