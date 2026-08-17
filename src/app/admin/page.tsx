@@ -142,6 +142,9 @@ export default function AdminPage() {
   // loop to reduce redundant string allocations from O(2N) to O(1).
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return managedUsers;
+  // ⚡ Bolt Optimization: Memoize filtered list to prevent unnecessary array allocations and re-renders,
+  // and hoist invariant searchTerm.toLowerCase() outside the filter loop to eliminate redundant O(N) conversions.
+  const filteredUsers = useMemo(() => {
     const lowerTerm = searchTerm.toLowerCase();
     return managedUsers.filter(u =>
       u.name.toLowerCase().includes(lowerTerm) ||
