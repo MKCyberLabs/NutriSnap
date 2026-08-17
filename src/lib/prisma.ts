@@ -17,6 +17,18 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
     }
   }
 });
+// 🛡️ Sentinel: Removed hardcoded database credentials
+export const prisma = globalForPrisma.prisma ?? new PrismaClient(
+  process.env.DATABASE_URL
+    ? {
+        datasources: {
+          db: {
+            url: process.env.DATABASE_URL
+          }
+        }
+      }
+    : undefined
+);
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;

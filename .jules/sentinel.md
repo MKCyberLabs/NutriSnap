@@ -78,3 +78,8 @@
 **Vulnerability:** A hardcoded fallback value for the database connection string (`DATABASE_URL`) containing credentials (`postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap`) was present in `src/lib/prisma.ts`.
 **Learning:** Hardcoded fallback credentials can be committed to source control and exposed to unauthorized individuals, leading to database compromise.
 **Prevention:** Always rely exclusively on environment variables (like `process.env.DATABASE_URL`) for connection strings and sensitive credentials. Never include hardcoded fallback credentials in the source code.
+
+## 2024-05-24 - [Hardcoded Database Credentials]
+**Vulnerability:** Found a hardcoded database fallback string containing a password in `src/lib/prisma.ts`.
+**Learning:** Default docker database configurations (like `postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap`) are often left as fallbacks during early development and accidentally committed.
+**Prevention:** Remove fallback connection strings in production code; strictly enforce `process.env.DATABASE_URL` as the only source of truth.
