@@ -88,3 +88,8 @@
 **Vulnerability:** A hardcoded database connection string (`postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap`) was used as a fallback in `src/lib/prisma.ts`.
 **Learning:** Hardcoded fallback values for secrets undermine the secure initialization mechanism and can expose sensitive credentials in the codebase, which could be accessed if the repository is leaked or compromised.
 **Prevention:** Always rely exclusively on environment variables (e.g., `process.env.DATABASE_URL`) for database connection strings and never include hardcoded fallback credentials in the codebase.
+
+## 2024-10-24 - [Hardcoded Database Credentials]
+**Vulnerability:** A hardcoded database connection URL (`postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap`) was used as a fallback in `src/lib/prisma.ts`.
+**Learning:** Hardcoding credentials in source code exposes sensitive database access information to anyone with access to the repository, leading to potential unauthorized data access and breaches.
+**Prevention:** Never include hardcoded credentials in the codebase. Always rely exclusively on environment variables (e.g., `process.env.DATABASE_URL`) for sensitive connection strings and secrets.
