@@ -93,3 +93,8 @@
 **Vulnerability:** A hardcoded database connection URL (`postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap`) was used as a fallback in `src/lib/prisma.ts`.
 **Learning:** Hardcoding credentials in source code exposes sensitive database access information to anyone with access to the repository, leading to potential unauthorized data access and breaches.
 **Prevention:** Never include hardcoded credentials in the codebase. Always rely exclusively on environment variables (e.g., `process.env.DATABASE_URL`) for sensitive connection strings and secrets.
+
+## 2025-02-14 - [Critical Authorization Bypass in Server Actions]
+**Vulnerability:** IDOR/Authentication Bypass via client-provided parameters in Server Actions. Admin server actions (`verifyAdmin`, `fetchAllUsers`, `createDbUser`, `updateDbUser`, `deleteDbUser` in `src/ai/actions/db-admin.ts`) accepted an optional `adminUserId` parameter, which functioned as a fallback if the session cookie was missing.
+**Learning:** Because Server Actions act as public API endpoints and can be called directly with arbitrary JSON payloads, relying on client-provided data for authorization entirely bypasses secure session (cookie) verification. A malicious actor could spoof their identity by manually executing the action with a target `adminUserId`.
+**Prevention:** Never pass authentication identifiers (like `userId` or `adminUserId`) as arguments from the client to server actions if they are used to determine permissions. Always rely exclusively on secure, server-side context (e.g., HTTP-only cookies like `nutrisnap_session_id`) to establish identity.

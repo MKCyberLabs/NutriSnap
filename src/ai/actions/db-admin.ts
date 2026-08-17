@@ -3,9 +3,9 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 
-async function verifyAdmin(adminUserId?: string) {
+async function verifyAdmin() {
   const cookieStore = await cookies();
-  const sessionId = cookieStore.get('nutrisnap_session_id')?.value || adminUserId;
+  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
   if (!sessionId) throw new Error('Unauthorized: No session token');
   
   const user = await prisma.user.findUnique({
@@ -20,9 +20,9 @@ async function verifyAdmin(adminUserId?: string) {
 }
 
 
-export async function fetchAllUsers(adminUserId?: string) {
+export async function fetchAllUsers() {
   try {
-    await verifyAdmin(adminUserId);
+    await verifyAdmin();
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' }
     });
@@ -37,9 +37,9 @@ export async function fetchAllUsers(adminUserId?: string) {
   }
 }
 
-export async function createDbUser(userData: any, adminUserId?: string) {
+export async function createDbUser(userData: any) {
   try {
-    await verifyAdmin(adminUserId);
+    await verifyAdmin();
     const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
     if (!userData.password && !initialPassword) {
       throw new Error('No password provided and ADMIN_INITIAL_PASSWORD is not set');
@@ -67,9 +67,9 @@ export async function createDbUser(userData: any, adminUserId?: string) {
   }
 }
 
-export async function updateDbUser(userId: string, userData: any, adminUserId?: string) {
+export async function updateDbUser(userId: string, userData: any) {
   try {
-    await verifyAdmin(adminUserId);
+    await verifyAdmin();
     const updateData: any = {
       email: userData.email,
       name: userData.name,
@@ -93,9 +93,9 @@ export async function updateDbUser(userId: string, userData: any, adminUserId?: 
   }
 }
 
-export async function deleteDbUser(userId: string, adminUserId?: string) {
+export async function deleteDbUser(userId: string) {
   try {
-    await verifyAdmin(adminUserId);
+    await verifyAdmin();
     await prisma.user.delete({ where: { id: userId } });
     return { success: true };
   } catch (error) {
