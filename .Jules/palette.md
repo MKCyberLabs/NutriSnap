@@ -55,3 +55,7 @@
 ## 2024-05-18 - [Missing Accessibility Attributes on Custom Radio Buttons]
 **Learning:** Found custom interactive elements (e.g. custom drink type selection buttons in `src/app/hydration/page.tsx`) being used as a single-select radio group but lacking essential accessibility attributes such as `aria-pressed`, `aria-label`, and `type="button"`. Also lacked `focus-visible` states.
 **Action:** Always ensure that elements acting as custom toggles or radio options have `type="button"`, proper `aria-pressed` states, descriptive `aria-label`s, and explicit keyboard focus styles (`focus-visible`). Additionally, add `aria-hidden="true"` to decorative elements like emojis within these interactive components.
+
+## 2024-05-18 - [Invalid HTML and Accessibility in Links]
+**Learning:** Next.js `<Link>` elements should not wrap `<button>` elements directly inside them, as this generates invalid HTML and breaks semantic a11y tooling. Navigation links should be actual anchor tags (styled like buttons if desired).
+**Action:** Remove nested `<button>` inside `<Link>`. Apply button-like styling and `focus-visible` classes directly to the `<Link>`. Use `aria-current="page"` instead of `aria-pressed` for active navigation states.
