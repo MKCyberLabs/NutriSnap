@@ -67,3 +67,7 @@
 ## 2024-11-20 - [Accessibility: Nested buttons inside links]
 **Learning:** Found instances where `<button>` elements were directly nested inside `<Link>` components for navigation. This generates invalid HTML and causes accessibility issues for screen readers.
 **Action:** When creating navigation links that should look like buttons, apply the button styles directly to the `<Link>` element instead of nesting a `<button>` inside. Additionally, use `aria-current="page"` to semantically indicate the active view and ensure `focus-visible` styling is included for keyboard navigation.
+
+## 2026-08-02 - [Missing ARIA Labels on Form Inputs and Hidden Decorative Icons]
+**Learning:** Discovered that input components on the Login page (e.g. Email and Password) lacked explicit `aria-label` attributes despite having `htmlFor` labels, which is a required pattern for NutriSnap UI components. Additionally, found that decorative icons like spinners (`Loader2`) and arrows within submit buttons were missing `aria-hidden="true"`, causing redundant screen reader announcements.
+**Action:** Always ensure that form inputs have explicit `aria-label` attributes even if a visible label exists nearby. Furthermore, decorative icons or loading spinners within action buttons must include `aria-hidden="true"` to provide a cleaner screen reader experience.

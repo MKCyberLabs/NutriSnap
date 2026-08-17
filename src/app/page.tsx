@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { ShieldCheck, UserCheck, ArrowRight, Lock } from 'lucide-react';
+import { ShieldCheck, UserCheck, ArrowRight, Lock, Loader2 } from 'lucide-react';
 import { saveAuthSession } from '@/lib/auth-mock';
 import { authenticateDbUser } from '@/ai/actions/db-users';
 import { useToast } from '@/hooks/use-toast';
@@ -113,6 +113,7 @@ export default function LoginPage() {
                 <Input 
                   id="email" 
                   type="email" 
+                  aria-label="Email Identity"
                   placeholder="admin@mkcyberlabs.in" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -125,6 +126,7 @@ export default function LoginPage() {
                 <Input 
                   id="password" 
                   type="password" 
+                  aria-label="Secret Key"
                   placeholder="••••••••••••" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -133,9 +135,14 @@ export default function LoginPage() {
                 />
               </div>
               <Button type="submit" className="w-full h-12 text-lg font-bold group rounded-xl" disabled={loading}>
-                {loading ? "Authenticating..." : (
+                {loading ? (
                   <>
-                    Establish Session <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
+                    Authenticating...
+                  </>
+                ) : (
+                  <>
+                    Establish Session <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
                   </>
                 )}
               </Button>
