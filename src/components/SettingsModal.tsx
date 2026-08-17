@@ -663,6 +663,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                       >
                                         <SelectTrigger aria-label="Reminder interval" className={glassInputClasses}>
                                         <SelectTrigger aria-label="Reminder Interval" className={glassInputClasses}>
+                                        <SelectTrigger aria-label="Select reminder interval" className={glassInputClasses}>
                                           <SelectValue placeholder="Select interval" />
                                         </SelectTrigger>
                                         <SelectContent>

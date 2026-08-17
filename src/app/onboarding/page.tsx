@@ -83,6 +83,7 @@ export default function OnboardingPage() {
                   onValueChange={(val: 'male' | 'female') => setMetrics({...metrics, gender: val})}
                 >
                   <SelectTrigger aria-label="Gender" className="w-full">
+                  <SelectTrigger aria-label="Select gender" className="w-full">
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
                   <SelectContent>

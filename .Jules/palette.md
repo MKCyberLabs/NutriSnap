@@ -107,3 +107,7 @@
 ## 2024-11-20 - [Accessibility & Semantics: Avoid Nesting Buttons in Links]
 **Learning:** Found instances where `<button>` elements were directly nested inside `<Link>` components in Next.js (e.g. `Navbar.tsx`). This generates invalid HTML (`<a><button></button></a>`), breaks semantic meaning, and causes accessibility issues for screen reader and keyboard navigation users.
 **Action:** When a link should look like a button, either apply the button classes directly to the `<Link>` element, or use Shadcn UI's `<Button asChild>` to properly wrap the `<Link>` component without rendering a redundant `<button>` DOM element. Also, use `aria-current="page"` on links to denote the currently active view semantically.
+
+## 2024-09-02 - [Missing ARIA Labels on More Select Triggers]
+**Learning:** Found more instances across `SettingsModal.tsx`, `admin/page.tsx`, and `onboarding/page.tsx` where custom dropdown triggers (`SelectTrigger`) lacked explicit `aria-label` attributes for selecting intervals, roles, and gender. Although they have visual labels nearby, explicitly linking them or using `aria-label` provides better context.
+**Action:** Consistently ensure that all `SelectTrigger` components, regardless of the view, have an `aria-label` attribute to describe their specific purpose for screen reader users.
