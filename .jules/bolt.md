@@ -49,3 +49,7 @@
 ## 2024-05-24 - [Avoid Unmemoized Filter Loops in Render]
 **Learning:** In Next.js App Router applications, placing array operations like `.filter()` with string manipulation (e.g., `.toLowerCase()`) directly inside the component's render body can cause O(N) recalculations on every unrelated state update (like typing in a search box). This is a common performance anti-pattern.
 **Action:** Always wrap array filtering derived from state inside a `useMemo` hook, and hoist invariant operations (like converting a search term to lowercase) outside the filter loop callback to avoid redundant computations.
+
+## 2024-02-17 - [Optimized UseMemo Filter Operations]
+**Learning:** In React `useMemo` hooks, if an invariant string manipulation (like `.toLowerCase()`) is placed inside an array `.filter()` block callback, the runtime redundantly executes string allocation operations equivalent to $O(N)$ times.
+**Action:** Always hoist invariant search terms out of mapping, filtering, or reducing iterations inside components and `useMemo` hooks to convert them to $O(1)$ evaluations, significantly cutting computation time in frontend searches (especially on moderately large sets like combobox selections).
