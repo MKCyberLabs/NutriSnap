@@ -79,3 +79,7 @@
 ## 2024-11-20 - [Missing Keyboard Focus on Quick Add Buttons]
 **Learning:** Found custom action buttons (like the Quick Add water amounts in `hydration/page.tsx`) that lacked `type="button"` and `focus-visible` styles, relying only on hover effects for interactivity cues. While mouse users could see the hover state, keyboard users lacked a visual indicator of focus.
 **Action:** Always add `type="button"` and explicit `focus-visible` classes (like `focus-visible:ring-2`) to custom action buttons to ensure full accessibility for keyboard users, preventing accidental form submissions and ensuring clear focus indicators.
+
+## 2024-11-20 - [Missing aria-pressed and focus-visible on Custom Toggle Buttons in SettingsModal]
+**Learning:** Found custom button groups acting as tab navigation (`account`, `health`, `notifications`, `preferences`) in `SettingsModal.tsx` lacking `aria-pressed` to indicate their active state, as well as missing standard keyboard focus indicators (`focus-visible:ring-2`, etc.), negatively impacting screen readers and keyboard users.
+**Action:** When creating custom tab navigation or toggle groups using standard buttons, ensure the `aria-pressed` (or `aria-selected` depending on the role) attribute dynamically corresponds to the active state, and apply `focus-visible` styling appropriately to enable clear keyboard navigation.
