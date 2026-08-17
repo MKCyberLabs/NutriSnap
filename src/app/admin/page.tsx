@@ -129,6 +129,13 @@ export default function AdminPage() {
     return managedUsers.filter(u =>
       u.name.toLowerCase().includes(term) ||
       u.email.toLowerCase().includes(term)
+  // ⚡ Bolt Optimization: Memoize filteredUsers and hoist lowercase conversion
+  // Prevents O(N) operations on every keystroke by not recalculating unless users or search term changes.
+  const filteredUsers = useMemo(() => {
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return managedUsers.filter(u =>
+      u.name.toLowerCase().includes(lowerSearchTerm) ||
+      u.email.toLowerCase().includes(lowerSearchTerm)
     );
   }, [managedUsers, searchTerm]);
 
