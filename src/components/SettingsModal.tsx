@@ -83,6 +83,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
   // to avoid O(N) string allocations on every render/keystroke.
   const filteredTimezones = useMemo(() => {
     if (!tzSearch) return allTimezones;
+    // ⚡ Bolt Optimization: Hoist tzSearch.toLowerCase() to avoid O(N) string allocations inside filter loop
     const term = tzSearch.toLowerCase();
     return allTimezones.filter(tz => tz.toLowerCase().includes(term));
   }, [allTimezones, tzSearch]);

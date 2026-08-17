@@ -53,6 +53,9 @@ export function authenticateUser(email: string, password?: string): ManagedUser 
   // to avoid O(N) string allocations during authentication checks.
   const targetEmail = email.toLowerCase();
   const user = users.find(u => u.email.toLowerCase() === targetEmail);
+  // ⚡ Bolt Optimization: Hoist email.toLowerCase() to avoid O(N) string allocations during authentication.
+  const emailLower = email.toLowerCase();
+  const user = users.find(u => u.email.toLowerCase() === emailLower);
   
   if (user && user.password === password) {
     return user;
