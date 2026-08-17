@@ -22,6 +22,7 @@
 **Vulnerability:** A Genkit tool (`queryDatabase`) designed for the LLM to fetch database records allowed raw SQL strings to be constructed by the LLM and executed via `prisma.$queryRawUnsafe`. The only validation was checking if the string started with "SELECT". This allowed trivial SQL injection (e.g., prompt injection) to extract other users' sensitive data.
 **Learning:** LLMs cannot be trusted to generate safe raw SQL queries on the fly, and string validation on LLM output is a weak defense. Providing an LLM direct SQL execution access is inherently dangerous.
 **Prevention:** Remove arbitrary SQL execution tools for LLMs. Instead, fetch the required contextual data securely via parameterized ORM queries *before* passing the context to the LLM prompt.
+
 ## 2024-06-23 - Pass-the-Hash and Password Hash Leak via Server Actions (Addendum)
 **Vulnerability:** A critical vulnerability existed in `src/ai/actions/db-admin.ts` and `src/ai/actions/db-users.ts` where server actions (`fetchAllUsers`, `createDbUser`, `updateDbUser`, `authenticateDbUser`) were returning full database user objects containing hashed passwords directly to the frontend.
 **Learning:** Returning full database objects from Next.js Server Actions implicitly exposes all properties to the client, leading to sensitive data leaks like password hashes.
@@ -67,3 +68,8 @@
 **Learning:** Exposing raw error strings from backend components to the frontend can provide attackers with sensitive context about the internal environment or third-party service dependencies.
 **Prevention:** Catch statements on API endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Internal Server Error") to the client.
 \n## 2026-08-07 - [Hardcoded Database Credentials]\n**Vulnerability:** A hardcoded database connection string containing a password (`nutrisnap_pass`) was used as a fallback in `src/lib/prisma.ts`.\n**Learning:** Hardcoded database credentials, even as fallbacks, pose a severe security risk if committed to version control, as they can be easily extracted and abused.\n**Prevention:** Always rely exclusively on environment variables (e.g., `process.env.DATABASE_URL`) for database connection strings and never include hardcoded fallbacks in the codebase.
+
+## 2023-10-27 - [Hardcoded Database Credentials]
+**Vulnerability:** Hardcoded PostgreSQL credentials (`postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap`) were used as a fallback for `DATABASE_URL` in `src/lib/prisma.ts`.
+**Learning:** Developers sometimes use hardcoded credentials as a fallback for local development convenience, which risks exposing sensitive production credentials if the codebase is shared or compromised, or if the local credentials are inadvertently the same as production.
+**Prevention:** Always rely exclusively on `process.env.DATABASE_URL` for the database connection string. Never include hardcoded fallback credentials in the codebase (e.g., in `src/lib/prisma.ts`). Ensure local environments use `.env` files for configuration.
