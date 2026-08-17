@@ -103,3 +103,7 @@
 ## 2024-11-20 - [Invalid Nested Button Links]
 **Learning:** Found instances where `<button>` elements were directly nested inside Next.js `<Link>` components (e.g. toggle navigation in `Navbar.tsx`). This generates invalid HTML, can confuse screen readers, and is generally bad practice.
 **Action:** When styling Next.js navigation links to look like buttons, always apply the styles (including `focus-visible` classes) directly to the `<Link>` element instead of wrapping a `<button>`. Add `aria-current="page"` to semantically indicate the active view.
+
+## 2024-11-20 - [Accessibility & Semantics: Avoid Nesting Buttons in Links]
+**Learning:** Found instances where `<button>` elements were directly nested inside `<Link>` components in Next.js (e.g. `Navbar.tsx`). This generates invalid HTML (`<a><button></button></a>`), breaks semantic meaning, and causes accessibility issues for screen reader and keyboard navigation users.
+**Action:** When a link should look like a button, either apply the button classes directly to the `<Link>` element, or use Shadcn UI's `<Button asChild>` to properly wrap the `<Link>` component without rendering a redundant `<button>` DOM element. Also, use `aria-current="page"` on links to denote the currently active view semantically.

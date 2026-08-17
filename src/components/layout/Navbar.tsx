@@ -115,6 +115,19 @@ export function Navbar() {
               className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}
             >
               Hydration Hub
+            <Link
+              href="/dashboard"
+              aria-current={!isHydration ? 'page' : undefined}
+              className={`block px-4 py-1.5 rounded-full text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${!isHydration ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}
+            >
+                NutriSnap
+            </Link>
+            <Link
+              href="/hydration"
+              aria-current={isHydration ? 'page' : undefined}
+              className={`block px-4 py-1.5 rounded-full text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${isHydration ? 'bg-sky-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 opacity-60 hover:opacity-100'}`}
+            >
+                Hydration Hub
             </Link>
           </div>
         )}
