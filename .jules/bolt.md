@@ -85,3 +85,7 @@
 ## 2023-10-27 - [Avoid redundant allocations in string searches]
 **Learning:** Found string filters repeatedly allocating new strings inside render loops for long arrays. Calling `searchTerm.toLowerCase()` inside a `.filter` block over an array runs O(N) times and allocates N new strings per re-render, creating needless GC pressure and high CPU load for large lists.
 **Action:** Extract the `.toLowerCase()` call outside the loop to calculate once, and memoize the overall filter with `useMemo` so it recalculates only when inputs change.
+
+## 2025-02-28 - [Pre-computing static array derivations for faster search]
+**Learning:** Found `.toLowerCase()` being called on every element of a static `allTimezones` array inside a `.filter()` loop every time the `tzSearch` state changed in `src/components/SettingsModal.tsx`. Because `allTimezones` is relatively static but large, doing the string derivation on every keystroke adds O(N) allocation overhead.
+**Action:** When searching/filtering over static arrays, pre-compute the derived search keys (like lowercased strings) once on mount. Store an array of objects `{ original, searchKey }`, and hoist the input `.toLowerCase()` outside the `.filter()` loop.
