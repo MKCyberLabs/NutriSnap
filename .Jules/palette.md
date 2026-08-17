@@ -63,3 +63,7 @@
 ## 2024-07-26 - [Nesting Buttons inside Links]
 **Learning:** Found instances where `<button>` elements were directly nested inside `<Link>` components (e.g., in `Navbar.tsx`). This generates invalid HTML because interactive elements should not be nested, and it negatively impacts accessibility and standard keyboard navigation. Furthermore, active links often lacked `aria-current="page"` and `focus-visible` styles.
 **Action:** Always apply button-like styles directly to the `<Link>` element instead of nesting a `<button>` inside. When modifying navigation links, ensure they use `aria-current="page"` to semantically indicate the active view and include explicit `focus-visible` classes (like `focus-visible:outline-none focus-visible:ring-2`) to ensure keyboard accessibility. When wrapping Shadcn UI components (like `<Button>`) around a `<Link>`, always use the `asChild` prop on the component.
+
+## 2024-11-20 - [Accessibility: Nested buttons inside links]
+**Learning:** Found instances where `<button>` elements were directly nested inside `<Link>` components for navigation. This generates invalid HTML and causes accessibility issues for screen readers.
+**Action:** When creating navigation links that should look like buttons, apply the button styles directly to the `<Link>` element instead of nesting a `<button>` inside. Additionally, use `aria-current="page"` to semantically indicate the active view and ensure `focus-visible` styling is included for keyboard navigation.
