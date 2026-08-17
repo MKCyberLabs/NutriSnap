@@ -175,6 +175,15 @@ export default function AdminPage() {
       )
       .map(u => u.original);
   }, [mappedUsers, managedUsers, searchTerm]);
+  // Memoized user search filtering with hoisted invariant to prevent O(N) string allocation on re-renders
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return managedUsers;
+    const lowercasedTerm = searchTerm.toLowerCase();
+    return managedUsers.filter(u =>
+      u.name.toLowerCase().includes(lowercasedTerm) ||
+      u.email.toLowerCase().includes(lowercasedTerm)
+    );
+  }, [managedUsers, searchTerm]);
 
   return (
     <div className="min-h-svh bg-slate-50 dark:bg-slate-950 font-sans">
