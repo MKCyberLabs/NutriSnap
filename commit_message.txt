@@ -1,0 +1,13 @@
+🎨 Palette: [UX improvement] Add ARIA labels and focus-visible to UI components
+
+**💡 What:**
+- Added `focus-visible` classes to the 'Edit weight' button in the dashboard for better keyboard navigation.
+- Added `focus-visible` to the 'Remove meal photo' button in the Meal Analysis tool.
+- Added `aria-hidden="true"` to decorative icons (`Loader2` and `Sparkles`) inside the Meal Analysis tool analyze button.
+
+**🎯 Why:**
+- To improve accessibility and user experience, keyboard users now get explicit visual feedback when focusing on interactive elements, and screen readers will ignore decorative loading spinners/icons to reduce redundant announcements.
+
+**♿ Accessibility:**
+- Keyboard focus states improved.
+- Decorative elements hidden from screen readers.

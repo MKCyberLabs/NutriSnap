@@ -244,7 +244,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                 variant="destructive" 
                 size="icon" 
                 aria-label="Remove meal photo"
-                className="absolute top-2 right-2 h-8 w-8 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 h-8 w-8 rounded-full shadow-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.preventDefault();
                   clearSelection();
@@ -264,11 +264,11 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
         <Button onClick={handleAnalyze} disabled={isAnalyzing} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground h-12 text-md font-bold shadow-lg shadow-primary/20 rounded-xl order-1 sm:order-2">
           {isAnalyzing ? (
             <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Analyzing...
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" /> Analyzing...
             </>
           ) : (
             <>
-              Analyze with Health Matrix <Sparkles className="ml-2 h-5 w-5" />
+              Analyze with Health Matrix <Sparkles className="ml-2 h-5 w-5" aria-hidden="true" />
             </>
           )}
         </Button>
