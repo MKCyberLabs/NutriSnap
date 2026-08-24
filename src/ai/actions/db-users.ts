@@ -53,14 +53,24 @@ export async function resetDbUserPassword(userId: string, newPassword: string) {
 export async function authenticateDbUser(email: string, password?: string) {
   try {
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return null;
     
     // Dynamically calculate if bio data is truly complete
-    user.onboarded = user.onboarded && !!(user.age && user.age > 0 && user.weight && user.weight > 0 && user.height && user.height > 0);
+    if (user) {
+      user.onboarded = user.onboarded && !!(user.age && user.age > 0 && user.weight && user.weight > 0 && user.height && user.height > 0);
+    }
     
     if (password) {
-      const isValid = await bcrypt.compare(password, user.password);
-      if (isValid) {
+      // 🛡️ Sentinel: Mitigate User Enumeration Timing Attacks
+      const dummyHash = '$2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa';
+      let isValid = false;
+
+      if (user) {
+        isValid = await bcrypt.compare(password, user.password);
+      } else {
+        await bcrypt.compare(password, dummyHash);
+      }
+
+      if (user && isValid) {
         const cookieStore = await cookies();
         cookieStore.set('nutrisnap_session_id', user.id, {
           httpOnly: true,
@@ -72,6 +82,8 @@ export async function authenticateDbUser(email: string, password?: string) {
         const { password: _, ...userWithoutPassword } = user;
         return userWithoutPassword;
       }
+    } else if (!user) {
+      return null;
     }
     
     return null;

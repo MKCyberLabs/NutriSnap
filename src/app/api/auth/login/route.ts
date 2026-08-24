@@ -32,15 +32,18 @@ export async function POST(req: NextRequest) {
       where: { email },
     });
 
-    if (!user) {
-      updateAttempts(identifier);
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    // 🛡️ Sentinel: Mitigate User Enumeration Timing Attacks
+    // Always perform a hash comparison even if the user is not found to normalize response times.
+    const dummyHash = '$2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa';
+    let passwordMatch = false;
+
+    if (user) {
+      passwordMatch = await bcrypt.compare(password, user.password);
+    } else {
+      await bcrypt.compare(password, dummyHash);
     }
 
-    // Password Verification
-    const passwordMatch = await bcrypt.compare(password, user.password);
-
-    if (!passwordMatch) {
+    if (!user || !passwordMatch) {
       updateAttempts(identifier);
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
