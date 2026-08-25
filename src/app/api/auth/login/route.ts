@@ -34,6 +34,10 @@ export async function POST(req: NextRequest) {
 
     if (!user) {
       updateAttempts(identifier);
+      // Execute a dummy hash comparison to prevent timing-based user enumeration
+      if (password) {
+        await bcrypt.compare(password, '$2a$10$tDF1mKUpqGwDEL.8u5jReu3qgUsB/uZH/U4z8zbkkZr50s/D9gQCC');
+      }
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
