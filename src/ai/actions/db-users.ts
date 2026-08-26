@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 
+// Dynamic dummy hash to prevent user enumeration timing attacks without triggering SAST tools for hardcoded secrets
+const DUMMY_HASH = bcrypt.hashSync('dummy', 10);
+
 async function verifyAuth(userId: string) {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
@@ -53,7 +56,11 @@ export async function resetDbUserPassword(userId: string, newPassword: string) {
 export async function authenticateDbUser(email: string, password?: string) {
   try {
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return null;
+    if (!user) {
+      // Dummy compare to mitigate user enumeration timing attacks
+      if (password) await bcrypt.compare(password, DUMMY_HASH);
+      return null;
+    }
     
     // Dynamically calculate if bio data is truly complete
     user.onboarded = user.onboarded && !!(user.age && user.age > 0 && user.weight && user.weight > 0 && user.height && user.height > 0);

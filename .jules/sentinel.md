@@ -113,3 +113,8 @@
 **Vulnerability:** A medium-priority information leakage vulnerability existed in `src/app/api/telegram/webhook/route.ts` where internal server errors in the webhook POST handler were passing the raw `err.message` detail directly to the client/caller in the JSON response payload.
 **Learning:** Exposing raw error strings from backend webhook components to the caller can provide attackers with sensitive context about the internal environment or third-party service dependencies. This is consistent with previous learnings about API routes but applied to webhooks.
 **Prevention:** Catch statements on webhook endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Internal Server Error") to the caller.
+
+## 2026-08-26 - [User Enumeration via Timing Attack]
+**Vulnerability:** The authentication flows in `src/app/api/auth/login/route.ts` and `src/ai/actions/db-users.ts` returned immediately if a user was not found, but performed an expensive `bcrypt.compare` operation if the user was found. This timing discrepancy allowed attackers to guess valid email addresses based on response times.
+**Learning:** Returning early on invalid users when subsequent validation steps are computationally expensive creates a reliable oracle for user enumeration.
+**Prevention:** Normalize response times by performing a dummy `bcrypt.compare` using a dynamically generated hash (`bcrypt.hashSync('dummy', 10)`) when a user is not found. Generate the dummy hash dynamically at the module level to avoid triggering SAST tools with hardcoded secrets.
