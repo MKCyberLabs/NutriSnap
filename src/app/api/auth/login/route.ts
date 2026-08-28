@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { loginSchema } from '@/lib/validation';
 
+// 🛡️ Sentinel: Generate a dummy hash once at startup to prevent user enumeration
+// timing attacks. Avoid hardcoding a valid hash string to prevent false-positive SAST alerts.
+const DUMMY_HASH = bcrypt.hashSync('dummy', 10);
+
 // Simple in-memory rate limiter for prototype
 // Relaxed for development: 50 attempts per 15 mins
 const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
@@ -32,13 +36,18 @@ export async function POST(req: NextRequest) {
       where: { email },
     });
 
+    let passwordMatch = false;
+
     if (!user) {
+      // 🛡️ Sentinel: Mitigate User Enumeration timing attacks by performing a dummy hash comparison
+      // when a user lookup returns null, ensuring response time is consistent.
+      await bcrypt.compare(password, DUMMY_HASH);
       updateAttempts(identifier);
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    } else {
+      // Password Verification
+      passwordMatch = await bcrypt.compare(password, user.password);
     }
-
-    // Password Verification
-    const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
       updateAttempts(identifier);
