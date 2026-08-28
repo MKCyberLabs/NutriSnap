@@ -111,3 +111,6 @@
 ## 2024-09-02 - [Missing ARIA Labels on More Select Triggers]
 **Learning:** Found more instances across `SettingsModal.tsx`, `admin/page.tsx`, and `onboarding/page.tsx` where custom dropdown triggers (`SelectTrigger`) lacked explicit `aria-label` attributes for selecting intervals, roles, and gender. Although they have visual labels nearby, explicitly linking them or using `aria-label` provides better context.
 **Action:** Consistently ensure that all `SelectTrigger` components, regardless of the view, have an `aria-label` attribute to describe their specific purpose for screen reader users.
+## 2026-08-28 - [Accessible Decorative Icons in Buttons]
+**Learning:** Decorative icons (like Lucide React icons) placed inside interactive elements (like buttons) without explicit `aria-hidden="true"` attributes are often read aloud by screen readers, creating redundant and confusing auditory noise for users, especially when the button already has an `aria-label` or text content describing its function.
+**Action:** When composing UI components that contain icons solely for visual enhancement alongside descriptive text or an `aria-label`, always apply `aria-hidden="true"` to the icon element to ensure screen readers only announce the intended function of the interactive element.

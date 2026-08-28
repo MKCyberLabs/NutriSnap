@@ -420,16 +420,16 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
           {/* Navigation */}
           <div className="w-full md:w-64 flex md:flex-col gap-3 shrink-0 overflow-x-auto md:overflow-y-auto pb-2 md:pb-0 custom-scrollbar border-b md:border-b-0 md:border-r border-white/20 md:pr-4">
             <Button variant="ghost" aria-pressed={activeTab === 'account'} onClick={() => requestTabChange('account')} className={tabClasses('account')}>
-              <ShieldAlert className="mr-2 h-5 w-5 shrink-0" /> Account & Security
+              <ShieldAlert className="mr-2 h-5 w-5 shrink-0" aria-hidden="true" /> Account & Security
             </Button>
             <Button variant="ghost" aria-pressed={activeTab === 'health'} onClick={() => requestTabChange('health')} className={tabClasses('health')}>
-              <Activity className="mr-2 h-5 w-5 shrink-0" /> Health & Biometrics
+              <Activity className="mr-2 h-5 w-5 shrink-0" aria-hidden="true" /> Health & Biometrics
             </Button>
             <Button variant="ghost" aria-pressed={activeTab === 'notifications'} onClick={() => requestTabChange('notifications')} className={tabClasses('notifications')}>
-              <Bell className="mr-2 h-5 w-5 shrink-0" /> Notifications
+              <Bell className="mr-2 h-5 w-5 shrink-0" aria-hidden="true" /> Notifications
             </Button>
             <Button variant="ghost" aria-pressed={activeTab === 'preferences'} onClick={() => requestTabChange('preferences')} className={tabClasses('preferences')}>
-              <Settings2 className="mr-2 h-5 w-5 shrink-0" /> Preferences
+              <Settings2 className="mr-2 h-5 w-5 shrink-0" aria-hidden="true" /> Preferences
             </Button>
           </div>
 
@@ -464,7 +464,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                           />
                         </div>
                         <Button onClick={() => handleSaveSettings()} disabled={savingSettings} className="rounded-xl px-8 shadow-lg shadow-primary/20">
-                          {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Changes
+                          {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="mr-2 h-4 w-4" aria-hidden="true" />} Save Changes
                         </Button>
                       </CardContent>
                     </div>
@@ -534,7 +534,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                         </div>
 
                         <Button onClick={() => handleSaveSettings()} disabled={savingSettings} className="rounded-xl px-8 shadow-lg shadow-primary/20">
-                          {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Health Data
+                          {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="mr-2 h-4 w-4" aria-hidden="true" />} Save Health Data
                         </Button>
                       </CardContent>
                     </div>
@@ -560,7 +560,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                 className={glassInputClasses} 
                               />
                               <Button onClick={() => handleSaveSettings()} disabled={savingSettings} className="rounded-xl px-6">
-                                {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                                {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : 'Save'}
                               </Button>
                             </div>
                             <p className="text-xs text-muted-foreground">Required to receive reminders and log meals via Telegram.</p>
@@ -606,7 +606,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                           className={`flex-1 ${glassInputClasses}`}
                                         />
                                         <Button onClick={() => handleSaveReminder(cat)} disabled={savingReminder === cat} variant="secondary" size="icon" aria-label={`Save ${cat} reminder`} className="shrink-0 rounded-xl bg-white/40 hover:bg-white/60">
-                                          {savingReminder === cat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                          {savingReminder === cat ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
                                         </Button>
                                       </div>
                                     </div>
@@ -778,7 +778,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                           </Popover>
                         </div>
                         <Button onClick={() => handleSaveSettings()} disabled={savingSettings} className="rounded-xl px-8 shadow-lg shadow-primary/20">
-                          {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Preferences
+                          {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="mr-2 h-4 w-4" aria-hidden="true" />} Save Preferences
                         </Button>
                       </CardContent>
                     </div>
