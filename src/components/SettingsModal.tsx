@@ -66,14 +66,10 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
   const [isTzOpen, setIsTzOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // ⚡ Bolt Optimization: Pre-compute and store lowercased formatting for the large static
+  // ⚡ Bolt Optimization: Pre-compute lowercased formatting for the large static
   // array of timezones on component mount to avoid O(N) string allocations on every keystroke.
-  // ⚡ Bolt Optimization: Pre-compute lowercase values for timezones to prevent O(N) allocations on every keystroke
-  // ⚡ Bolt Optimization: Pre-compute lowercase timezone names to avoid O(N) string allocations per keystroke.
-  // Pre-compute lowercased timezones on mount to avoid O(N) string allocations during search
   const allTimezones = useMemo(() => {
     let tzs: string[];
-    let tzs: string[] = [];
     try {
       tzs = Intl.supportedValuesOf('timeZone');
       if (!tzs.includes('Asia/Kolkata')) {
@@ -82,114 +78,21 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
       }
     } catch (e) {
       tzs = ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
-      return tzs.map(tz => ({ value: tz, lower: tz.toLowerCase() }));
-    } catch (e) {
-      return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'].map(tz => ({ value: tz, lower: tz.toLowerCase() }));
-      return tzs.map(tz => ({ original: tz, lower: tz.toLowerCase() }));
-    } catch (e) {
-      return ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata']
-        .map(tz => ({ original: tz, lower: tz.toLowerCase() }));
-      // ⚡ Bolt Optimization: Pre-compute lowercase timezone names to avoid O(N) string allocations during filtering
-      return tzs.map(tz => ({ label: tz, lower: tz.toLowerCase() }));
-    } catch (e) {
-      const defaultTzs = ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata'];
-      return defaultTzs.map(tz => ({ label: tz, lower: tz.toLowerCase() }));
     }
-    return tzs.map(tz => ({ tz, searchKey: tz.toLowerCase() }));
-    }
-    return tzs.map(tz => ({ original: tz, lower: tz.toLowerCase() }));
-    }
-    // ⚡ Bolt Optimization: Pre-compute lowercase versions once on mount to avoid O(N) string allocations during filter.
+
     return tzs.map(tz => ({
-      original: tz,
+      value: tz,
       lower: tz.toLowerCase()
     }));
   }, []);
 
   // ⚡ Bolt Optimization: Hoist tzSearch.toLowerCase() outside the filter loop
-  // to avoid O(N) string allocations on every render/keystroke.
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones;
-    // ⚡ Bolt Optimization: Hoist tzSearch.toLowerCase() to avoid O(N) string allocations inside filter loop
-    const term = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.toLowerCase().includes(term));
-  // ⚡ Bolt Optimization: Hoisted invariant tzSearch.toLowerCase() outside the loop to prevent O(N) string allocations on every keystroke.
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones;
-    // ⚡ Bolt Optimization: Hoist invariant search term to prevent O(N) string allocations inside the filter loop.
-    // ⚡ Bolt Optimization: Hoist tzSearch.toLowerCase() outside the filter loop
-    // to prevent redundant O(N) string allocations during timezone search.
-    const searchLower = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.toLowerCase().includes(searchLower));
-  // ⚡ Bolt Optimization: Hoist invariant search term lowercasing outside the filter loop
-  // and use O(1) property lookup instead of .toLowerCase() during the loop.
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones.map(item => item.tz);
-    const searchLower = tzSearch.toLowerCase();
-    return allTimezones
-      .filter(item => item.searchKey.includes(searchLower))
-      .map(item => item.tz);
-  // ⚡ Bolt Optimization: Hoist invariant search term lowercasing outside the filter loop
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones;
-    const term = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.lower.includes(term));
-  // ⚡ Bolt Optimization: Hoist invariant tzSearch.toLowerCase() outside the filter loop and map back to string array.
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones.map(tz => tz.original);
-    const searchLower = tzSearch.toLowerCase();
-    return allTimezones
-      .filter(tz => tz.lower.includes(searchLower))
-      .map(tz => tz.original);
-    if (!tzSearch) return allTimezones.map(tz => tz.label);
-    // ⚡ Bolt Optimization: Hoist invariant search term lowering outside the O(N) loop
-    const term = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.lower.includes(term)).map(tz => tz.label);
-    if (!tzSearch) return allTimezones.map(tz => tz.original);
-    // Hoist invariant search string lowercase to avoid repeated allocation in loop
-    const term = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.lower.includes(term)).map(tz => tz.original);
-  // ⚡ Bolt Optimization: Memoize filtered list to prevent O(N) redundant string allocations
-  // by hoisting tzSearch.toLowerCase() outside the .filter() loop.
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones;
-    const term = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.toLowerCase().includes(term));
-    if (!tzSearch) return allTimezones.map(t => t.original);
-    // ⚡ Bolt Optimization: Hoist invariant search term `.toLowerCase()` out of the O(N) filter loop.
-    const term = tzSearch.toLowerCase();
-    return allTimezones
-      .filter(tz => tz.lower.includes(term))
-      .map(tz => tz.original);
-  // ⚡ Bolt Optimization: Hoist invariant tzSearch.toLowerCase() to avoid O(N) string allocations inside loop
+  // to avoid O(N) string allocations on every keystroke.
   const filteredTimezones = useMemo(() => {
     if (!tzSearch) return allTimezones;
     const searchLower = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.toLowerCase().includes(searchLower));
-  // ⚡ Bolt Optimization: Hoist invariant tzSearch.toLowerCase() outside the loop.
-  // Replaces O(N) string allocations inside the filter with a single O(1) allocation per keystroke.
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones;
-    const term = tzSearch.toLowerCase();
-    return allTimezones.filter(tz => tz.toLowerCase().includes(term));
+    return allTimezones.filter(tz => tz.lower.includes(searchLower));
   }, [allTimezones, tzSearch]);
-  // ⚡ Bolt Optimization: Pre-compute lowercased timezones to prevent O(N) string allocation
-  // on every keystroke when searching through 400+ timezones.
-  const timezonesWithLower = useMemo(() => {
-    return allTimezones.map(tz => ({
-      original: tz,
-      lower: tz.toLowerCase()
-    }));
-  }, [allTimezones]);
-
-  const filteredTimezones = useMemo(() => {
-    if (!tzSearch) return allTimezones;
-    // ⚡ Bolt Optimization: Hoist invariant tzSearch.toLowerCase() out of the .filter() loop
-    const term = tzSearch.toLowerCase();
-    return timezonesWithLower
-      .filter(item => item.lower.includes(term))
-      .map(item => item.original);
-  }, [timezonesWithLower, tzSearch, allTimezones]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!initialState) return false;
@@ -661,8 +564,6 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                         value={String(hydrationSetting.intervalMinutes)}
                                         onValueChange={(val) => setHydrationSetting({ ...hydrationSetting, intervalMinutes: parseInt(val) })}
                                       >
-                                        <SelectTrigger aria-label="Reminder interval" className={glassInputClasses}>
-                                        <SelectTrigger aria-label="Reminder Interval" className={glassInputClasses}>
                                         <SelectTrigger aria-label="Select reminder interval" className={glassInputClasses}>
                                           <SelectValue placeholder="Select interval" />
                                         </SelectTrigger>
