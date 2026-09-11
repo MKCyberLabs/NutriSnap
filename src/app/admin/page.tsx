@@ -132,42 +132,11 @@ export default function AdminPage() {
   }, [managedUsers]);
 
   // ⚡ Bolt Optimization: Filter using pre-computed values and hoist invariant search term
+  // By separating the static mapping from dynamic filtering, we prevent redundant O(N)
+  // lowercase conversions during active keystrokes, ensuring high performance.
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return managedUsers;
     const term = searchTerm.toLowerCase();
-    return managedUsers.filter(u =>
-      u.name.toLowerCase().includes(term) ||
-      u.email.toLowerCase().includes(term)
-  // ⚡ Bolt Optimization: Memoize filteredUsers and hoist lowercase conversion
-  // Prevents O(N) operations on every keystroke by not recalculating unless users or search term changes.
-  const filteredUsers = useMemo(() => {
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    return managedUsers.filter(u =>
-      u.name.toLowerCase().includes(lowerSearchTerm) ||
-      u.email.toLowerCase().includes(lowerSearchTerm)
-  // ⚡ Bolt Optimization: Memoize the filtered user list to prevent O(N) array filtering
-  // on every single re-render of this heavy admin page.
-  // Additionally, hoist the invariant `searchTerm.toLowerCase()` outside of the filter
-  // loop to reduce redundant string allocations from O(2N) to O(1).
-  const filteredUsers = useMemo(() => {
-    if (!searchTerm) return managedUsers;
-  // ⚡ Bolt Optimization: Memoize filtered list to prevent unnecessary array allocations and re-renders,
-  // and hoist invariant searchTerm.toLowerCase() outside the filter loop to eliminate redundant O(N) conversions.
-  const filteredUsers = useMemo(() => {
-    const lowerTerm = searchTerm.toLowerCase();
-    return managedUsers.filter(u =>
-      u.name.toLowerCase().includes(lowerTerm) ||
-      u.email.toLowerCase().includes(lowerTerm)
-  // ⚡ Bolt: Memoize filtered users to prevent O(N) recalculations on every render
-  // and hoist searchTerm.toLowerCase() to prevent redundant O(N) string allocations inside the loop.
-  const filteredUsers = useMemo(() => {
-    const searchLower = searchTerm.toLowerCase();
-    return managedUsers.filter(u =>
-      u.name.toLowerCase().includes(searchLower) ||
-      u.email.toLowerCase().includes(searchLower)
-    );
-  }, [managedUsers, searchTerm]);
-
     return mappedUsers
       .filter(u =>
         u.nameLower.includes(term) ||
@@ -175,15 +144,6 @@ export default function AdminPage() {
       )
       .map(u => u.original);
   }, [mappedUsers, managedUsers, searchTerm]);
-  // Memoized user search filtering with hoisted invariant to prevent O(N) string allocation on re-renders
-  const filteredUsers = useMemo(() => {
-    if (!searchTerm) return managedUsers;
-    const lowercasedTerm = searchTerm.toLowerCase();
-    return managedUsers.filter(u =>
-      u.name.toLowerCase().includes(lowercasedTerm) ||
-      u.email.toLowerCase().includes(lowercasedTerm)
-    );
-  }, [managedUsers, searchTerm]);
 
   return (
     <div className="min-h-svh bg-slate-50 dark:bg-slate-950 font-sans">
@@ -226,8 +186,6 @@ export default function AdminPage() {
                 <div className="space-y-2">
                   <Label>System Role</Label>
                   <Select value={currentUser.role || 'USER'} onValueChange={val => setCurrentUser({...currentUser, role: val as UserRole})}>
-                    <SelectTrigger aria-label="System role" className="rounded-xl">
-                    <SelectTrigger aria-label="System Role" className="rounded-xl">
                     <SelectTrigger aria-label="Select system role" className="rounded-xl">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
@@ -389,9 +347,7 @@ export default function AdminPage() {
               <div className="space-y-2">
                 <Label>Identity Role</Label>
                 <Select value={currentUser.role || 'USER'} onValueChange={val => setCurrentUser({...currentUser, role: val as UserRole})}>
-                  <SelectTrigger aria-label="Identity role" className="rounded-xl">
-                  <SelectTrigger aria-label="Identity Role" className="rounded-xl">
-                  <SelectTrigger aria-label="Select system role" className="rounded-xl">
+                  <SelectTrigger aria-label="Select identity role" className="rounded-xl">
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
