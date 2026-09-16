@@ -114,3 +114,7 @@
 ## 2026-08-28 - [Accessible Decorative Icons in Buttons]
 **Learning:** Decorative icons (like Lucide React icons) placed inside interactive elements (like buttons) without explicit `aria-hidden="true"` attributes are often read aloud by screen readers, creating redundant and confusing auditory noise for users, especially when the button already has an `aria-label` or text content describing its function.
 **Action:** When composing UI components that contain icons solely for visual enhancement alongside descriptive text or an `aria-label`, always apply `aria-hidden="true"` to the icon element to ensure screen readers only announce the intended function of the interactive element.
+
+## 2024-11-20 - [Missing ARIA Labels on Native Select Inputs]
+**Learning:** Discovered that in addition to custom `SelectTrigger` components, native `<select>` elements (like the Gender selector in `SettingsModal.tsx`) also lacked explicit `aria-label` attributes. Even when preceded by a `<Label>` component, unless explicitly linked with `htmlFor` and `id`, screen readers may fail to announce the dropdown context clearly.
+**Action:** Consistently ensure that all select dropdowns—both custom Shadcn `SelectTrigger` components and native `<select>` elements—have an explicit `aria-label` attribute to provide context for screen reader users.
