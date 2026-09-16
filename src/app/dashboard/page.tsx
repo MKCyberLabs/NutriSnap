@@ -810,12 +810,17 @@ export default function DashboardPage() {
     return { protein, carbs, fat, calories, peakCalories, trackedDays };
   }, [dynamicWeeklyData]);
 
+  // ⚡ Bolt Optimization: Memoize total days calculation
+  // Replaces 4 separate date math operations (one in weeklyAvgCalories, three in render loop)
+  // with a single memoized calculation.
+  const totalDaysInRange = useMemo(() => {
+    return differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1;
+  }, [activeWeeklyRange]);
+
   const weeklyAvgCalories = useMemo(() => {
     if (dynamicWeeklyData.length === 0) return 0;
-    const totalDaysInRange =
-      differenceInDays(activeWeeklyRange.to, activeWeeklyRange.from) + 1;
     return Math.round(weeklyTotals.calories / totalDaysInRange);
-  }, [dynamicWeeklyData, activeWeeklyRange, weeklyTotals.calories]);
+  }, [dynamicWeeklyData, totalDaysInRange, weeklyTotals.calories]);
 
   if (!isMounted) return null;
 
@@ -1558,35 +1563,17 @@ export default function DashboardPage() {
                       {
                         label: "Protein",
                         val: weeklyTotals.protein,
-                        max:
-                          userTargets.protein *
-                          (differenceInDays(
-                            activeWeeklyRange.to,
-                            activeWeeklyRange.from,
-                          ) +
-                            1),
+                        max: userTargets.protein * totalDaysInRange,
                       },
                       {
                         label: "Carbs",
                         val: weeklyTotals.carbs,
-                        max:
-                          userTargets.carbs *
-                          (differenceInDays(
-                            activeWeeklyRange.to,
-                            activeWeeklyRange.from,
-                          ) +
-                            1),
+                        max: userTargets.carbs * totalDaysInRange,
                       },
                       {
                         label: "Fats",
                         val: weeklyTotals.fat,
-                        max:
-                          userTargets.fat *
-                          (differenceInDays(
-                            activeWeeklyRange.to,
-                            activeWeeklyRange.from,
-                          ) +
-                            1),
+                        max: userTargets.fat * totalDaysInRange,
                       },
                     ].map((m) => {
                       const percentage = Math.min(
