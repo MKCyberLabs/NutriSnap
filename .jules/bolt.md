@@ -125,3 +125,7 @@
 ## 2025-02-28 - [Separating Static Pre-computation from Dynamic Filtering]
 **Learning:** When trying to optimize filtering logic, if the data generation (`.map`) and filtering (`.filter`) are combined within a single `useMemo` block that depends on the search term, it causes O(N) memory allocations (creating mapped objects) for every keystroke. This defeats the purpose of the optimization and actually degrades performance.
 **Action:** Explicitly split optimizations involving structurally modified data into two isolated hooks. First, a `useMemo` block dependent *only* on the raw static data to compute the transformed list (the `.map` operation). Second, a `useMemo` block dependent on *both* the mapped list and the dynamic search term to execute the actual search (the `.filter` operation). This ensures the costly transformations happen exactly once.
+
+## 2023-10-28 - [Performance] Memoizing Range Calculations
+**Learning:** Found multiple redundant date math calculations inside the render loop in `src/app/dashboard/page.tsx`. `differenceInDays` was being called 4 times per render with the exact same variables for calculating `totalDaysInRange`.
+**Action:** Extract repeated expensive or semi-expensive function calls out of the render mapping loops into a `useMemo` block, especially when they depend on state that doesn't change per mapped item.
