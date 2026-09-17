@@ -398,6 +398,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                             <div className="space-y-2 flex flex-col">
                               <Label className="mb-1">Gender</Label>
                               <select 
+                                aria-label="Select gender"
                                 value={gender} 
                                 onChange={e => setGender(e.target.value)}
                                 className={`flex h-10 w-full items-center justify-between px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none ${glassInputClasses}`}

@@ -65,7 +65,7 @@ export const MealCategoryCard = memo(function MealCategoryCard({ category, onAna
                   aria-label={`Log ${category}`}
                   className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
                 >
-                  <Plus className="h-5 w-5" />
+                  <Plus className="h-5 w-5" aria-hidden="true" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="bottom" className="h-[90svh] rounded-t-[3rem] border-none glass-card p-8 flex flex-col">
@@ -89,7 +89,7 @@ export const MealCategoryCard = memo(function MealCategoryCard({ category, onAna
                   aria-label={`Log ${category}`}
                   className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
                 >
-                  <Plus className="h-5 w-5" />
+                  <Plus className="h-5 w-5" aria-hidden="true" />
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[500px] glass-card border-none rounded-[2.5rem] p-10">

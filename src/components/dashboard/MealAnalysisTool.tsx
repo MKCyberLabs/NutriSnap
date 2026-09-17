@@ -142,7 +142,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
       <div className="flex-1 overflow-y-auto py-4 space-y-6">
         <div className="space-y-3">
           <Label className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
-            <Clock className="h-4 w-4 text-primary" /> Time of Intake
+            <Clock className="h-4 w-4 text-primary" aria-hidden="true" /> Time of Intake
           </Label>
           
           <div className="flex items-center gap-2">
@@ -199,7 +199,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
 
         <div className="space-y-2">
           <Label htmlFor="meal-description" className="text-sm font-semibold flex items-center gap-2 text-foreground/80">
-            <FileText className="h-4 w-4 text-primary" /> Describe your meal
+            <FileText className="h-4 w-4 text-primary" aria-hidden="true" /> Describe your meal
           </Label>
           <Textarea 
             id="meal-description"
@@ -230,7 +230,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
               ) : (
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <div className="p-4 rounded-full bg-primary/5 group-hover:bg-primary/10 transition-colors mb-3">
-                    <Camera className="w-8 h-8 text-primary" />
+                    <Camera className="w-8 h-8 text-primary" aria-hidden="true" />
                   </div>
                   <p className="text-sm font-medium text-foreground/70">Upload meal photo</p>
                   <p className="text-xs text-muted-foreground mt-1">PNG, JPG up to 10MB</p>
