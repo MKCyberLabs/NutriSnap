@@ -127,7 +127,14 @@ function CustomDrinkDialog({
   );
 }
 
+
+// ⚡ Bolt Optimization: Hoist invariant static arrays outside the component
+// Prevents O(N) array allocations on every render.
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const GLASSES_ARRAY = Array.from({ length: 8 });
+
 export default function HydrationPage() {
+
   const router = useRouter();
   const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
@@ -259,7 +266,7 @@ export default function HydrationPage() {
     
     // Aggregate by day
     const dayTotals = new Array(7).fill(0);
-    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayLabels = DAY_LABELS;
     
     // ⚡ Bolt Optimization: Calculate invariant startOfDay(weekStart) outside the loop
     // Prevents redundant O(N) object allocations and date math on every iteration
@@ -639,7 +646,7 @@ export default function HydrationPage() {
                     <h2 className="text-lg font-bold text-slate-800 mb-4">Hydration Insights</h2>
                     
                     <div className="grid grid-cols-4 gap-y-4 gap-x-2 mb-6">
-                      {Array.from({ length: 8 }).map((_, i) => (
+                      {GLASSES_ARRAY.map((_, i) => (
                         <div key={i} className="flex justify-center">
                           <GlassWater className={`h-8 w-8 transition-colors duration-500 ${i < filledGlasses ? 'text-cyan-500 drop-shadow-sm' : 'text-slate-200'}`} fill={i < filledGlasses ? 'currentColor' : 'none'} />
                         </div>

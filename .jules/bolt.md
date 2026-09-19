@@ -133,3 +133,7 @@
 ## 2025-02-28 - [Avoid Premature Object Allocation for Small Arrays]
 **Learning:** Found a micro-optimization in `SettingsModal.tsx` that transformed an array of timezone strings into an array of objects to pre-compute lowercase labels. However, for small native arrays (under 1000 items), the memory allocation and garbage collection overhead of mapping to objects outweighs the sub-millisecond cost of inline string transformations during a `.filter()` loop, actively worsening performance during re-renders.
 **Action:** When filtering small native string arrays (e.g., short dropdown lists), evaluate inline transformations rather than pre-computing object derivations to avoid unnecessary memory overhead.
+
+## 2025-02-28 - [Avoid Redundant Array Allocations in React Renders]
+**Learning:** Found multiple instances where static arrays (like `['S','M','T','W','T','F','S']` and `Array.from({ length: 8 })`) were defined inline within JSX `.map()` calls or inside `useMemo` blocks. This anti-pattern forces the JavaScript engine to allocate new array objects and memory on *every single render*, causing unnecessary garbage collection pressure and degrading performance in highly interactive components.
+**Action:** Always hoist invariant, static arrays and config objects outside the component body as constant variables so they are allocated exactly once per module load rather than per render.
