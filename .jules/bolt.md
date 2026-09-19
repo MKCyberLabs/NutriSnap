@@ -129,3 +129,7 @@
 ## 2023-10-28 - [Performance] Memoizing Range Calculations
 **Learning:** Found multiple redundant date math calculations inside the render loop in `src/app/dashboard/page.tsx`. `differenceInDays` was being called 4 times per render with the exact same variables for calculating `totalDaysInRange`.
 **Action:** Extract repeated expensive or semi-expensive function calls out of the render mapping loops into a `useMemo` block, especially when they depend on state that doesn't change per mapped item.
+
+## 2025-02-28 - [Avoid Premature Object Allocation for Small Arrays]
+**Learning:** Found a micro-optimization in `SettingsModal.tsx` that transformed an array of timezone strings into an array of objects to pre-compute lowercase labels. However, for small native arrays (under 1000 items), the memory allocation and garbage collection overhead of mapping to objects outweighs the sub-millisecond cost of inline string transformations during a `.filter()` loop, actively worsening performance during re-renders.
+**Action:** When filtering small native string arrays (e.g., short dropdown lists), evaluate inline transformations rather than pre-computing object derivations to avoid unnecessary memory overhead.
