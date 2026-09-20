@@ -26,7 +26,14 @@ const CATEGORIES = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 
 type Tab = 'account' | 'health' | 'notifications' | 'preferences';
 
+
+// ⚡ Bolt Optimization: Hoist invariant static arrays outside the component
+// Prevents O(N) array allocations on every render.
+const DAY_LABELS = ['S','M','T','W','T','F','S'];
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
 export function SettingsModal({ children }: { children: React.ReactNode }) {
+
   const router = useRouter();
   const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
@@ -576,9 +583,8 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                     <div className="space-y-2 col-span-2">
                                       <Label className="mb-2 block">Active Days</Label>
                                       <div className="flex items-center gap-2">
-                                        {['S','M','T','W','T','F','S'].map((dayLabel, idx) => {
-                                          const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-                                          const dayName = dayNames[idx];
+                                        {DAY_LABELS.map((dayLabel, idx) => {
+                                          const dayName = DAY_NAMES[idx];
                                           const isActiveDay = hydrationSetting.activeDays.includes(dayName);
                                           return (
                                             <button
