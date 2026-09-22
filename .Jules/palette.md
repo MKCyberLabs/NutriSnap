@@ -118,3 +118,6 @@
 ## 2024-11-20 - [Missing ARIA Labels on Native Select Inputs]
 **Learning:** Discovered that in addition to custom `SelectTrigger` components, native `<select>` elements (like the Gender selector in `SettingsModal.tsx`) also lacked explicit `aria-label` attributes. Even when preceded by a `<Label>` component, unless explicitly linked with `htmlFor` and `id`, screen readers may fail to announce the dropdown context clearly.
 **Action:** Consistently ensure that all select dropdowns—both custom Shadcn `SelectTrigger` components and native `<select>` elements—have an explicit `aria-label` attribute to provide context for screen reader users.
+## 2024-10-25 - Confirmation Dialogs for Destructive Actions
+**Learning:** Destructive actions without a confirmation dialog are an accessibility and UX risk. Implementing a confirmation dialog prevents accidental data loss.
+**Action:** Always enforce a confirmation step for destructive actions (e.g. deletions) by wrapping them in Shadcn UI's `AlertDialog` component and managing its visibility via a React state variable.
