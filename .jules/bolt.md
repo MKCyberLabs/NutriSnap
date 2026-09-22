@@ -137,3 +137,7 @@
 ## 2025-02-28 - [Avoid Redundant Array Allocations in React Renders]
 **Learning:** Found multiple instances where static arrays (like `['S','M','T','W','T','F','S']` and `Array.from({ length: 8 })`) were defined inline within JSX `.map()` calls or inside `useMemo` blocks. This anti-pattern forces the JavaScript engine to allocate new array objects and memory on *every single render*, causing unnecessary garbage collection pressure and degrading performance in highly interactive components.
 **Action:** Always hoist invariant, static arrays and config objects outside the component body as constant variables so they are allocated exactly once per module load rather than per render.
+
+## 2025-03-02 - [Avoid Invariant Inline Array Allocations in Render]
+**Learning:** Found static inline arrays (like `['Breakfast', 'Lunch', 'Dinner', 'Snacks']` and `['AM', 'PM']`) defined directly inside `.map()` loops within React components. Defining arrays inline inside the render body forces the JavaScript engine to allocate a new array in memory on every re-render, creating unnecessary garbage collection pressure and degrading performance, especially in frequently updated components.
+**Action:** Always extract static, invariant arrays out of the component and define them as global constants to ensure they are only allocated once per module load.

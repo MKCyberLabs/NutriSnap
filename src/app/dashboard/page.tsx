@@ -111,6 +111,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, Variants } from "framer-motion";
 
+// ⚡ Bolt Optimization: Hoist static array to prevent O(N) array allocation on every render
+const MEAL_CATEGORIES: MealCategory[] = ["Breakfast", "Lunch", "Dinner", "Snacks"];
+
 // Animation variants for staggered cascade
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -996,9 +999,7 @@ export default function DashboardPage() {
           >
             <div className="lg:col-span-2 space-y-6">
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {(
-                  ["Breakfast", "Lunch", "Dinner", "Snacks"] as MealCategory[]
-                ).map((cat) => (
+                {MEAL_CATEGORIES.map((cat) => (
                   <motion.div
                     key={cat}
                     variants={itemVariants}
