@@ -36,6 +36,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -54,6 +64,7 @@ export default function AdminPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<Partial<User & { password?: string, telegramId?: string | null }>>({});
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     const session = getAuthSession();
@@ -107,6 +118,7 @@ export default function AdminPage() {
   const handleDeleteUser = async (id: string) => {
     if (id === adminUser?.id) {
       toast({ variant: "destructive", title: "Action Denied", description: "You cannot delete your own admin account." });
+      setDeleteId(null);
       return;
     }
     
@@ -119,6 +131,7 @@ export default function AdminPage() {
     } else {
       toast({ variant: "destructive", title: "Error", description: "Failed to delete user." });
     }
+    setDeleteId(null);
   };
 
   // ⚡ Bolt Optimization: Pre-compute lowercase string values on data fetch
@@ -294,7 +307,7 @@ export default function AdminPage() {
                           size="icon" 
                           aria-label="Delete user"
                           className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => handleDeleteUser(user.id)}
+                          onClick={() => setDeleteId(user.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -362,6 +375,24 @@ export default function AdminPage() {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* Delete User Confirmation Dialog */}
+        <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+          <AlertDialogContent className="rounded-[2rem]">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete User Account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the user's account and remove their data from our servers.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => deleteId && handleDeleteUser(deleteId)} className="bg-red-500 hover:bg-red-600 text-white rounded-xl">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );
