@@ -21,6 +21,7 @@ import { MealNutritionalAnalysisOutput } from '@/ai/flows/meal-nutritional-analy
 // Prevents O(N) re-allocations of 72 elements on every keystroke when user types in the description box.
 const HOURS = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+const PERIODS = ['AM', 'PM'];
 
 interface MealAnalysisToolProps {
   category: MealCategory;
@@ -175,7 +176,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
             </div>
 
             <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/10">
-              {['AM', 'PM'].map((p) => (
+              {PERIODS.map((p) => (
                 <Button
                   key={p}
                   type="button"
