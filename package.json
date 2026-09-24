@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:analysis-contract": "tsx --test src/lib/python-analysis-response.test.ts",
     "prisma:seed": "prisma db seed"
   },
   "dependencies": {

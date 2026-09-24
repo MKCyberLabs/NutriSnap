@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { NotFoodError } from '@/lib/errors';
+import { parsePythonAnalysis } from '@/lib/python-analysis-response';
 
 const MealNutritionalAnalysisInputSchema = z.object({
   mealDescription: z
@@ -77,26 +77,8 @@ export async function mealNutritionalAnalysis(
     throw new Error(`Python API failed with status ${response.status}`);
   }
 
-  const data = await response.json();
-  
-  if (data.status !== 'success') {
-    throw new Error(`Python API returned an error: ${data.message || 'Unknown error'}`);
-  }
-
-  // The Python backend uses the 'agy' CLI, which might output thought process before the JSON.
-  // We need to extract the JSON block from data.response
-  const jsonMatch = data.response.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Failed to extract JSON from Python AI response.');
-  }
-
-  const parsedData = JSON.parse(jsonMatch[0]);
-
-  if (parsedData.error === "NOT_FOOD") {
-    throw new NotFoodError(parsedData.aiNote || "This image does not contain identifiable food.");
-  }
-
-  return parsedData as MealNutritionalAnalysisOutput;
+  const data: unknown = await response.json();
+  return parsePythonAnalysis(data, MealNutritionalAnalysisOutputSchema);
 }
 
 const TelegramMealAnalysisInputSchema = z.object({
@@ -135,24 +117,6 @@ export async function telegramMealNutritionalAnalysis(
     throw new Error(`Python API failed with status ${response.status}`);
   }
 
-  const data = await response.json();
-  
-  if (data.status !== 'success') {
-    throw new Error(`Python API returned an error: ${data.message || 'Unknown error'}`);
-  }
-
-  const jsonMatch = data.response.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    const err: any = new Error('Failed to extract JSON from Python AI response.');
-    err.rawResponse = data.response;
-    throw err;
-  }
-
-  const parsedData = JSON.parse(jsonMatch[0]);
-
-  if (parsedData.error === "NOT_FOOD") {
-    throw new NotFoodError(parsedData.aiNote || "This image does not contain identifiable food.");
-  }
-
-  return parsedData as TelegramMealAnalysisOutput;
+  const data: unknown = await response.json();
+  return parsePythonAnalysis(data, TelegramMealAnalysisOutputSchema);
 }

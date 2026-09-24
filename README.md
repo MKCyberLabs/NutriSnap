@@ -22,6 +22,19 @@ The Python API has been configured as a permanent background service. It is set 
 - **Restart Service:** `systemctl restart gemini-api`
 - **Enable Auto-Start on Boot:** `systemctl enable gemini-api.service` (Already enabled)
 
+### AI provider routing
+
+NutriSnap sends dashboard and Telegram meal analysis to the Python service configured by `PYTHON_API_URL`. Provider selection belongs to that service, so changing between Antigravity, OpenRouter, and the direct Google API does not require changing the NutriSnap UI or database.
+
+The Python service returns a validated `result` object. NutriSnap also accepts the older `response` string, which permits rolling deployment of the two repositories in either order. See [docs/AI_PROVIDER_ARCHITECTURE.md](docs/AI_PROVIDER_ARCHITECTURE.md) for configuration and rollout details.
+
+To verify the NutriSnap adapter:
+
+```bash
+npm run test:analysis-contract
+npm run typecheck
+```
+
 ## Managing the Database
 
 When setting up NutriSnap on a fresh system (where the database is empty), you must sync the database schema.

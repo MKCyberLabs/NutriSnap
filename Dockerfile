@@ -21,6 +21,7 @@ COPY . .
 
 # Build the project
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL="postgresql://nutrisnap:nutrisnap_pass@localhost:5432/nutrisnap"
 RUN npx prisma@6 generate
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
