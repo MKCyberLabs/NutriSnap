@@ -121,3 +121,7 @@
 ## 2024-10-25 - Confirmation Dialogs for Destructive Actions
 **Learning:** Destructive actions without a confirmation dialog are an accessibility and UX risk. Implementing a confirmation dialog prevents accidental data loss.
 **Action:** Always enforce a confirmation step for destructive actions (e.g. deletions) by wrapping them in Shadcn UI's `AlertDialog` component and managing its visibility via a React state variable.
+
+## 2024-05-18 - Missing implicit association for visually labeled native inputs
+**Learning:** In Next.js/React applications, when using native `<input>` or custom elements like `<Select>` without explicit `id` attributes that bind to a visual `<Label htmlFor="...">`, screen readers fail to associate the label with the input. Visual proximity is not enough. This pattern was found across many Settings components.
+**Action:** Always provide explicit `aria-label` attributes to unlinked form inputs or explicit `id`/`htmlFor` bindings to ensure they are accessible.
