@@ -118,3 +118,8 @@
 **Vulnerability:** In authentication endpoints (`login/route.ts`, `db-users.ts`), when a user email did not exist in the database, the server returned `401 Unauthorized` immediately without performing a costly `bcrypt.compare` operation. This allowed attackers to measure response latency and accurately enumerate registered email addresses.
 **Learning:** Returning early on nonexistent user lookups creates a measurable timing discrepancy between existing and non-existing accounts due to the computational cost of password hashing algorithms like bcrypt.
 **Prevention:** Perform a constant-time dummy password verification (e.g. `await bcrypt.compare(password, DUMMY_HASH)`) when a user is not found in the database to ensure identical response times across valid and invalid email inputs.
+
+## 2024-05-27 - [Memory Leak in Rate Limiter]
+**Vulnerability:** An in-memory rate limiter implemented a `setInterval` at the module level to clear old entries. In Next.js local development, Fast Refresh causes the module to be re-evaluated on every save, creating duplicate intervals that are never cleared. Over time, this leads to a memory leak and potential DoS. Additionally, a logic flaw in resetting attempt counts extended the lockout duration indefinitely instead of resetting it after the penalty window expired.
+**Learning:** In Next.js environments, avoid module-level `setInterval` for cleanup due to Fast Refresh. Use lazy cleanup upon data access or attach the interval to `globalThis`. Ensure rate limiting logic resets counts correctly after expiration to avoid accidental permanent lockouts.
+**Prevention:** Implement lazy cleanup or globally stored intervals. Always test the lockout reset logic to ensure users can re-authenticate after the penalty period.
