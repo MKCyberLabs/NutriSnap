@@ -6,6 +6,32 @@ import { cookies } from 'next/headers';
 // Dynamic dummy hash to prevent user enumeration timing attacks without triggering SAST tools for hardcoded secrets
 const DUMMY_HASH = bcrypt.hashSync('dummy', 10);
 
+// Simple in-memory rate limiter for server action
+// Relaxed for development: 50 attempts per 15 mins
+const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+
+// Simple cleanup interval to prevent memory leaks (runs every 15 mins)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, data] of loginAttempts.entries()) {
+    if (now - data.lastAttempt > 15 * 60 * 1000) {
+      loginAttempts.delete(id);
+    }
+  }
+}, 15 * 60 * 1000);
+
+function updateAttempts(identifier: string) {
+  const now = Date.now();
+  const attempts = loginAttempts.get(identifier) || { count: 0, lastAttempt: 0 };
+
+  // Reset the count if the penalty window has expired
+  if (now - attempts.lastAttempt > 15 * 60 * 1000) {
+    loginAttempts.set(identifier, { count: 1, lastAttempt: now });
+  } else {
+    loginAttempts.set(identifier, { count: attempts.count + 1, lastAttempt: now });
+  }
+}
+
 async function verifyAuth(userId: string) {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
@@ -55,10 +81,20 @@ export async function resetDbUserPassword(userId: string, newPassword: string) {
 
 export async function authenticateDbUser(email: string, password?: string) {
   try {
+    const identifier = email.toLowerCase();
+
+    // Rate Limiting Check
+    const attempts = loginAttempts.get(identifier);
+    const now = Date.now();
+    if (attempts && attempts.count >= 50 && now - attempts.lastAttempt < 15 * 60 * 1000) {
+      throw new Error('Too many failed login attempts. Please try again in 15 minutes.');
+    }
+
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       // Dummy compare to mitigate user enumeration timing attacks
       if (password) await bcrypt.compare(password, DUMMY_HASH);
+      updateAttempts(identifier);
       return null;
     }
     
@@ -68,6 +104,8 @@ export async function authenticateDbUser(email: string, password?: string) {
     if (password) {
       const isValid = await bcrypt.compare(password, user.password);
       if (isValid) {
+        // Reset rate limit on success
+        loginAttempts.delete(identifier);
         const cookieStore = await cookies();
         cookieStore.set('nutrisnap_session_id', user.id, {
           httpOnly: true,
@@ -78,7 +116,11 @@ export async function authenticateDbUser(email: string, password?: string) {
         // Remove password field to prevent hash leak to frontend
         const { password: _, ...userWithoutPassword } = user;
         return userWithoutPassword;
+      } else {
+        updateAttempts(identifier);
       }
+    } else {
+      updateAttempts(identifier);
     }
     
     return null;
