@@ -125,3 +125,7 @@
 ## 2024-05-18 - Missing implicit association for visually labeled native inputs
 **Learning:** In Next.js/React applications, when using native `<input>` or custom elements like `<Select>` without explicit `id` attributes that bind to a visual `<Label htmlFor="...">`, screen readers fail to associate the label with the input. Visual proximity is not enough. This pattern was found across many Settings components.
 **Action:** Always provide explicit `aria-label` attributes to unlinked form inputs or explicit `id`/`htmlFor` bindings to ensure they are accessible.
+
+## 2026-10-01 - [Redundant Screen Reader Announcements on Close Icons]
+**Learning:** Discovered that the default Close buttons in Radix UI primitives (e.g., Dialog, Sheet, Toast) often render an internal `<X />` icon without an `aria-hidden="true"` attribute. While the `DialogPrimitive.Close` wrapper includes an `<span className="sr-only">Close</span>`, screen readers might redundantly announce the SVG icon if it's not explicitly hidden, causing unnecessary auditory noise.
+**Action:** When working with primitive or customized close buttons that include both screen-reader-only text and a visual icon, always add `aria-hidden="true"` to the decorative SVG/icon component to ensure a clean, single announcement.
