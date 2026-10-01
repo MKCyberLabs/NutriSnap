@@ -41,7 +41,7 @@ export function Navbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link href="/dashboard" className="flex items-center gap-2">
           <div className={`h-9 w-9 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg ${isHydration ? 'bg-sky-500 shadow-sky-500/20' : 'bg-primary shadow-primary/20'}`}>
-            {isHydration ? <Droplets className="h-5 w-5" /> : 'N'}
+            {isHydration ? <Droplets className="h-5 w-5" aria-hidden="true" /> : 'N'}
           </div>
           <span className={`text-xl font-bold tracking-tight ${isHydration ? 'text-sky-600' : 'text-primary'}`}>NutriSnap</span>
         </Link>
@@ -70,24 +70,24 @@ export function Navbar() {
           {user?.role === 'ADMIN' && (
             <Button asChild variant="ghost" className="hidden md:flex gap-2 rounded-xl">
               <Link href="/admin">
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4" aria-hidden="true" />
                 Admin
               </Link>
             </Button>
           )}
           <div className="flex items-center gap-2 rounded-full border border-white/40 bg-white/20 px-4 py-1.5 text-sm font-medium backdrop-blur-sm">
-            <UserCircle className="h-4 w-4 text-muted-foreground" />
+            <UserCircle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <span className="max-w-[100px] truncate">{user?.name || 'User'}</span>
           </div>
           
           <SettingsModal>
             <Button variant="outline" size="icon" aria-label="Settings" className={`rounded-full h-10 w-10 border-white/40 hover:bg-white/40 ${isHydration ? 'text-sky-500' : 'text-primary'}`}>
-              <Settings className="h-4 w-4" />
+              <Settings className="h-4 w-4" aria-hidden="true" />
             </Button>
           </SettingsModal>
 
           <Button variant="outline" size="icon" aria-label="Log out" onClick={handleLogout} className="rounded-full h-10 w-10 border-white/40 hover:bg-white/40">
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
       </div>

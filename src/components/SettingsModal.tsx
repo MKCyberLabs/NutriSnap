@@ -359,10 +359,11 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                       </CardHeader>
                       <CardContent className="space-y-6">
                         <div className="space-y-2">
-                          <Label htmlFor="password" className="flex items-center gap-2 font-medium"><KeyRound className="h-4 w-4 text-primary" /> Reset Password</Label>
+                          <Label htmlFor="password" className="flex items-center gap-2 font-medium"><KeyRound className="h-4 w-4 text-primary" aria-hidden="true" /> Reset Password</Label>
                           <Input 
                             id="password" 
                             type="password" 
+                            aria-label="New Password"
                             placeholder="Enter new password to reset" 
                             value={newPassword} 
                             onChange={e => setNewPassword(e.target.value)} 
@@ -388,15 +389,15 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label htmlFor="age">Age</Label>
-                              <Input id="age" type="number" placeholder="30" value={age} onChange={e => setAge(e.target.value)} className={glassInputClasses} />
+                              <Input id="age" type="number" aria-label="Age" placeholder="30" value={age} onChange={e => setAge(e.target.value)} className={glassInputClasses} />
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="weight">Weight (kg)</Label>
-                              <Input id="weight" type="number" placeholder="70" value={weight} onChange={e => setWeight(e.target.value)} className={glassInputClasses} />
+                              <Input id="weight" type="number" aria-label="Weight in kg" placeholder="70" value={weight} onChange={e => setWeight(e.target.value)} className={glassInputClasses} />
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="height">Height (cm)</Label>
-                              <Input id="height" type="number" placeholder="175" value={height} onChange={e => setHeight(e.target.value)} className={glassInputClasses} />
+                              <Input id="height" type="number" aria-label="Height in cm" placeholder="175" value={height} onChange={e => setHeight(e.target.value)} className={glassInputClasses} />
                             </div>
                             <div className="space-y-2 flex flex-col">
                               <Label className="mb-1">Gender</Label>
@@ -419,23 +420,23 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                             <div className="space-y-2">
                               <Label htmlFor="calories">Calories (kcal)</Label>
-                              <Input id="calories" type="number" placeholder="2000" value={calGoal} onChange={e => setCalGoal(e.target.value)} className={glassInputClasses} />
+                              <Input id="calories" type="number" aria-label="Calories in kcal" placeholder="2000" value={calGoal} onChange={e => setCalGoal(e.target.value)} className={glassInputClasses} />
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="protein">Protein (g)</Label>
-                              <Input id="protein" type="number" placeholder="150" value={proGoal} onChange={e => setProGoal(e.target.value)} className={glassInputClasses} />
+                              <Input id="protein" type="number" aria-label="Protein in grams" placeholder="150" value={proGoal} onChange={e => setProGoal(e.target.value)} className={glassInputClasses} />
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="carbs">Carbs (g)</Label>
-                              <Input id="carbs" type="number" placeholder="250" value={carbGoal} onChange={e => setCarbGoal(e.target.value)} className={glassInputClasses} />
+                              <Input id="carbs" type="number" aria-label="Carbs in grams" placeholder="250" value={carbGoal} onChange={e => setCarbGoal(e.target.value)} className={glassInputClasses} />
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="fat">Fat (g)</Label>
-                              <Input id="fat" type="number" placeholder="65" value={fatGoal} onChange={e => setFatGoal(e.target.value)} className={glassInputClasses} />
+                              <Input id="fat" type="number" aria-label="Fat in grams" placeholder="65" value={fatGoal} onChange={e => setFatGoal(e.target.value)} className={glassInputClasses} />
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="waterGoal" className="text-sky-500 flex items-center gap-1"><Droplets className="h-3 w-3" /> Water (ml)</Label>
-                              <Input id="waterGoal" type="number" placeholder="2750" value={waterGoal} onChange={e => setWaterGoal(e.target.value)} className={glassInputClasses} />
+                              <Label htmlFor="waterGoal" className="text-sky-500 flex items-center gap-1"><Droplets className="h-3 w-3" aria-hidden="true" /> Water (ml)</Label>
+                              <Input id="waterGoal" type="number" aria-label="Water in milliliters" placeholder="2750" value={waterGoal} onChange={e => setWaterGoal(e.target.value)} className={glassInputClasses} />
                             </div>
                           </div>
                         </div>
@@ -461,6 +462,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                             <div className="flex gap-2">
                               <Input 
                                 id="telegram" 
+                                aria-label="Telegram ID"
                                 placeholder="e.g. 123456789" 
                                 value={telegramId} 
                                 onChange={e => setTelegramId(e.target.value)} 
@@ -548,6 +550,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                       <Label>Wake Up Time</Label>
                                       <Input 
                                         type="time" 
+                                        aria-label="Wake Up Time"
                                         value={hydrationSetting.startTime} 
                                         onChange={(e) => setHydrationSetting({ ...hydrationSetting, startTime: e.target.value })}
                                         className={glassInputClasses}
@@ -557,6 +560,7 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
                                       <Label>Sleep Time</Label>
                                       <Input 
                                         type="time" 
+                                        aria-label="Sleep Time"
                                         value={hydrationSetting.endTime} 
                                         onChange={(e) => setHydrationSetting({ ...hydrationSetting, endTime: e.target.value })}
                                         className={glassInputClasses}
