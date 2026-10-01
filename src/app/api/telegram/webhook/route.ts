@@ -6,6 +6,7 @@ import { askNutritionFlow } from '@/ai/flows/ask-nutrition';
 import { NotFoodError } from '@/lib/errors';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 import { TZDate } from '@date-fns/tz';
 import { startOfDay, endOfDay, formatISO } from 'date-fns';
@@ -467,7 +468,7 @@ bot.on('message', async (ctx) => {
       
       const extMatch = file.file_path?.match(/\.([^.]+)$/);
       const ext = extMatch ? `.${extMatch[1]}` : '.jpg';
-      const filename = `${Date.now()}_${telegramId}${ext}`;
+      const filename = `${Date.now()}_${telegramId}_${crypto.randomUUID()}${ext}`;
       const filePath = path.join(uploadsDir, filename);
 
       const response = await fetch(fileLink);

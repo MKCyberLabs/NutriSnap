@@ -410,12 +410,12 @@ export default function DashboardPage() {
         : new Date().toISOString();
 
       const newLog: MealLog = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: crypto.randomUUID(),
         category: category,
         timestamp: isoTimestamp,
         items: (data.foodItems || []).map((item) => ({
           ...item,
-          id: Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
         })),
         totalNutrients: {
           calories: Number(data.calories),
@@ -535,7 +535,7 @@ export default function DashboardPage() {
         if (log.id !== logId) return log;
         const newItems: FoodItem[] = (result.foodItems || []).map((item) => ({
           ...item,
-          id: Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
         }));
         const combinedItems = [...log.items, ...newItems];
         const { calories, protein, carbs, fat, fiber, saturatedFat, sugar } =

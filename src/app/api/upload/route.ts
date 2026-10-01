@@ -4,6 +4,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
+import crypto from 'crypto';
 
 /**
  * API Route to handle local file uploads for meal photos.
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
       // Directory might already exist
     }
 
-    // Generate a unique filename: timestamp_random.extension
+    // Generate a unique filename: timestamp_uuid.extension
     const fileExtension = path.extname(file.name).toLowerCase() || '.png';
 
     // Security Enhancement: Validate file extension
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unsupported file type. Only images are allowed.' }, { status: 400 });
     }
 
-    const uniqueFilename = `${Date.now()}_${Math.floor(Math.random() * 100000)}${fileExtension}`;
+    const uniqueFilename = `${Date.now()}_${crypto.randomUUID()}${fileExtension}`;
     const filePath = path.join(uploadDir, uniqueFilename);
 
     // Save to disk
