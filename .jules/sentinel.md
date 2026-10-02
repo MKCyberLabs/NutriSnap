@@ -123,3 +123,7 @@
 **Vulnerability:** An in-memory rate limiter implemented a `setInterval` at the module level to clear old entries. In Next.js local development, Fast Refresh causes the module to be re-evaluated on every save, creating duplicate intervals that are never cleared. Over time, this leads to a memory leak and potential DoS. Additionally, a logic flaw in resetting attempt counts extended the lockout duration indefinitely instead of resetting it after the penalty window expired.
 **Learning:** In Next.js environments, avoid module-level `setInterval` for cleanup due to Fast Refresh. Use lazy cleanup upon data access or attach the interval to `globalThis`. Ensure rate limiting logic resets counts correctly after expiration to avoid accidental permanent lockouts.
 **Prevention:** Implement lazy cleanup or globally stored intervals. Always test the lockout reset logic to ensure users can re-authenticate after the penalty period.
+## 2025-02-24 - Insecure Predictable Filename Generation
+**Vulnerability:** Filenames for uploaded files and internal component IDs were generated using `Math.random()`, resulting in predictable and enumeratable values.
+**Learning:** `Math.random()` provides pseudorandom numbers that lack sufficient entropy for cryptographically secure operations like generating unique identifiers. This could allow attackers to predict file paths or intentionally cause file collisions.
+**Prevention:** Always use the `crypto` module (e.g., `crypto.randomUUID()`) to generate secure, unpredictable UUIDs for sensitive identifiers and filenames.
