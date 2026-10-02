@@ -6,19 +6,33 @@ import { cookies } from 'next/headers';
 // Dynamic dummy hash to prevent user enumeration timing attacks without triggering SAST tools for hardcoded secrets
 const DUMMY_HASH = bcrypt.hashSync('dummy', 10);
 
+const globalForRateLimiter = globalThis as unknown as {
+  dbUsersLoginAttempts: Map<string, { count: number; lastAttempt: number }>;
+  dbUsersCleanupInterval: NodeJS.Timeout;
+};
+
 // Simple in-memory rate limiter for server action
 // Relaxed for development: 50 attempts per 15 mins
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+const loginAttempts = globalForRateLimiter.dbUsersLoginAttempts || new Map<string, { count: number; lastAttempt: number }>();
+if (process.env.NODE_ENV !== 'production') {
+  globalForRateLimiter.dbUsersLoginAttempts = loginAttempts;
+}
 
 // Simple cleanup interval to prevent memory leaks (runs every 15 mins)
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, data] of loginAttempts.entries()) {
-    if (now - data.lastAttempt > 15 * 60 * 1000) {
-      loginAttempts.delete(id);
+if (!globalForRateLimiter.dbUsersCleanupInterval) {
+  const interval = setInterval(() => {
+    const now = Date.now();
+    for (const [id, data] of loginAttempts.entries()) {
+      if (now - data.lastAttempt > 15 * 60 * 1000) {
+        loginAttempts.delete(id);
+      }
     }
+  }, 15 * 60 * 1000);
+
+  if (process.env.NODE_ENV !== 'production') {
+    globalForRateLimiter.dbUsersCleanupInterval = interval;
   }
-}, 15 * 60 * 1000);
+}
 
 function updateAttempts(identifier: string) {
   const now = Date.now();

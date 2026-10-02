@@ -141,3 +141,8 @@
 ## 2025-03-02 - [Avoid Invariant Inline Array Allocations in Render]
 **Learning:** Found static inline arrays (like `['Breakfast', 'Lunch', 'Dinner', 'Snacks']` and `['AM', 'PM']`) defined directly inside `.map()` loops within React components. Defining arrays inline inside the render body forces the JavaScript engine to allocate a new array in memory on every re-render, creating unnecessary garbage collection pressure and degrading performance, especially in frequently updated components.
 **Action:** Always extract static, invariant arrays out of the component and define them as global constants to ensure they are only allocated once per module load.
+
+
+## 2025-03-02 - [Fix Fast Refresh Memory Leak in Rate Limiters]
+**Learning:** In Next.js, using `setInterval` directly at the module level for features like rate limiters or background tasks creates a memory leak during local development. Because Fast Refresh re-evaluates modules on save, it spawns duplicate interval closures that run indefinitely in the background and accumulate over time.
+**Action:** When implementing polling or scheduled background tasks in Next.js backend routes (e.g. Server Actions, API handlers), always assign the `setInterval` instance to a property on the `globalThis` object (like Prisma instances) to prevent duplicate execution during Fast Refresh.
