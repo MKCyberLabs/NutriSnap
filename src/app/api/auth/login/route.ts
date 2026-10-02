@@ -10,7 +10,26 @@ const DUMMY_HASH = bcrypt.hashSync('dummy', 10);
 
 // Simple in-memory rate limiter for prototype
 // Relaxed for development: 50 attempts per 15 mins
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+// 🛡️ Sentinel: Store Map in globalThis to prevent duplicate Maps and survive Fast Refresh
+const globalMapKey = Symbol.for('authLoginAttemptsMap');
+if (!(globalThis as any)[globalMapKey]) {
+  (globalThis as any)[globalMapKey] = new Map<string, { count: number; lastAttempt: number }>();
+}
+const loginAttempts = (globalThis as any)[globalMapKey];
+
+// Simple cleanup interval to prevent memory leaks (runs every 15 mins)
+// 🛡️ Sentinel: Store interval in globalThis to prevent duplicate intervals during Fast Refresh
+const globalIntervalKey = Symbol.for('authLoginCleanupInterval');
+if (!(globalThis as any)[globalIntervalKey]) {
+  (globalThis as any)[globalIntervalKey] = setInterval(() => {
+    const now = Date.now();
+    for (const [id, data] of loginAttempts.entries()) {
+      if (now - data.lastAttempt > 15 * 60 * 1000) {
+        loginAttempts.delete(id);
+      }
+    }
+  }, 15 * 60 * 1000);
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -92,6 +111,13 @@ export async function POST(req: NextRequest) {
 }
 
 function updateAttempts(id: string) {
+  const now = Date.now();
   const attempts = loginAttempts.get(id) || { count: 0, lastAttempt: 0 };
-  loginAttempts.set(id, { count: attempts.count + 1, lastAttempt: Date.now() });
+
+  // Reset the count if the penalty window has expired
+  if (now - attempts.lastAttempt > 15 * 60 * 1000) {
+    loginAttempts.set(id, { count: 1, lastAttempt: now });
+  } else {
+    loginAttempts.set(id, { count: attempts.count + 1, lastAttempt: now });
+  }
 }
