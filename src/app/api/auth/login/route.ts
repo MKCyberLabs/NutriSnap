@@ -116,6 +116,13 @@ export async function POST(req: NextRequest) {
 }
 
 function updateAttempts(id: string) {
+  const now = Date.now();
   const attempts = loginAttempts.get(id) || { count: 0, lastAttempt: 0 };
-  loginAttempts.set(id, { count: attempts.count + 1, lastAttempt: Date.now() });
+
+  // Reset the count if the penalty window has expired
+  if (now - attempts.lastAttempt > 15 * 60 * 1000) {
+    loginAttempts.set(id, { count: 1, lastAttempt: now });
+  } else {
+    loginAttempts.set(id, { count: attempts.count + 1, lastAttempt: now });
+  }
 }
