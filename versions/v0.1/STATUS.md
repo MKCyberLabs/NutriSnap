@@ -20,15 +20,20 @@ GitHub execution issue: **#131**
 - Milestone 4 obligations, reminder engine & Telegram contract (NSV01-0501..0530, NSV01-0601..0629) is complete and PASS.
 - Independent Review B (NSV01-0550..0551) performed by Codex: EXPLICIT PASS (11/11 criteria verified).
 - Milestone 5 security, acceptance scenario & software verification gate (NSV01-0701..0711, NSV01-0801..0808, NSV01-1101..1116) is complete and PASS:
-  - Security & negative authorization test suite (10/10 PASS);
-  - Integrated 16-step Health + Wealth acceptance scenario (PASS);
-  - All 74 `npm run test:life-hub` tests PASS;
+  - Reconciled current `origin/main` via clean non-fast-forward merge preserving SettingsModal useMemo optimization;
+  - Added complete `Session` table DDL, indexes, and cascade FK to `migration.sql` with deterministic PostgreSQL test (`src/lib/migration/main-to-v01-migration.test.ts`);
+  - Extracted trusted finance service layer (`src/lib/finance/finance-service.ts`) decoupling Telegram `/expense` and Paid callbacks from browser session cookies;
+  - Enforced approved category vocabulary server-side and strengthened negative authorization tests;
+  - Fixed WEEKLY interval recurrence (interval >= 1) and YEARLY interval math (interval > 1);
+  - Added real PostgreSQL-backed 16-step acceptance scenario (`src/lib/scenario/db-acceptance.test.ts`);
+  - Security & negative authorization test suite (11/11 PASS);
+  - Cookie-independent Telegram test suite (3/3 PASS);
+  - All 86 `npm run test:life-hub` tests PASS;
   - All 5 `npm run test:analysis-contract` tests PASS;
   - TypeScript typecheck: 0 errors;
   - Production build: 18/18 static routes pass;
-  - `./scripts/verify-v01-local.sh`: PASS (clean).
-- Independent Review C (NSV01-1210..1211) performed by Codex: EXPLICIT PASS (16/16 criteria verified).
-- Phase 12 Final Repository & Audit Gate: ALL PASS.
+  - `./scripts/verify-v01-local.sh`: PASS (clean);
+  - `git diff --check`: PASS (clean).
 
 Shared cross-agent memory is now established so AGY-Manickam, AGY-Rohit and Codex can switch/resume without depending on their private memory.
 

@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestones 0-5 COMPLETE — Full Local Software Gate & Verification Plan Passed`
-- Current review gate: `Review C PASSED — PR READY`
-- Last verified implementation checkpoint: Milestone 5 Security, Acceptance Scenario & Full Verification Checkpoint
+- Current milestone: `Milestones 0-5 COMPLETE — Release Blockers Resolved & Verified`
+- Current review gate: `Awaiting Independent Review C on updated SHA`
+- Last verified implementation checkpoint: Release Blockers Resolution & Software Verification Gate
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -28,22 +28,22 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 - `npm run typecheck`: PASS (0 errors);
 - `npm run build`: PASS (18/18 static pages);
 - `npm run test:today`: 5/5 PASS;
-- `npm run test:finance`: 19/19 PASS;
-- `npm run test:reminders`: 39/39 PASS;
-- `npm run test:security`: 10/10 PASS;
-- `npm run test:life-hub`: 74/74 PASS;
-- `./scripts/verify-v01-local.sh`: PASS;
+- `npm run test:finance`: 23/23 PASS;
+- `npm run test:reminders`: 45/45 PASS;
+- `npm run test:security`: 11/11 PASS;
+- `npm run test:life-hub`: 86/86 PASS;
+- `./scripts/verify-v01-local.sh`: PASS (clean);
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-1. Open PR from `feature/v0.1-health-wealth` to `main` referencing issue #131 and verification evidence.
-2. PR remains unmerged for owner Manickam's review.
-3. No production migration, deployment, or production Telegram sends executed.
+1. Commit all resolution changes and push to `origin/feature/v0.1-health-wealth`.
+2. Dispatch independent Review C to Codex subagent against the new SHA.
+3. Conclude with final evidence report and `READY FOR OWNER RE-REVIEW — DO NOT MERGE`.
 
 ## Active blockers
 
-None. All milestones and reviews (A, B, C) PASSED.
+None. All release blockers resolved and verified. PR #132 is mergeable and awaiting final owner approval.
 
 ## Active Herdr panes / delegation
 

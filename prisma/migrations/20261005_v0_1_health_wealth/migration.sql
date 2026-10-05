@@ -132,7 +132,19 @@ CREATE TABLE IF NOT EXISTS "ReminderDelivery" (
     CONSTRAINT "ReminderDelivery_pkey" PRIMARY KEY ("id")
 );
 
+-- 8. Create Session table
+CREATE TABLE IF NOT EXISTS "Session" (
+    "tokenHash" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Session_pkey" PRIMARY KEY ("tokenHash")
+);
+
 -- Indexes
+CREATE INDEX IF NOT EXISTS "Session_userId_idx" ON "Session"("userId");
+CREATE INDEX IF NOT EXISTS "Session_expiresAt_idx" ON "Session"("expiresAt");
 CREATE INDEX IF NOT EXISTS "FinancialAccount_userId_isActive_idx" ON "FinancialAccount"("userId", "isActive");
 CREATE INDEX IF NOT EXISTS "FinancialAccount_userId_type_idx" ON "FinancialAccount"("userId", "type");
 CREATE INDEX IF NOT EXISTS "FinancialTransaction_userId_occurredAt_idx" ON "FinancialTransaction"("userId", "occurredAt" DESC);
@@ -155,6 +167,9 @@ CREATE INDEX IF NOT EXISTS "Reminder_obligationId_idx" ON "Reminder"("obligation
 -- Foreign Keys
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Session_userId_fkey') THEN
+    ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Reminder_obligationId_fkey') THEN
     ALTER TABLE "Reminder" ADD CONSTRAINT "Reminder_obligationId_fkey" FOREIGN KEY ("obligationId") REFERENCES "Obligation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;

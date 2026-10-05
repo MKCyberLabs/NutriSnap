@@ -64,6 +64,23 @@ export function isValidObligationKind(kind: string): kind is ObligationKind {
 }
 
 /**
+ * Validates that a transaction category is one of the approved categories.
+ */
+export function isValidTransactionCategory(category: string): category is TransactionCategory {
+  return TRANSACTION_CATEGORIES.includes(category as TransactionCategory);
+}
+
+/**
+ * Normalizes a transaction category string by case-insensitive matching against approved categories.
+ * Defaults to 'Other' if no match is found.
+ */
+export function normalizeTransactionCategory(category: string): TransactionCategory {
+  const trimmed = category.trim().toLowerCase();
+  const match = TRANSACTION_CATEGORIES.find((c) => c.toLowerCase() === trimmed);
+  return match || 'Other';
+}
+
+/**
  * Validates and normalizes monetary amount to a positive Prisma.Decimal.
  * Rejects 0, negative amounts, non-numeric values, or values with more than 2 decimal places.
  */

@@ -291,7 +291,7 @@ bot.callbackQuery(/^paid_([^_]+)_(.+)$/, async (ctx) => {
   }
 
   try {
-    const { markObligationPaid } = await import('@/app/finance/actions');
+    const { markObligationPaid } = await import('@/lib/finance/finance-service');
     const result = await markObligationPaid(user.id, {
       obligationId,
       occurrenceKey,
@@ -411,22 +411,25 @@ bot.command('expense', async (ctx) => {
   const note = parts.slice(2).join(' ') || null;
 
   try {
-    const { recordTransaction, getAccounts } = await import('@/app/finance/actions');
+    const { recordTransaction, getAccounts } = await import('@/lib/finance/finance-service');
+    const { normalizeTransactionCategory } = await import('@/lib/finance/finance');
     const accounts = await getAccounts(user.id);
     if (accounts.length === 0) {
       return ctx.reply('⚠️ Please create a financial account first on the web dashboard before logging expenses.');
     }
 
+    const normalizedCategory = normalizeTransactionCategory(category);
+
     await recordTransaction(user.id, {
       type: 'EXPENSE',
       amount: amountStr,
-      category,
+      category: normalizedCategory,
       accountId: accounts[0].id,
       occurredAt: new Date(),
       note,
     });
 
-    return ctx.reply(`💸 Logged expense of **₹${amountStr}** under **${category}** from ${accounts[0].name}.`, {
+    return ctx.reply(`💸 Logged expense of **₹${amountStr}** under **${normalizedCategory}** from ${accounts[0].name}.`, {
       parse_mode: 'Markdown',
     });
   } catch (err: any) {

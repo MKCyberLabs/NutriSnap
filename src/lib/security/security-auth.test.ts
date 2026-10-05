@@ -16,85 +16,222 @@ import { getNextOccurrence, RecurrenceRule } from '../recurrence/recurrence';
 import fs from 'node:fs';
 import path from 'node:path';
 
-test('NSV01-0701: Forged account ID rejected', () => {
-  // Simulating an attempt to access or transfer to an account not belonging to user
+import * as financeService from '../finance/finance-service';
+
+test('NSV01-0701: Cross-user transfer and forged destination account rejected by service', async () => {
   const userA = 'user-alice';
-  const forgedAccount = {
-    id: 'acc-forged-999',
-    userId: 'user-bob-attacker',
-    name: 'Attacker Account'
+  const userB = 'user-bob';
+
+  const mockDb = {
+    financialAccount: {
+      findUnique: async ({ where }: any) => {
+        if (where.id === 'acc-alice-1') {
+          return { id: 'acc-alice-1', userId: userA, isActive: true };
+        }
+        if (where.id === 'acc-bob-1') {
+          return { id: 'acc-bob-1', userId: userB, isActive: true };
+        }
+        return null;
+      }
+    }
   };
 
-  assert.throws(
-    () => {
-      validateTransferInvariants({
-        sourceAccountId: 'acc-alice-1',
-        destinationAccountId: forgedAccount.id,
-        sourceAccountUserId: userA,
-        destinationAccountUserId: forgedAccount.userId,
-        currentUserId: userA,
-        amount: new Prisma.Decimal('100.00')
-      });
+  await assert.rejects(
+    async () => {
+      await financeService.recordTransaction(userA, {
+        type: 'TRANSFER',
+        amount: '100.00',
+        category: 'Transfer',
+        accountId: 'acc-alice-1',
+        transferAccountId: 'acc-bob-1',
+        occurredAt: new Date(),
+      }, mockDb as any);
     },
-    /Both transfer accounts must belong to the authenticated user/,
-    'Transfer to forged cross-user account must be rejected'
+    /Destination transfer account not found or unauthorized/,
+    'Service must reject cross-user transfer'
   );
 });
 
-test('NSV01-0702: Forged transaction ID rejected', () => {
-  // Simulating mutation on transaction ID not owned by user
+test('NSV01-0702: Forged transaction ID rejected by deleteTransaction service', async () => {
   const userA = 'user-alice';
-  const txBob = {
-    id: 'tx-bob-456',
-    userId: 'user-bob-victim',
-    amount: new Prisma.Decimal('500.00')
+  const userB = 'user-bob-victim';
+
+  const mockDb = {
+    financialTransaction: {
+      findUnique: async ({ where }: any) => {
+        if (where.id === 'tx-bob-456') {
+          return { id: 'tx-bob-456', userId: userB };
+        }
+        return null;
+      },
+      delete: async () => {
+        throw new Error('Should not be called');
+      }
+    }
   };
 
-  const isOwner = txBob.userId === userA;
-  assert.equal(isOwner, false, 'User Alice cannot match transaction owned by Bob');
+  await assert.rejects(
+    async () => {
+      await financeService.deleteTransaction(userA, 'tx-bob-456', mockDb as any);
+    },
+    /Transaction not found or unauthorized/,
+    'User Alice cannot delete transaction owned by Bob'
+  );
 });
 
-test('NSV01-0703: Forged obligation ID rejected', () => {
-  // Simulating Paid or Edit attempt on forged obligation ID
+test('NSV01-0703: Forged obligation ID rejected by markObligationPaid service', async () => {
   const userA = 'user-alice';
-  const obBob = {
-    id: 'ob-bob-789',
-    userId: 'user-bob-victim',
-    title: 'Bob Rent'
+  const userB = 'user-bob-victim';
+
+  const mockDb = {
+    obligation: {
+      findUnique: async ({ where }: any) => {
+        if (where.id === 'ob-bob-789') {
+          return { id: 'ob-bob-789', userId: userB, nextDueAt: new Date(), dueAt: new Date(), recurrenceType: 'MONTHLY' };
+        }
+        return null;
+      }
+    }
   };
 
-  const isOwner = obBob.userId === userA;
-  assert.equal(isOwner, false, 'User Alice cannot mutate obligation owned by Bob');
+  await assert.rejects(
+    async () => {
+      await financeService.markObligationPaid(userA, {
+        obligationId: 'ob-bob-789',
+        occurrenceKey: '2026-10-15T09:00',
+      }, mockDb as any);
+    },
+    /Obligation not found or unauthorized/,
+    'User Alice cannot mark obligation owned by Bob as paid'
+  );
 });
 
-test('NSV01-0704: Forged reminder/delivery ID rejected', () => {
-  // Simulating claim or callback on forged reminder delivery ID
+test('NSV01-0704: Cross-user account archive rejected by archiveAccount service', async () => {
   const userA = 'user-alice';
-  const deliveryVictim = {
-    id: 'del-999',
-    userId: 'user-victim',
-    obligationId: 'ob-victim-1'
+  const userB = 'user-bob';
+
+  const mockDb = {
+    financialAccount: {
+      findUnique: async ({ where }: any) => {
+        if (where.id === 'acc-bob-999') {
+          return { id: 'acc-bob-999', userId: userB };
+        }
+        return null;
+      },
+      update: async () => {
+        throw new Error('Should not be called');
+      }
+    }
   };
 
-  const isOwner = deliveryVictim.userId === userA;
-  assert.equal(isOwner, false, 'User Alice cannot claim delivery owned by victim');
+  await assert.rejects(
+    async () => {
+      await financeService.archiveAccount(userA, 'acc-bob-999', mockDb as any);
+    },
+    /Account not found or unauthorized/,
+    'User Alice cannot archive account owned by Bob'
+  );
 });
 
-test('NSV01-0705: Invalid enum/category rejected', () => {
-  // Invalid account types
-  assert.equal(isValidAccountType('BITCOIN'), false);
-  assert.equal(isValidAccountType('STOCK_BROKER'), false);
-  assert.equal(isValidAccountType('CREDIT_CARD'), true);
+test('NSV01-0705: Unapproved category and invalid occurrenceKey rejected server-side', async () => {
+  const userA = 'user-alice';
+  const mockDb = {
+    financialAccount: {
+      findUnique: async () => ({ id: 'acc-alice-1', userId: userA, isActive: true })
+    },
+    obligation: {
+      findUnique: async () => ({
+        id: 'ob-1',
+        userId: userA,
+        nextDueAt: new Date('2026-10-15T10:00:00Z'),
+        dueAt: new Date('2026-10-15T10:00:00Z'),
+        recurrenceType: 'MONTHLY',
+        amount: null,
+      })
+    },
+    obligationOccurrence: {
+      findUnique: async () => null,
+      create: async ({ data }: any) => ({ id: 'occ-1', ...data })
+    },
+    user: {
+      findUnique: async () => ({ timezone: 'UTC' })
+    },
+    $transaction: async (fn: any) => fn(mockDb)
+  };
 
-  // Invalid transaction types
-  assert.equal(isValidTransactionType('DIVIDEND'), false);
-  assert.equal(isValidTransactionType('CRYPTO_SWAP'), false);
-  assert.equal(isValidTransactionType('EXPENSE'), true);
+  // 1. Invalid transaction category rejected
+  await assert.rejects(
+    async () => {
+      await financeService.recordTransaction(userA, {
+        type: 'EXPENSE',
+        amount: '100.00',
+        category: 'Gambling', // Unapproved category!
+        accountId: 'acc-alice-1',
+        occurredAt: new Date(),
+      }, mockDb as any);
+    },
+    /Invalid transaction category/,
+    'Service must reject unapproved category'
+  );
 
-  // Invalid obligation kinds
-  assert.equal(isValidObligationKind('GAMBLING'), false);
-  assert.equal(isValidObligationKind('LOAN_SHARK'), false);
-  assert.equal(isValidObligationKind('RECHARGE'), true);
+  // 2. Invalid occurrenceKey format rejected
+  await assert.rejects(
+    async () => {
+      await financeService.markObligationPaid(userA, {
+        obligationId: 'ob-1',
+        occurrenceKey: 'not-a-valid-date-key',
+      }, mockDb as any);
+    },
+    /Invalid occurrence key format/,
+    'Service must reject invalid occurrenceKey format'
+  );
+});
+
+test('NSV01-0705-B: Stale occurrence key does NOT advance obligation nextDueAt', async () => {
+  const userA = 'user-alice';
+  let updatedData: any = null;
+
+  const currentDueAt = new Date('2026-11-15T10:00:00.000Z');
+  const mockDb = {
+    obligation: {
+      findUnique: async () => ({
+        id: 'ob-1',
+        userId: userA,
+        dueAt: new Date('2026-09-15T10:00:00.000Z'),
+        nextDueAt: currentDueAt, // Currently due in November
+        recurrenceType: 'MONTHLY',
+        recurrenceInterval: 1,
+        amount: null,
+      }),
+      update: async ({ data }: any) => {
+        updatedData = data;
+        return { id: 'ob-1', ...data };
+      }
+    },
+    obligationOccurrence: {
+      findUnique: async () => null,
+      create: async ({ data }: any) => ({ id: 'occ-stale', ...data })
+    },
+    reminderDelivery: {
+      updateMany: async () => ({ count: 0 })
+    },
+    user: {
+      findUnique: async () => ({ timezone: 'UTC' })
+    },
+    $transaction: async (fn: any) => fn(mockDb)
+  };
+
+  // Mark a past occurrence (e.g. October) as paid
+  const staleOccurrenceKey = '2026-10-15T10:00';
+  const result = await financeService.markObligationPaid(userA, {
+    obligationId: 'ob-1',
+    occurrenceKey: staleOccurrenceKey,
+  }, mockDb as any);
+
+  assert.equal(result.success, true);
+  // Crucial check: nextDueAt must NOT be advanced when paying a stale key!
+  assert.equal(result.nextDueAt, currentDueAt.toISOString());
+  assert.equal(updatedData.nextDueAt, undefined, 'Obligation nextDueAt must not be updated by stale key');
 });
 
 test('NSV01-0706: Invalid recurrence/date rejected', () => {

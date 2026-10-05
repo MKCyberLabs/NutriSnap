@@ -149,19 +149,25 @@ Corresponds primarily to TEST_MATRIX Gate B/E/F/L.
 - [x] **NSV01-0223** — Cross-user relation integrity verified after migration. Status: PASS. Evidence: Multi-user isolation verified in `src/lib/migration/migration-backfill.test.ts` (test 4).
 - [x] **NSV01-0224** — Backup/restore or rollback rehearsal documented in non-production. Status: PASS. Evidence: Idempotent re-run safety verified in `src/lib/migration/migration-backfill.test.ts` (test 5).
 - [x] **NSV01-0225** — No production `--accept-data-loss` operation used. Status: PASS. Evidence: Migration is purely additive with safe constraint dropping and idempotent data backfill.
+- [x] **NSV01-0226** — Migration SQL contains Session table definition with tokenHash PK, User FK with CASCADE, and indexes. Status: PASS. Evidence: `prisma/migrations/20261005_v0_1_health_wealth/migration.sql` verified via `src/lib/migration/main-to-v01-migration.test.ts`.
+- [x] **NSV01-0227** — Clean upgrade path from current main schema adds Session without table-not-found errors. Status: PASS. Evidence: Verified in `src/lib/migration/main-to-v01-migration.test.ts`.
+- [x] **NSV01-0228** — Session model CRUD operations and session lifecycle functional. Status: PASS. Evidence: Verified in `src/lib/migration/main-to-v01-migration.test.ts`.
+- [x] **NSV01-0229** — Fresh PostgreSQL test database upgrade rehearsal from main schema passes cleanly. Status: PASS. Evidence: Executed on isolated PostgreSQL 15 test container `nutrisnap_test_db`; verified in `src/lib/migration/main-to-v01-migration.test.ts`.
 
 ## Recurrence
 
 - [x] **NSV01-0230** — ONCE future occurrence deterministic. Status: PASS. Evidence: Verified in `src/lib/recurrence/recurrence.test.ts` (test 1).
 - [x] **NSV01-0231** — DAILY recurrence deterministic. Status: PASS. Evidence: Verified in `src/lib/recurrence/recurrence.test.ts` (test 2).
 - [x] **NSV01-0232** — WEEKLY recurrence deterministic. Status: PASS. Evidence: Verified in `src/lib/recurrence/recurrence.test.ts` (test 3).
-- [x] **NSV01-0233** — MONTHLY Jan 31 → February clamps to valid last day. Status: PASS. Evidence: Clamps to Feb 28 in non-leap year; verified in `src/lib/recurrence/recurrence.test.ts` (test 4).
-- [x] **NSV01-0234** — February → March behavior does not drift unexpectedly. Status: PASS. Evidence: Advances from Feb 28 to March 31 without drifting; verified in `src/lib/recurrence/recurrence.test.ts` (test 4).
-- [x] **NSV01-0235** — YEARLY leap-day rule explicit and tested. Status: PASS. Evidence: Feb 29 clamps to Feb 28 in non-leap years and restores Feb 29 in leap years; verified in `src/lib/recurrence/recurrence.test.ts` (test 5).
-- [x] **NSV01-0236** — EVERY_N_DAYS 28/56/84 pass. Status: PASS. Evidence: Exact 28, 56, and 84 day steps verified in `src/lib/recurrence/recurrence.test.ts` (test 6).
-- [x] **NSV01-0237** — Asia/Kolkata local time case passes. Status: PASS. Evidence: Preserves 18:00 IST across dates; verified in `src/lib/recurrence/recurrence.test.ts` (test 7).
-- [x] **NSV01-0238** — representative DST transition case passes. Status: PASS. Evidence: Preserves 09:00 AM EDT/EST across DST shift; verified in `src/lib/recurrence/recurrence.test.ts` (test 8).
-- [x] **NSV01-0239** — Snooze changes delivery attempt but not recurrence anchor. Status: PASS. Evidence: Snoozing to Oct 18 preserves Oct 15 anchor and calculates Nov 15 next due; verified in `src/lib/recurrence/recurrence.test.ts` (test 9).
+- [x] **NSV01-0232-B** — WEEKLY recurrence with interval > 1 (biweekly and multi-day). Status: PASS. Evidence: Verified in `src/lib/recurrence/recurrence.test.ts` (test 4).
+- [x] **NSV01-0233** — MONTHLY Jan 31 → February clamps to valid last day. Status: PASS. Evidence: Clamps to Feb 28 in non-leap year; verified in `src/lib/recurrence/recurrence.test.ts` (test 5).
+- [x] **NSV01-0234** — February → March behavior does not drift unexpectedly. Status: PASS. Evidence: Advances from Feb 28 to March 31 without drifting; verified in `src/lib/recurrence/recurrence.test.ts` (test 5).
+- [x] **NSV01-0235** — YEARLY leap-day rule explicit and tested. Status: PASS. Evidence: Feb 29 clamps to Feb 28 in non-leap years and restores Feb 29 in leap years; verified in `src/lib/recurrence/recurrence.test.ts` (test 6).
+- [x] **NSV01-0235-B** — YEARLY recurrence with interval > 1 stepping math and leap day preservation. Status: PASS. Evidence: Verified in `src/lib/recurrence/recurrence.test.ts` (test 7).
+- [x] **NSV01-0236** — EVERY_N_DAYS 28/56/84 pass. Status: PASS. Evidence: Exact 28, 56, and 84 day steps verified in `src/lib/recurrence/recurrence.test.ts` (test 8).
+- [x] **NSV01-0237** — Asia/Kolkata local time case passes. Status: PASS. Evidence: Preserves 18:00 IST across dates; verified in `src/lib/recurrence/recurrence.test.ts` (test 9).
+- [x] **NSV01-0238** — representative DST transition case passes. Status: PASS. Evidence: Preserves 09:00 AM EDT/EST across DST shift; verified in `src/lib/recurrence/recurrence.test.ts` (test 10).
+- [x] **NSV01-0239** — Snooze changes delivery attempt but not recurrence anchor. Status: PASS. Evidence: Snoozing to Oct 18 preserves Oct 15 anchor and calculates Nov 15 next due; verified in `src/lib/recurrence/recurrence.test.ts` (test 11).
 
 ## Review A
 
@@ -281,22 +287,26 @@ Do not begin broad UI/application expansion until Review A PASS.
 - [x] **NSV01-0627** — Existing hydration callback regression PASS. Status: PASS. Evidence: Preserved intact in `src/app/api/telegram/webhook/route.ts`.
 - [x] **NSV01-0628** — Existing meal reminder regression PASS where applicable. Status: PASS. Evidence: Preserved intact in `src/app/api/telegram/webhook/route.ts`.
 - [x] **NSV01-0629** — Verify no real production Telegram message was sent during local gate. Status: PASS. Evidence: Local development runtime uses mock token `mock` per baseline.
+- [x] **NSV01-0630** — Telegram /expense operates in cookie-free environment via trusted finance-service. Status: PASS. Evidence: Verified in `src/lib/telegram/telegram-finance.test.ts` (test 1).
+- [x] **NSV01-0631** — Telegram Paid callback idempotency and duplicate suppression. Status: PASS. Evidence: Verified in `src/lib/telegram/telegram-finance.test.ts` (test 2).
+- [x] **NSV01-0632** — Telegram Paid callback cross-user rejection. Status: PASS. Evidence: Verified in `src/lib/telegram/telegram-finance.test.ts` (test 3).
 
 ---
 
 # Phase 7 — Security / privacy / authorization
 
-- [x] **NSV01-0701** — Forged account ID rejected. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 1) and server actions.
-- [x] **NSV01-0702** — Forged transaction ID rejected. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 2) and server actions.
-- [x] **NSV01-0703** — Forged obligation ID rejected. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 3) and server actions.
-- [x] **NSV01-0704** — Forged reminder/delivery ID rejected. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 4) and webhook callback handlers.
-- [x] **NSV01-0705** — Invalid enum/category rejected. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 5).
-- [x] **NSV01-0706** — Invalid recurrence/date rejected. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 6).
-- [x] **NSV01-0707** — Huge/invalid amount handled within documented bounds. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 7) enforcing `MAX_FINANCIAL_AMOUNT` (`999999999999.99`).
-- [x] **NSV01-0708** — XSS-like title/note payload rendered/handled safely. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 8).
-- [x] **NSV01-0709** — No bank password/UPI PIN/CVV/PIN/OTP/broker credential field introduced. Status: PASS. Evidence: Automated schema inspection in `src/lib/security/security-auth.test.ts` (test 9).
-- [x] **NSV01-0710** — Logs/evidence do not expose secrets/tokens. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 10).
-- [x] **NSV01-0711** — Secret-pattern scan over v0.1 delta PASS. Status: PASS. Evidence: Automated secret regex scanner in `src/lib/security/security-auth.test.ts` (test 10) PASS with 0 violations.
+- [x] **NSV01-0701** — Cross-user transfer and forged destination account rejected by service. Status: PASS. Evidence: Real service call verified in `src/lib/security/security-auth.test.ts` (test 1).
+- [x] **NSV01-0702** — Forged transaction ID rejected by deleteTransaction service. Status: PASS. Evidence: Real service call verified in `src/lib/security/security-auth.test.ts` (test 2).
+- [x] **NSV01-0703** — Forged obligation ID rejected by markObligationPaid service. Status: PASS. Evidence: Real service call verified in `src/lib/security/security-auth.test.ts` (test 3).
+- [x] **NSV01-0704** — Cross-user account archive rejected by archiveAccount service. Status: PASS. Evidence: Real service call verified in `src/lib/security/security-auth.test.ts` (test 4).
+- [x] **NSV01-0705** — Unapproved category and invalid occurrenceKey format rejected server-side. Status: PASS. Evidence: Real service call verified in `src/lib/security/security-auth.test.ts` (test 5).
+- [x] **NSV01-0705-B** — Stale occurrence key does NOT advance obligation nextDueAt. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 6).
+- [x] **NSV01-0706** — Invalid recurrence/date rejected. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 7).
+- [x] **NSV01-0707** — Huge/invalid amount handled within documented bounds. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 8) enforcing `MAX_FINANCIAL_AMOUNT` (`999999999999.99`).
+- [x] **NSV01-0708** — XSS-like title/note payload rendered/handled safely. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 9).
+- [x] **NSV01-0709** — No bank password/UPI PIN/CVV/PIN/OTP/broker credential field introduced. Status: PASS. Evidence: Automated schema inspection in `src/lib/security/security-auth.test.ts` (test 10).
+- [x] **NSV01-0710** — Logs/evidence do not expose secrets/tokens. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 11).
+- [x] **NSV01-0711** — Secret-pattern scan over v0.1 delta PASS. Status: PASS. Evidence: Automated secret regex scanner in `src/lib/security/security-auth.test.ts` (test 11) PASS with 0 violations.
 
 ---
 
@@ -397,7 +407,9 @@ Use one isolated test user and fixed fixture dates.
 - [x] **NSV01-1115** — Existing Food page still works. Status: PASS. Evidence: Verified by analysis contract tests and Today suite.
 - [x] **NSV01-1116** — Existing Water page still works. Status: PASS. Evidence: Verified by hydration route preservation and Today suite.
 
-All NSV01-1101..1116 must PASS for the integrated acceptance scenario to PASS: ALL PASS.
+All NSV01-1101..1116 PASS across two independent test runners:
+1. `src/lib/scenario/health-wealth-scenario.test.ts` (deterministic pure domain test);
+2. `src/lib/scenario/db-acceptance.test.ts` (real PostgreSQL 15 test database mutations with `finance-service.ts` and Prisma client).
 
 ---
 

@@ -174,7 +174,21 @@ export function getNextOccurrence(
         return new Date(anchor.getTime());
       }
 
-      // Check day-by-day in timezone until a matching day > after is found
+      // Anchor's Sunday in user timezone
+      const anchorDayOfWeek = anchorInTz.getDay();
+      const anchorSunday = new TZDate(
+        anchorInTz.getFullYear(),
+        anchorInTz.getMonth(),
+        anchorInTz.getDate() - anchorDayOfWeek,
+        0,
+        0,
+        0,
+        0,
+        tz
+      );
+      const anchorSundayMs = anchorSunday.getTime();
+
+      // Estimate starting cursor
       let cursor = new TZDate(
         anchorInTz.getFullYear(),
         anchorInTz.getMonth(),
@@ -186,25 +200,77 @@ export function getNextOccurrence(
         tz
       );
 
-      // Fast-forward close to after
+      // Fast-forward close to `after` if it is in the future
       if (after.getTime() > cursor.getTime()) {
-        const msDiff = after.getTime() - cursor.getTime();
-        const daysToSkip = Math.floor(msDiff / (24 * 60 * 60 * 1000));
-        if (daysToSkip > 7) {
+        const afterDayOfWeek = afterInTz.getDay();
+        const afterSunday = new TZDate(
+          afterInTz.getFullYear(),
+          afterInTz.getMonth(),
+          afterInTz.getDate() - afterDayOfWeek,
+          0,
+          0,
+          0,
+          0,
+          tz
+        );
+        const rawWeeks = Math.floor((afterSunday.getTime() - anchorSundayMs) / (7 * 24 * 60 * 60 * 1000));
+        if (rawWeeks > 0) {
+          const intervalsToSkip = Math.max(0, Math.floor(rawWeeks / intervalWeeks));
+          const weeksToSkip = intervalsToSkip * intervalWeeks;
+          if (weeksToSkip > 0) {
+            cursor = new TZDate(
+              anchorSunday.getFullYear(),
+              anchorSunday.getMonth(),
+              anchorSunday.getDate() + (weeksToSkip * 7),
+              anchorHour,
+              anchorMinute,
+              anchorSecond,
+              0,
+              tz
+            );
+          }
+        }
+      }
+
+      while (true) {
+        const cursorDayOfWeek = cursor.getDay();
+        const cursorSunday = new TZDate(
+          cursor.getFullYear(),
+          cursor.getMonth(),
+          cursor.getDate() - cursorDayOfWeek,
+          0,
+          0,
+          0,
+          0,
+          tz
+        );
+        const diffWeeks = Math.round((cursorSunday.getTime() - anchorSundayMs) / (7 * 24 * 60 * 60 * 1000));
+        const isIntervalWeek = diffWeeks >= 0 && (diffWeeks % intervalWeeks === 0);
+
+        if (!isIntervalWeek) {
+          // Jump to Sunday of next week
           cursor = new TZDate(
-            cursor.getFullYear(),
-            cursor.getMonth(),
-            cursor.getDate() + (daysToSkip - 7),
+            cursorSunday.getFullYear(),
+            cursorSunday.getMonth(),
+            cursorSunday.getDate() + 7,
             anchorHour,
             anchorMinute,
             anchorSecond,
             0,
             tz
           );
+          continue;
         }
-      }
 
-      while (cursor.getTime() <= after.getTime() || !activeDays.includes(WEEKDAY_NAMES[cursor.getDay()])) {
+        if (
+          cursor.getTime() >= anchor.getTime() &&
+          cursor.getTime() > after.getTime() &&
+          activeDays.includes(WEEKDAY_NAMES[cursor.getDay()])
+        ) {
+          return new Date(cursor.getTime());
+        }
+
+        // Advance by 1 day
         cursor = new TZDate(
           cursor.getFullYear(),
           cursor.getMonth(),
@@ -216,8 +282,6 @@ export function getNextOccurrence(
           tz
         );
       }
-
-      return new Date(cursor.getTime());
     }
 
     case 'MONTHLY': {
@@ -271,7 +335,8 @@ export function getNextOccurrence(
       }
 
       const anchorYear = anchorInTz.getFullYear();
-      let step = Math.max(1, afterInTz.getFullYear() - anchorYear);
+      const yearDiff = afterInTz.getFullYear() - anchorYear;
+      let step = Math.max(0, Math.floor(yearDiff / intervalYears));
 
       while (true) {
         const candidateYear = anchorYear + step * intervalYears;

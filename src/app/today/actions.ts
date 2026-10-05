@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/session';
 import { TZDate } from '@date-fns/tz';
 import { startOfDay, endOfDay } from 'date-fns';
-import { getMonthlyFinanceSummary, getObligations } from '@/app/finance/actions';
+import { getMonthlyFinanceSummary, getObligations } from '@/lib/finance/finance-service';
 
 export interface TodayFoodSummary {
   status: 'ok' | 'error';

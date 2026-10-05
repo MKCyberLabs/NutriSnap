@@ -72,6 +72,49 @@ test('NSV01-0232: WEEKLY recurrence deterministic', () => {
   assert.equal(next2.toISOString(), '2026-10-12T09:00:00.000Z');
 });
 
+test('NSV01-0232-B: WEEKLY recurrence with interval > 1 (biweekly and multi-day)', () => {
+  // Biweekly on Mondays and Thursdays in UTC
+  const biweeklyMultiDay: RecurrenceRule = {
+    type: 'WEEKLY',
+    interval: 2,
+    activeDays: ['Monday', 'Thursday'],
+    timezone: 'UTC'
+  };
+  // Monday Oct 5, 2026 at 09:00 UTC (week 0)
+  const anchor = new Date('2026-10-05T09:00:00.000Z');
+
+  // 1. Next after Monday Oct 5 in same week 0 -> Thursday Oct 8, 2026
+  const nextThuW0 = getNextOccurrence(biweeklyMultiDay, anchor, anchor);
+  assert.ok(nextThuW0);
+  assert.equal(nextThuW0.toISOString(), '2026-10-08T09:00:00.000Z');
+
+  // 2. Next after Thursday Oct 8 must skip week 1 (Oct 12-18) and jump to week 2 (Oct 19)
+  const nextMonW2 = getNextOccurrence(biweeklyMultiDay, anchor, nextThuW0);
+  assert.ok(nextMonW2);
+  assert.equal(nextMonW2.toISOString(), '2026-10-19T09:00:00.000Z');
+
+  // 3. Next after Monday Oct 19 -> Thursday Oct 22, 2026 (same week 2)
+  const nextThuW2 = getNextOccurrence(biweeklyMultiDay, anchor, nextMonW2);
+  assert.ok(nextThuW2);
+  assert.equal(nextThuW2.toISOString(), '2026-10-22T09:00:00.000Z');
+
+  // 4. Next after Thursday Oct 22 -> Monday Nov 2, 2026 (week 4)
+  const nextMonW4 = getNextOccurrence(biweeklyMultiDay, anchor, nextThuW2);
+  assert.ok(nextMonW4);
+  assert.equal(nextMonW4.toISOString(), '2026-11-02T09:00:00.000Z');
+
+  // Biweekly single-day: every 2 weeks on Wednesday
+  const biweeklyWednesday: RecurrenceRule = {
+    type: 'WEEKLY',
+    interval: 2,
+    timezone: 'UTC'
+  };
+  const wedAnchor = new Date('2026-10-07T14:00:00.000Z'); // Wednesday
+  const nextWed = getNextOccurrence(biweeklyWednesday, wedAnchor, wedAnchor);
+  assert.ok(nextWed);
+  assert.equal(nextWed.toISOString(), '2026-10-21T14:00:00.000Z'); // Exactly 14 days later
+});
+
 test('NSV01-0233 & NSV01-0234: MONTHLY Jan 31 clamps to Feb 28 and does NOT drift in March', () => {
   // Anchored on January 31, 2026 at 15:00 UTC (non-leap year)
   const anchor = new Date('2026-01-31T15:00:00.000Z');
@@ -130,6 +173,38 @@ test('NSV01-0235: YEARLY leap-day rule explicit and tested', () => {
   const next2028 = getNextOccurrence(rule, anchor, next2027);
   assert.ok(next2028);
   assert.equal(next2028.toISOString(), '2028-02-29T12:00:00.000Z');
+});
+
+test('NSV01-0235-B: YEARLY recurrence with interval > 1 (step calculation and leap day)', () => {
+  // Every 2 years on June 15
+  const rule2Years: RecurrenceRule = {
+    type: 'YEARLY',
+    interval: 2,
+    timezone: 'UTC'
+  };
+  const anchor = new Date('2026-06-15T10:00:00.000Z');
+
+  // Next after anchor -> 2028-06-15
+  const next1 = getNextOccurrence(rule2Years, anchor, anchor);
+  assert.ok(next1);
+  assert.equal(next1.toISOString(), '2028-06-15T10:00:00.000Z');
+
+  // Next after 2029-01-01 -> 2030-06-15 (must NOT skip to 2032!)
+  const after2029 = new Date('2029-01-01T00:00:00.000Z');
+  const next2030 = getNextOccurrence(rule2Years, anchor, after2029);
+  assert.ok(next2030);
+  assert.equal(next2030.toISOString(), '2030-06-15T10:00:00.000Z');
+
+  // Every 4 years on Feb 29 (Olympic/leap year cycle)
+  const rule4YearsLeap: RecurrenceRule = {
+    type: 'YEARLY',
+    interval: 4,
+    timezone: 'UTC'
+  };
+  const leapAnchor = new Date('2024-02-29T12:00:00.000Z');
+  const nextLeap2028 = getNextOccurrence(rule4YearsLeap, leapAnchor, leapAnchor);
+  assert.ok(nextLeap2028);
+  assert.equal(nextLeap2028.toISOString(), '2028-02-29T12:00:00.000Z');
 });
 
 test('NSV01-0236: EVERY_N_DAYS for 28, 56, and 84 days', () => {

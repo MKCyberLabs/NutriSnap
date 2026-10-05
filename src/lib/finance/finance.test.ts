@@ -12,6 +12,8 @@ import {
   calculateMonthlyTotals,
   calculateCategoryBreakdown,
   formatINR,
+  isValidTransactionCategory,
+  normalizeTransactionCategory,
   ACCOUNT_TYPES,
   TRANSACTION_TYPES,
   OBLIGATION_KINDS
@@ -350,4 +352,25 @@ test('NSV01-0430: Manipulated client-computed total ignored; server calculation 
 
   assert.equal(serverAuthoritativeTotal.toString(), '500');
   assert.notEqual(serverAuthoritativeTotal.toString(), clientClaimedTotal);
+});
+
+test('NSV01-0431: Transaction category validation and normalization', () => {
+  // Approved categories
+  assert.equal(isValidTransactionCategory('Food'), true);
+  assert.equal(isValidTransactionCategory('Utilities'), true);
+  assert.equal(isValidTransactionCategory('Recharge'), true);
+  assert.equal(isValidTransactionCategory('Transfer'), true);
+
+  // Unapproved categories rejected
+  assert.equal(isValidTransactionCategory('Gambling'), false);
+  assert.equal(isValidTransactionCategory('Crypto'), false);
+  assert.equal(isValidTransactionCategory(''), false);
+  assert.equal(isValidTransactionCategory('RandomString'), false);
+
+  // Normalization (case-insensitive)
+  assert.equal(normalizeTransactionCategory('food'), 'Food');
+  assert.equal(normalizeTransactionCategory('FOOD'), 'Food');
+  assert.equal(normalizeTransactionCategory('  recharge  '), 'Recharge');
+  assert.equal(normalizeTransactionCategory('utilities'), 'Utilities');
+  assert.equal(normalizeTransactionCategory('unknown_xyz'), 'Other');
 });
