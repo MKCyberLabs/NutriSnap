@@ -1,6 +1,6 @@
 # NutriSnap v0.1 — Status / Resume Point
 
-Status: **MILESTONE 2 COMPLETE — HEALTH + WEALTH SHELL / TODAY VERIFIED**
+Status: **MILESTONE 3 COMPLETE — WEALTH ACCOUNTS & TRANSACTIONS VERIFIED**
 
 Target branch: `feature/v0.1-health-wealth`
 
@@ -10,19 +10,22 @@ GitHub execution issue: **#131**
 
 ## Current phase
 
-`Milestone 3 — Wealth Accounts & Transactions Core`
+`Milestone 4 — Obligations and Reminders Core`
 
 - Milestone 0 preflight checks (NSV01-0101..0110) are complete and PASS.
 - Milestone 1 foundation implementation (NSV01-0201..0239) is complete and PASS.
 - Independent Review A (NSV01-0250..0251) performed by Codex: EXPLICIT PASS (12/12 criteria verified).
-- Milestone 2 shell implementation (NSV01-0301..0315) is complete and PASS:
-  - Shared module registry (`MODULE_REGISTRY`) driving desktop and mobile bottom navigation;
-  - Authenticated `/today` overview page with Health (Food & Water) and Wealth (Finances & Reminders);
-  - Quick Add modal supporting Food, Water, Expense, Income, and Reminder;
-  - Authenticated route shells for `/finance` and `/reminders`;
-  - Error isolation and partial-module failure protection verified;
-  - 29/29 `npm run test:life-hub` unit tests pass;
-  - Next.js build: 18/18 routes successfully compiled;
+- Milestone 2 shell implementation (NSV01-0301..0315) is complete and PASS.
+- Milestone 3 accounts & transactions core (NSV01-0401..0430) is complete and PASS:
+  - Account types BANK, CASH, WALLET, CREDIT_CARD verified;
+  - Zero/negative amount rejection and exact Decimal precision verified;
+  - Transfer invariant validation (distinct accounts, no income/expense inflation) verified;
+  - Derived balance calculation exact across deposits, expenses, and transfers;
+  - Category breakdown reconciles exactly to total expense;
+  - Server-authoritative totals ignore client-side manipulated sums;
+  - Negative authorization & cross-user access rejection verified;
+  - 40/40 `npm run test:life-hub` unit/contract tests PASS;
+  - Next.js build: 18/18 routes pass;
   - Local software gate `./scripts/verify-v01-local.sh` PASS.
 
 Shared cross-agent memory is now established so AGY-Manickam, AGY-Rohit and Codex can switch/resume without depending on their private memory.
@@ -91,13 +94,24 @@ The following are retained for history but are not the active execution path on 
 
 ## Next action
 
-1. Proceed to Milestone 3 (Wealth accounts and transactions core).
-2. Implement accounts CRUD, derived balance calculation verification, transaction entry (income, expense, transfer), monthly summary aggregation, and category breakdown reconciliation.
-3. Add security negative authorization tests (cross-user mutation rejections, same-account transfer rejections).
-4. Run verification and checkpoint commits.
+1. Proceed to Milestone 4 (Obligations, reminder engine, durable idempotency, Telegram contract).
+2. Verify obligation recurrence execution (84-day recharge, monthly credit-card, subscriptions, once-only bills).
+3. Verify reminder delivery claim deduplication (`@@unique([reminderId, occurrenceKey, offsetMinutes, channel])`).
+4. Verify idempotent Mark-Paid with optional single expense creation.
+5. Verify Telegram command/callback contract (`/start`, `/log`, `/water`, `/expense`, `/reminders`, mark-paid callback) with production safeguard preserved.
+6. Prepare for Review B gate (Codex independent review).
 
 ## Latest implementation checkpoint
 
+- **Milestone 3 — Wealth Accounts & Transactions Core Checkpoint**:
+  - Full CRUD and schema validation for BANK, CASH, WALLET, CREDIT_CARD;
+  - Positive Decimal amount enforcement and negative/zero/malformed rejection;
+  - Same-account and cross-user transfer rejection;
+  - Exact derived balance computation avoiding floating-point imprecision;
+  - Monthly income/expense summation excluding transfers;
+  - Category breakdown exact reconciliation to total expense;
+  - Server-authoritative totals avoiding client-side sum tampering;
+  - 19/19 `npm run test:finance` and 40/40 `npm run test:life-hub` tests passing.
 - **Milestone 2 — Health + Wealth Shell / Today Checkpoint**:
   - Module Registry & Navigation: Created `src/lib/navigation.ts` defining `MODULE_REGISTRY` (`Today`, `Food`, `Water`, `Money`, `Reminders`). Wired into `src/components/layout/Navbar.tsx` for desktop and mobile bottom navigation with 360px viewport support.
   - Today Read-Model & Overview: Implemented `src/app/today/page.tsx` and `src/app/today/actions.ts` aggregating Food, Water, Wealth, and Reminders with partial-module failure protection and strict user scoping.

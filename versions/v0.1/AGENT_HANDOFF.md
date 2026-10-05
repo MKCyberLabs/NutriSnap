@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestone 2 — Health + Wealth shell / Today complete`
+- Current milestone: `Milestone 3 — Wealth Accounts & Transactions Core complete`
 - Current review gate: `Review A PASSED` (next gate: Review B after Milestone 4)
-- Last verified implementation checkpoint: Milestone 2 Shell & Today Checkpoint
+- Last verified implementation checkpoint: Milestone 3 Accounts & Transactions Checkpoint
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -28,19 +28,21 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 - `npm run typecheck`: PASS (0 errors);
 - `npm run build`: PASS (18/18 static pages);
 - `npm run test:today`: 5/5 PASS;
-- `npm run test:finance`: 8/8 PASS;
+- `npm run test:finance`: 19/19 PASS;
 - `npm run test:reminders`: 16/16 PASS;
-- `npm run test:life-hub`: 29/29 PASS;
+- `npm run test:life-hub`: 40/40 PASS;
 - `./scripts/verify-v01-local.sh`: PASS;
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-1. Commit and push Milestone 2 Checkpoint to `feature/v0.1-health-wealth`.
-2. Proceed to Milestone 3 (Wealth Accounts & Transactions Core):
-   - Accounts CRUD and Derived balance calculation verification;
-   - Transaction entry (Income, Expense, Transfer) and category breakdown reconciliation;
-   - Negative authorization and security tests (cross-user rejections, same-account transfer rejections).
+1. Commit and push Milestone 3 Checkpoint to `feature/v0.1-health-wealth`.
+2. Proceed to Milestone 4 (Obligations, reminder engine, durable idempotency, Telegram contract):
+   - Recharge 84-day, monthly credit card due, subscription recurrence tests;
+   - Reminder delivery claim deduplication (`@@unique([reminderId, occurrenceKey, offsetMinutes, channel])`);
+   - Idempotent Mark-Paid with optional single expense creation;
+   - Telegram command/callback contract (`/start`, `/log`, `/water`, `/expense`, `/reminders`, mark-paid callback) preserving production safety.
+3. Prepare for independent Review B gate (Codex).
 
 ## Active blockers
 
@@ -50,7 +52,7 @@ None at this checkpoint.
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 2 checkpoint commit & Milestone 3 implementation | `WRITE-SAME-TREE-SEQUENTIAL` | `533db7f` | IN PROGRESS |
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 3 checkpoint commit & Milestone 4 implementation | `WRITE-SAME-TREE-SEQUENTIAL` | `a27d7b1` | IN PROGRESS |
 | 2 | Codex | Architecture/security/reviewer | Review A completed (PASS); Standby for Review B | `READ-ONLY` | Checkpoint SHA | IDLE |
 | 3 | AGY-Rohit | Bounded implementation/test helper | none yet | assign per task | n/a | IDLE |
 
@@ -104,6 +106,19 @@ Blockers/open questions:
 ```
 
 ## History
+
+### Milestone 3 — Wealth Accounts & Transactions Core Checkpoint
+
+- Implemented comprehensive accounts and transactions core validation in `src/lib/finance/finance.test.ts`.
+- Validated BANK, CASH, WALLET, and CREDIT_CARD account creation and limits (NSV01-0401..0404).
+- Enforced rejection of invalid account types and cross-user account read/mutations (NSV01-0405..0406).
+- Verified soft-delete account archiving preserving transaction history and derived balance (NSV01-0407).
+- Verified derived balance calculation exactness and transfer balance movement without inflating income/expense totals (NSV01-0408, NSV01-0423).
+- Verified exact Decimal amounts for income and expense; rejected zero, negative, and invalid values (NSV01-0420..0422).
+- Validated transfer invariants rejecting same-account transfers and cross-user destination accounts (NSV01-0424..0425).
+- Verified monthly income, expense, and category breakdown exact reconciliation (NSV01-0426..0428).
+- Verified transaction deletion safe recalculation and server-authoritative derivation rejecting client-side tampering (NSV01-0429..0430).
+- All 40 `npm run test:life-hub` tests passing, typecheck PASS, build PASS (18/18 routes), `./scripts/verify-v01-local.sh` PASS.
 
 ### Milestone 2 — Health + Wealth Shell / Today Checkpoint
 

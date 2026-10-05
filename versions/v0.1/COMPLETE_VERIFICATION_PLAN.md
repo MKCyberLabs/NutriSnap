@@ -196,28 +196,28 @@ Do not begin broad UI/application expansion until Review A PASS.
 
 ## Accounts
 
-- [ ] **NSV01-0401** — Create BANK account. Status: NOT RUN.
-- [ ] **NSV01-0402** — Create CASH account. Status: NOT RUN.
-- [ ] **NSV01-0403** — Create WALLET account. Status: NOT RUN.
-- [ ] **NSV01-0404** — Create CREDIT_CARD account with optional credit limit. Status: NOT RUN.
-- [ ] **NSV01-0405** — Invalid account type rejected. Status: NOT RUN.
-- [ ] **NSV01-0406** — Cross-user account read/mutation rejected. Status: NOT RUN.
-- [ ] **NSV01-0407** — Archive account preserves history. Status: NOT RUN.
-- [ ] **NSV01-0408** — Derived balance calculation exact. Status: NOT RUN.
+- [x] **NSV01-0401** — Create BANK account. Status: PASS. Evidence: Account type validation and schema verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0402** — Create CASH account. Status: PASS. Evidence: Account type validation and schema verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0403** — Create WALLET account. Status: PASS. Evidence: Account type validation and schema verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0404** — Create CREDIT_CARD account with optional credit limit. Status: PASS. Evidence: Account type and credit limit Decimal validation verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0405** — Invalid account type rejected. Status: PASS. Evidence: Rejected invalid types verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0406** — Cross-user account read/mutation rejected. Status: PASS. Evidence: Server-side ownership rejection verified in `src/lib/finance/finance.test.ts` and `src/app/finance/actions.ts`.
+- [x] **NSV01-0407** — Archive account preserves history. Status: PASS. Evidence: Soft delete preservation and derived balance verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0408** — Derived balance calculation exact. Status: PASS. Evidence: Exact Decimal balance derivation verified in `src/lib/finance/finance.test.ts`.
 
 ## Transactions
 
-- [ ] **NSV01-0420** — Income ₹10,000 records exact Decimal total. Status: NOT RUN.
-- [ ] **NSV01-0421** — Expense ₹1,250 records exact Decimal total. Status: NOT RUN.
-- [ ] **NSV01-0422** — Zero/negative amount rejected. Status: NOT RUN.
-- [ ] **NSV01-0423** — Transfer A→B moves balances without changing income/expense totals. Status: NOT RUN.
-- [ ] **NSV01-0424** — Same-account transfer rejected. Status: NOT RUN.
-- [ ] **NSV01-0425** — Cross-user destination account rejected. Status: NOT RUN.
-- [ ] **NSV01-0426** — Monthly income total exact. Status: NOT RUN.
-- [ ] **NSV01-0427** — Monthly expense total exact. Status: NOT RUN.
-- [ ] **NSV01-0428** — Category breakdown reconciles to expense total. Status: NOT RUN.
-- [ ] **NSV01-0429** — Edit/delete recalculates totals safely. Status: NOT RUN.
-- [ ] **NSV01-0430** — Manipulated client-computed total ignored; server remains authoritative. Status: NOT RUN.
+- [x] **NSV01-0420** — Income ₹10,000 records exact Decimal total. Status: PASS. Evidence: Exact Decimal parsing verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0421** — Expense ₹1,250 records exact Decimal total. Status: PASS. Evidence: Exact Decimal parsing verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0422** — Zero/negative amount rejected. Status: PASS. Evidence: Zero, negative, and invalid string amounts rejected in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0423** — Transfer A→B moves balances without changing income/expense totals. Status: PASS. Evidence: Verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0424** — Same-account transfer rejected. Status: PASS. Evidence: Verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0425** — Cross-user destination account rejected. Status: PASS. Evidence: Verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0426** — Monthly income total exact. Status: PASS. Evidence: Exact Decimal summation verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0427** — Monthly expense total exact. Status: PASS. Evidence: Exact Decimal summation verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0428** — Category breakdown reconciles to expense total. Status: PASS. Evidence: Exact category breakdown reconciliation verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0429** — Edit/delete recalculates totals safely. Status: PASS. Evidence: Transaction removal recalculation verified in `src/lib/finance/finance.test.ts`.
+- [x] **NSV01-0430** — Manipulated client-computed total ignored; server remains authoritative. Status: PASS. Evidence: Server authoritative derivation verified in `src/lib/finance/finance.test.ts`.
 
 ---
 

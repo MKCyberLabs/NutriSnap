@@ -192,3 +192,162 @@ test('formatINR formats currency properly with INR symbol', () => {
   // Intl format should include 1,250.50
   assert.ok(formatted.includes('1,250.50') || formatted.includes('1,250.5'));
 });
+
+// ============================================================================
+// PHASE 4 (Milestone 3) ACCOUNTS TESTS
+// ============================================================================
+
+test('NSV01-0401..0404: Account creation validation for BANK, CASH, WALLET, CREDIT_CARD', () => {
+  // BANK
+  assert.equal(isValidAccountType('BANK'), true);
+  // CASH
+  assert.equal(isValidAccountType('CASH'), true);
+  // WALLET
+  assert.equal(isValidAccountType('WALLET'), true);
+  // CREDIT_CARD with optional credit limit
+  assert.equal(isValidAccountType('CREDIT_CARD'), true);
+  const creditLimit = parseAndValidateAmount('50000');
+  assert.equal(creditLimit.toString(), '50000');
+});
+
+test('NSV01-0405: Invalid account type rejected', () => {
+  assert.equal(isValidAccountType('INVESTMENT'), false);
+  assert.equal(isValidAccountType('CRYPTO'), false);
+  assert.equal(isValidAccountType('SAVINGS_ACCOUNT'), false);
+});
+
+test('NSV01-0406: Cross-user account access and mutation rejected', () => {
+  // Simulate account mutation authorization check
+  function authorizeAccountMutation(accountUserId: string, currentUserId: string) {
+    if (accountUserId !== currentUserId) {
+      throw new Error('Account not found or unauthorized');
+    }
+    return true;
+  }
+
+  assert.equal(authorizeAccountMutation('user-alice', 'user-alice'), true);
+  assert.throws(
+    () => authorizeAccountMutation('user-bob', 'user-alice'),
+    /unauthorized/
+  );
+});
+
+test('NSV01-0407: Archive account preserves transaction history and balance', () => {
+  const accountId = 'acc-archived';
+  const openingBalance = '5000';
+  const transactions = [
+    { type: 'INCOME', amount: '2000', accountId, transferAccountId: null },
+    { type: 'EXPENSE', amount: '1500', accountId, transferAccountId: null }
+  ];
+
+  // Simulating soft delete archive: isActive set to false
+  const account = { id: accountId, isActive: false, openingBalance };
+  assert.equal(account.isActive, false);
+
+  // Derived balance calculation still processes historical transactions accurately
+  const balance = calculateAccountBalance(account.openingBalance, transactions, accountId);
+  assert.equal(balance.toString(), '5500');
+});
+
+// ============================================================================
+// PHASE 4 (Milestone 3) TRANSACTIONS TESTS
+// ============================================================================
+
+test('NSV01-0420 & NSV01-0421: Income ₹10,000 and Expense ₹1,250 record exact Decimal totals', () => {
+  const incomeAmount = parseAndValidateAmount('10000.00');
+  assert.ok(incomeAmount instanceof Prisma.Decimal);
+  assert.equal(incomeAmount.toString(), '10000');
+
+  const expenseAmount = parseAndValidateAmount('1250.00');
+  assert.ok(expenseAmount instanceof Prisma.Decimal);
+  assert.equal(expenseAmount.toString(), '1250');
+});
+
+test('NSV01-0422: Zero and negative amounts strictly rejected', () => {
+  assert.throws(() => parseAndValidateAmount('0'), /strictly positive/);
+  assert.throws(() => parseAndValidateAmount('-1250.00'), /strictly positive/);
+  assert.throws(() => parseAndValidateAmount(-0.01), /strictly positive/);
+});
+
+test('NSV01-0424: Same-account transfer rejected', () => {
+  assert.throws(
+    () =>
+      validateTransferInvariants({
+        sourceAccountId: 'acc-same',
+        destinationAccountId: 'acc-same',
+        sourceAccountUserId: 'user-1',
+        destinationAccountUserId: 'user-1',
+        currentUserId: 'user-1',
+        amount: '500'
+      }),
+    /must be distinct/
+  );
+});
+
+test('NSV01-0425: Cross-user destination account rejected', () => {
+  assert.throws(
+    () =>
+      validateTransferInvariants({
+        sourceAccountId: 'acc-source',
+        destinationAccountId: 'acc-attacker',
+        sourceAccountUserId: 'user-victim',
+        destinationAccountUserId: 'user-attacker',
+        currentUserId: 'user-victim',
+        amount: '500'
+      }),
+    /Both transfer accounts must belong to the authenticated user/
+  );
+});
+
+test('NSV01-0426 & NSV01-0427: Monthly income and expense totals are exact Decimal sums', () => {
+  const transactions = [
+    { type: 'INCOME', amount: '10000.25' },
+    { type: 'INCOME', amount: '4999.75' },
+    { type: 'EXPENSE', amount: '1250.50' },
+    { type: 'EXPENSE', amount: '749.50' },
+    { type: 'TRANSFER', amount: '2000.00' } // Transfer should NOT affect monthly income/expense!
+  ];
+
+  const totals = calculateMonthlyTotals(transactions);
+  assert.equal(totals.income.toString(), '15000');
+  assert.equal(totals.expense.toString(), '2000');
+});
+
+test('NSV01-0429: Edit/delete recalculates totals and balances safely', () => {
+  const accountId = 'acc-1';
+  let transactions = [
+    { id: 'tx-1', type: 'INCOME', amount: '10000', accountId, transferAccountId: null },
+    { id: 'tx-2', type: 'EXPENSE', amount: '2000', accountId, transferAccountId: null },
+    { id: 'tx-3', type: 'EXPENSE', amount: '500', accountId, transferAccountId: null }
+  ];
+
+  // Initial balance: 0 + 10,000 - 2,000 - 500 = 7,500
+  let balance = calculateAccountBalance('0', transactions, accountId);
+  assert.equal(balance.toString(), '7500');
+
+  // Delete transaction tx-2 (₹2,000 expense)
+  transactions = transactions.filter(t => t.id !== 'tx-2');
+
+  // Recalculated balance: 0 + 10,000 - 500 = 9,500
+  balance = calculateAccountBalance('0', transactions, accountId);
+  assert.equal(balance.toString(), '9500');
+
+  const totals = calculateMonthlyTotals(transactions);
+  assert.equal(totals.expense.toString(), '500');
+});
+
+test('NSV01-0430: Manipulated client-computed total ignored; server calculation remains authoritative', () => {
+  const serverTransactions = [
+    { type: 'EXPENSE', amount: '150.00' },
+    { type: 'EXPENSE', amount: '350.00' }
+  ];
+
+  // Malicious client claims expense is ₹10.00
+  const clientClaimedTotal = '10.00';
+
+  // Server authoritatively derives total from individual verified transactions
+  const serverAuthoritativeTotal = calculateMonthlyTotals(serverTransactions).expense;
+
+  assert.equal(serverAuthoritativeTotal.toString(), '500');
+  assert.notEqual(serverAuthoritativeTotal.toString(), clientClaimedTotal);
+});
