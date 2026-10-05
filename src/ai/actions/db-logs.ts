@@ -1,26 +1,20 @@
 'use server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
+import { requireUser } from '@/lib/session';
 
 async function verifyAuth(userId: string) {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
-  if (!sessionId || sessionId !== userId) {
-    throw new Error('Unauthorized');
-  }
+  await requireUser(userId);
 }
 
 async function verifyLogOwner(logId: string) {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
-  if (!sessionId) throw new Error('Unauthorized');
+  const user = await requireUser();
 
   const log = await prisma.mealLog.findUnique({
     where: { id: logId },
     select: { userId: true }
   });
 
-  if (!log || log.userId !== sessionId) {
+  if (!log || log.userId !== user.id) {
     throw new Error('Unauthorized');
   }
 }

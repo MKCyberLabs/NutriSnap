@@ -1,65 +1,6 @@
-
 'use client';
 
-import { User, UserRole } from './types';
-
-type ManagedUser = User & { password?: string };
-
-const INITIAL_MOCK_USERS: Record<string, ManagedUser> = {
-  'admin@mkcyberlabs.in': {
-    id: 'admin-1',
-    name: 'MK CyberLabs Admin',
-    email: 'admin@mkcyberlabs.in',
-    role: 'ADMIN',
-    onboarded: true,
-    password: process.env.ADMIN_INITIAL_PASSWORD || 'ChangeMeImmediately!'
-  },
-  'user@nutrisnap.com': {
-    id: '1',
-    name: 'Alex Johnson',
-    email: 'user@nutrisnap.com',
-    role: 'USER',
-    onboarded: true,
-    password: process.env.ADMIN_INITIAL_PASSWORD || 'ChangeMeImmediately!'
-  },
-};
-
-const STORAGE_KEY = 'nutrisnap_managed_users';
-
-export function getManagedUsers(): ManagedUser[] {
-  if (typeof window === 'undefined') return [];
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) {
-    const initial = Object.values(INITIAL_MOCK_USERS);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
-  }
-  return JSON.parse(stored);
-}
-
-export function saveManagedUsers(users: ManagedUser[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-  }
-}
-
-/**
- * Prototype Authentication Helper
- * Checks credentials against the local managed user registry.
- */
-export function authenticateUser(email: string, password?: string): ManagedUser | null {
-  const users = getManagedUsers();
-  // ⚡ Bolt Optimization: Hoist email.toLowerCase() outside the filter loop
-  // to avoid O(N) string allocations during authentication checks.
-  const targetEmail = email.toLowerCase();
-  const user = users.find(u => u.email.toLowerCase() === targetEmail);
-  
-  if (user && user.password === password) {
-    return user;
-  }
-  
-  return null;
-}
+import { User } from './types';
 
 export function saveAuthSession(user: User) {
   if (typeof window !== 'undefined') {

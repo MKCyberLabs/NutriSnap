@@ -1,11 +1,19 @@
-const { PrismaClient } = require('@prisma/client');
+require('dotenv').config();
+const { PrismaClient } = require('./generated/client');
+const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
 async function main() {
   const adminEmail = 'admin@mkcyberlabs.in';
-  // Pre-calculated bcrypt hash for 'ProductionPassword123!' with 12 rounds
-  const hashedPassword = '$2b$12$wChvYlO4UgpwEdBWXtvADuk4jecNA/Q0S6Tjcc433hstex6xo2YIW';
+  const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
+  if (!initialPassword) {
+    throw new Error('ADMIN_INITIAL_PASSWORD must be set before seeding');
+  }
+  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(initialPassword)) {
+    throw new Error('ADMIN_INITIAL_PASSWORD must meet the application password policy');
+  }
+  const hashedPassword = await bcrypt.hash(initialPassword, 12);
 
   const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail }

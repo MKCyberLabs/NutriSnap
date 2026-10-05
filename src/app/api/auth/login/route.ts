@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { loginSchema } from '@/lib/validation';
+import { createSession } from '@/lib/session';
 
 // 🛡️ Sentinel: Generate a dummy hash once at startup to prevent user enumeration
 // timing attacks. Avoid hardcoding a valid hash string to prevent false-positive SAST alerts.
@@ -46,18 +47,18 @@ export async function POST(req: NextRequest) {
     }
 
     const { email, password } = result.data;
-    const identifier = email.toLowerCase();
+    const identifier = email.trim().toLowerCase();
 
     // Rate Limiting Check
     const attempts = loginAttempts.get(identifier);
     const now = Date.now();
-    if (attempts && attempts.count >= 50 && now - attempts.lastAttempt < 15 * 60 * 1000) {
+    if (attempts && attempts.count >= 10 && now - attempts.lastAttempt < 15 * 60 * 1000) {
       return NextResponse.json({ error: 'Too many failed login attempts. Please try again in 15 minutes.' }, { status: 429 });
     }
 
     // Real Database Lookup via Prisma
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: identifier },
     });
 
     let passwordMatch = false;
@@ -98,17 +99,8 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    const response = NextResponse.json(responseData);
-    
-    // Set HttpOnly cookies for server-side session verification
-    response.cookies.set('nutrisnap_session_id', user.id, {
-      httpOnly: true,
-      secure: process.env.COOKIE_SECURE === 'true',
-      sameSite: 'lax',
-      path: '/'
-    });
-    
-    return response;
+    await createSession(user.id);
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('Login Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
