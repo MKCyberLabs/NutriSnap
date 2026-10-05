@@ -10,7 +10,7 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
 - Current milestone: `Milestones 0-5 COMPLETE — Scheduler Domain Isolation & Durable Retry Fully Re-Verified`
-- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes (c4d5995) + Retry Policy (18cfe9b) + Scheduler Domain Isolation Verified`
+- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes (c4d5995) + Retry Policy (18cfe9b) + Scheduler Domain Isolation PASS (a2202d3)`
 - Last verified implementation checkpoint: `a2202d39f0a13180312a97279907bdd2006d34b2` — all 92/92 tests PASS, build PASS, typecheck PASS
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
@@ -37,7 +37,9 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 
 ## Immediate next action
 
-Conduct Codex read-only delta review on commit `a2202d3` for scheduler cross-domain isolation.
+**READY FOR OWNER MERGE — SCHEDULER DOMAIN ISOLATION VERIFIED — DO NOT MERGE.**
+
+PR #132 is mergeable, all release blockers and owner-review bugs are resolved, durable retry policy is in place, scheduler cross-domain isolation is verified PASS by Codex, and all 92 deterministic tests pass. Awaiting owner final merge approval.
 
 ## Active blockers
 
@@ -48,7 +50,7 @@ None. All release blockers resolved and verified. PR #132 awaiting final owner a
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
 | 1 | AGY-Manickam | Lead/orchestrator/integrator | Scheduler isolation implementation & verification | `WRITE-SAME-TREE-SEQUENTIAL` | `a2202d3` | COMPLETE |
-| 2 | Codex | Architecture/security/reviewer | Scheduler domain isolation read-only delta review | `READ-ONLY` | `a2202d3` | IN PROGRESS |
+| 2 | Codex | Architecture/security/reviewer | Scheduler domain isolation read-only delta review | `READ-ONLY` | `a2202d3` | COMPLETE (PASS) |
 | 3 | AGY-Rohit | Bounded implementation/test helper | All slices integrated and verified | n/a | n/a | IDLE |
 
 When opening a secondary pane, replace the relevant row with:
@@ -137,6 +139,11 @@ Blockers/open questions:
      - `test:life-hub`: 92/92 PASS (up from 86/86);
      - `./scripts/verify-v01-local.sh`: PASS (clean exit 0);
      - `git diff --check`: PASS (clean).
+  5. **Codex Delta Review Verdict**: **EXPLICIT PASS** (conducted independently in read-only mode against commit SHA `a2202d3`).
+     - Cross-domain independence confirmed: `processSchedulerTick()` executes Health, Hydration, and Wealth sequentially without coupled guards (`if (activeReminders.length === 0)` removed);
+     - Error isolation confirmed: each domain enclosed in dedicated `try/catch` error boundary;
+     - Durable retry invariants confirmed: max 3 attempts with [5m, 15m] backoff, nextRetryAt calculation, 4th attempt refusal, single in-place delivery claims, and anchor timestamp preserved;
+     - Entry point and regressions confirmed: `startScheduler()` preserved, `.unref()` added to hydration timer, Food/Water regression protection maintained.
 
 ### Review C — Final Local Release Candidate Review Gate
 
