@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestones 0-5 COMPLETE — Release Blockers Resolved & Verified`
-- Current review gate: `Awaiting Independent Review C on updated SHA`
-- Last verified implementation checkpoint: Release Blockers Resolution & Software Verification Gate
+- Current milestone: `Milestones 0-5 COMPLETE — ALL Release Blockers Resolved & Fully Re-Verified`
+- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes Verified at c4d5995`
+- Last verified implementation checkpoint: `c4d5995` — all 86/86 tests PASS, build PASS, typecheck PASS
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -22,36 +22,35 @@ Older uncommitted `main` work from September was originally preserved in `stash@
 
 The original stash `stash@{0}` remains preserved and intact as a safety copy. No agent may apply/pop/drop it without explicit owner approval.
 
-## Known baseline evidence
+## Known baseline evidence (SHA c4d5995 — re-verified 2026-10-05)
 
 - `npm run test:analysis-contract`: 5/5 PASS;
 - `npm run typecheck`: PASS (0 errors);
-- `npm run build`: PASS (18/18 static pages);
+- `npm run build`: PASS (18/18 static pages, exit 0);
 - `npm run test:today`: 5/5 PASS;
 - `npm run test:finance`: 23/23 PASS;
 - `npm run test:reminders`: 45/45 PASS;
 - `npm run test:security`: 11/11 PASS;
 - `npm run test:life-hub`: 86/86 PASS;
-- `./scripts/verify-v01-local.sh`: PASS (clean);
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-1. Commit all resolution changes and push to `origin/feature/v0.1-health-wealth`.
-2. Dispatch independent Review C to Codex subagent against the new SHA.
-3. Conclude with final evidence report and `READY FOR OWNER RE-REVIEW — DO NOT MERGE`.
+**READY FOR OWNER RE-REVIEW — DO NOT MERGE.**
+
+PR #132 is mergeable and all release blockers are resolved and re-verified. Awaiting owner approval for merge to `main`.
 
 ## Active blockers
 
-None. All release blockers resolved and verified. PR #132 is mergeable and awaiting final owner approval.
+None. All release blockers resolved and verified. PR #132 awaiting final owner approval only.
 
 ## Active Herdr panes / delegation
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | PR creation & handoff to owner | `WRITE-SAME-TREE-SEQUENTIAL` | `3875e31` | IN PROGRESS |
-| 2 | Codex | Architecture/security/reviewer | Review A, B, C completed (ALL PASS) | `READ-ONLY` | `3875e31` | IDLE |
-| 3 | AGY-Rohit | Bounded implementation/test helper | All slices integrated and verified | assign per task | n/a | IDLE |
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | All implementation & verification complete | `WRITE-SAME-TREE-SEQUENTIAL` | `c4d5995` | COMPLETE |
+| 2 | Codex | Architecture/security/reviewer | Review A (533db7f PASS), B (67b81bf PASS), C (3875e31 PASS) | `READ-ONLY` | various | COMPLETE |
+| 3 | AGY-Rohit | Bounded implementation/test helper | All slices integrated and verified | n/a | n/a | IDLE |
 
 When opening a secondary pane, replace the relevant row with:
 
@@ -109,6 +108,26 @@ Blockers/open questions:
 - Conducted independently by Codex in read-only mode against commit SHA `3875e31c1baa02bdc3bd3c2ce57d80f726e9de88`.
 - Verdict: EXPLICIT PASS across all 16 Review C criteria in `REVIEW_GUIDE.md` (0 required repairs, scope/production boundaries respected).
 - Verified scope compliance, Food/Water regression protection, current-user Today view-model scoping, deterministic financial math and recurrence, idempotency of Paid/Done/Snooze, Telegram mock isolation, lack of payment initiation/credential fields, complete software verification evidence, and clean git state.
+
+### Release Blocker Resolution — SHA c4d5995 (2026-10-05)
+
+- Owner-review found 4 concrete release blockers after Review C PASS at `3875e31`.
+- All 4 blockers resolved in single commit `c4d5995` (pushed to `origin/feature/v0.1-health-wealth`):
+  1. **Session migration coverage**: Added `Session` table DDL + indexes + cascade FK to `migration.sql`; added `src/lib/migration/main-to-v01-migration.test.ts` with live PostgreSQL 15 container test (NSV01-0226..0229).
+  2. **Decouple Telegram from browser cookies**: Extracted `src/lib/finance/finance-service.ts` (trusted domain service layer); refactored `src/app/finance/actions.ts` to thin wrapper; fixed Telegram webhook to import from finance-service; added `src/lib/telegram/telegram-finance.test.ts` (NSV01-0630..0632).
+  3. **Validation, recurrence, negative authorization**: Added `isValidTransactionCategory`/`normalizeTransactionCategory` to `finance.ts`; fixed `WEEKLY` interval recurrence (biweekly) and `YEARLY` interval math; replaced synthetic security assertions with real `financeService.*` calls; added `ObligationItem` explicit return type.
+  4. **Real DB-backed acceptance**: Added `src/lib/scenario/db-acceptance.test.ts` — 16-step acceptance scenario against real PostgreSQL 15 container (NSV01-1101..1116).
+- Full re-verification at SHA `c4d5995` (2026-10-05):
+  - `test:analysis-contract`: 5/5 PASS;
+  - `typecheck`: 0 errors;
+  - `build`: 18/18 static routes, exit 0;
+  - `test:finance`: 23/23 PASS;
+  - `test:reminders`: 45/45 PASS;
+  - `test:security`: 11/11 PASS;
+  - `test:life-hub`: 86/86 PASS;
+  - `git diff --check`: PASS (clean).
+- PR #132 remains open and awaiting owner final approval (no merge without explicit owner authorization).
+
 
 ### Milestone 5 — Security, Acceptance Scenario & Full Verification Checkpoint
 
