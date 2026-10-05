@@ -1,0 +1,126 @@
+{
+  "schema": "paperclip.staged-plan.v1",
+  "adoptLegacyFirstStage": true,
+  "maxNegativeReviewRounds": 2,
+  "stages": [
+    {
+      "id": "foundation",
+      "title": "Preflight + schema/migration/recurrence foundation",
+      "objective": "Verify the frozen v0.1 baseline and implement only the Prisma finance/reminder schema foundation, migration/backfill safety, recurrence primitives, durable delivery/idempotency primitives, and their deterministic tests. Do not begin major UI work in this stage.",
+      "evidence": [
+        "baseline analysis-contract, typecheck and build status recorded",
+        "schema/migration delta documented and tested against non-production data",
+        "legacy meal reminders preserved",
+        "Decimal money and transfer semantics established",
+        "recurrence and idempotency tests pass",
+        "git diff --check passes and a meaningful checkpoint is pushed"
+      ],
+      "review": {
+        "label": "Review A",
+        "criteria": [
+          "Decimal/numeric money representation; never Float",
+          "account/transaction/obligation relations and transfer rules",
+          "legacy reminder migration/backfill safety",
+          "recurrence semantics and timezone handling",
+          "delivery and mark-paid idempotency design",
+          "server-side ownership/authorization boundaries"
+        ]
+      }
+    },
+    {
+      "id": "life-hub-shell",
+      "title": "Life Hub shell + Today",
+      "objective": "Implement the shared module registry, desktop/mobile navigation, /today read model and Quick Add shell while preserving existing /dashboard Food and /hydration Water behavior and auth redirects.",
+      "evidence": [
+        "Today route and navigation tests pass",
+        "Food and Water route regressions pass",
+        "auth/deep-link behavior remains correct",
+        "desktop/mobile primary navigation has no blocking overflow",
+        "meaningful checkpoint is pushed"
+      ]
+    },
+    {
+      "id": "finance-core",
+      "title": "Finance core",
+      "objective": "Implement manual-first financial accounts and INCOME/EXPENSE/TRANSFER transactions, authoritative monthly totals/category summaries, ownership validation, and Finance UI/actions without adding obligations/reminders yet.",
+      "evidence": [
+        "BANK/CASH/WALLET/CREDIT_CARD account tests pass",
+        "income/expense/transfer accounting tests pass",
+        "transfers do not change income/expense totals",
+        "cross-user and forged-ID negative tests pass",
+        "meaningful checkpoint is pushed"
+      ]
+    },
+    {
+      "id": "obligations-reminders",
+      "title": "Obligations + generic reminder engine",
+      "objective": "Implement bills/subscriptions/recharge/other obligation CRUD, recurrence/next-due behavior, generic HEALTH/FINANCE reminder data and offsets, durable scheduler claim/dedupe, snooze, and compatibility with existing meal reminders. Do not add final Telegram finance callbacks yet.",
+      "evidence": [
+        "obligation CRUD and recurrence cases pass including 28/56/84-day recharge",
+        "monthly end-of-month and leap-year behavior is deterministic",
+        "multiple reminder offsets and durable delivery dedupe pass",
+        "process restart/same-minute duplicate tests pass",
+        "legacy meal reminder regression passes",
+        "meaningful checkpoint is pushed"
+      ],
+      "review": {
+        "label": "Review B",
+        "criteria": [
+          "Finance and Reminder domain boundaries are coherent",
+          "finance reminders are not fake meal categories",
+          "scheduler uses one durable idempotent delivery path",
+          "snooze does not move recurrence anchors",
+          "ownership and stale/disabled obligation behavior are safe",
+          "existing Food/Water/reminder behavior remains compatible"
+        ]
+      }
+    },
+    {
+      "id": "actions-telegram",
+      "title": "Paid/Done/Snooze + Telegram integration",
+      "objective": "Implement Paid/Done/Open/Snooze behavior, exactly-once optional expense creation, recurrence advancement, finance Telegram reminder formatting/callbacks and ownership validation while preserving existing meal/hydration Telegram behavior under safe mock/test configuration.",
+      "evidence": [
+        "Paid with and without expense creation is idempotent",
+        "double web/Telegram callbacks cannot duplicate expenses",
+        "recurring and ONCE completion behavior passes",
+        "stale/cross-user callbacks are rejected safely",
+        "existing hydration/meal Telegram regression coverage passes",
+        "meaningful checkpoint is pushed"
+      ]
+    },
+    {
+      "id": "integration-hardening",
+      "title": "Final integration + security/runtime hardening",
+      "objective": "Complete Today aggregation, empty/loading/partial-error states, responsive behavior, security/privacy negatives, isolated Omarchy runtime/Docker verification, the complete v0.1 test matrix, secret scan and branch hygiene. Do not open/merge the final PR until Review C PASS.",
+      "evidence": [
+        "complete applicable TEST_MATRIX.md gates executed with exact counts",
+        "Food and Water regression passes",
+        "Today/Finance/Reminders integrated acceptance scenario passes",
+        "Omarchy isolated runtime/Docker smoke evidence recorded",
+        "secret scan and git diff --check pass",
+        "task branch is clean and pushed at a meaningful checkpoint"
+      ],
+      "review": {
+        "label": "Review C",
+        "criteria": [
+          "full v0.1 scope matches frozen specifications",
+          "all required tests/gates are evidenced without production claims",
+          "security/privacy and ownership controls are sufficient",
+          "provider interruption history, if any, did not create false FAIL/duplicate work",
+          "branch is suitable for final PR creation"
+        ]
+      }
+    },
+    {
+      "id": "pr-finalization",
+      "title": "PR finalization after Review C PASS",
+      "objective": "After Review C PASS only, perform final branch/remote cleanliness checks, push the final task branch state, open the pull request against main, and record PR/test/review evidence. Do not merge and do not deploy/migrate production.",
+      "evidence": [
+        "Review C PASS is present before PR finalization",
+        "final branch SHA and local==origin/clean state recorded",
+        "PR references GitHub Issue #129 and Paperclip stage/review evidence",
+        "PR remains unmerged for owner review"
+      ]
+    }
+  ]
+}
