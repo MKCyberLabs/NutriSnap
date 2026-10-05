@@ -64,7 +64,7 @@ export default function OnboardingPage() {
       <div className="w-full max-w-lg">
         <div className="mb-8 text-center">
           <h2 className="font-headline text-3xl font-bold text-primary mb-2">Initialize Wellness</h2>
-          <p className="text-muted-foreground font-body">We'll use these metrics to calculate your daily nutritional targets.</p>
+          <p className="text-muted-foreground font-body">We&apos;ll use these metrics to calculate your daily nutritional targets.</p>
         </div>
 
         <Card className="border-none shadow-xl">
