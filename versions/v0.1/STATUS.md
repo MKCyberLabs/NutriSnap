@@ -27,9 +27,11 @@ GitHub execution issue: **#131**
   - Fixed WEEKLY interval recurrence (interval >= 1) and YEARLY interval math (interval > 1);
   - Added real PostgreSQL-backed 16-step acceptance scenario (`src/lib/scenario/db-acceptance.test.ts`);
   - Implemented durable bounded retry policy for Wealth reminder deliveries (`attemptCount`, `lastAttemptAt`, `nextRetryAt`, max 3 attempts, [5m, 15m] backoff) with 10-proof test suite and PostgreSQL persistence;
+  - Removed scheduler cross-domain coupling in `src/lib/scheduler.ts`: Health/Meal, Hydration, and Wealth domains process completely independently via `processSchedulerTick`; verified by regression test suite `src/lib/reminders/scheduler-tick.test.ts` (NSV01-0531..0536);
   - Security & negative authorization test suite (11/11 PASS);
   - Cookie-independent Telegram test suite (3/3 PASS);
-  - All 86 `npm run test:life-hub` tests PASS;
+  - All 51 `npm run test:reminders` tests PASS;
+  - All 92 `npm run test:life-hub` tests PASS;
   - All 5 `npm run test:analysis-contract` tests PASS;
   - TypeScript typecheck: 0 errors;
   - Production build: 18/18 static routes pass;

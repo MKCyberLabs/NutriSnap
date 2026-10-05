@@ -253,6 +253,12 @@ Do not begin broad UI/application expansion until Review A PASS.
 - [x] **NSV01-0528** — Disabled reminder creates no delivery. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 12).
 - [x] **NSV01-0529** — Snoozed reminder does not send before snoozedUntil. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 13).
 - [x] **NSV01-0530** — Stale past occurrences do not create uncontrolled catch-up storm. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 14).
+- [x] **NSV01-0531** — Scheduler domain isolation: `activeReminders = []` does NOT prevent Hydration reminder processing. Status: PASS. Evidence: Verified in `src/lib/reminders/scheduler-tick.test.ts`.
+- [x] **NSV01-0532** — Scheduler domain isolation: `activeReminders = []` does NOT prevent Wealth/Obligation reminder processing. Status: PASS. Evidence: Verified in `src/lib/reminders/scheduler-tick.test.ts`.
+- [x] **NSV01-0533** — Scheduler domain isolation: Zero hydration settings does NOT prevent Wealth reminder processing. Status: PASS. Evidence: Verified in `src/lib/reminders/scheduler-tick.test.ts`.
+- [x] **NSV01-0534** — Scheduler domain isolation: Zero obligations does NOT break Health or Hydration reminder processing. Status: PASS. Evidence: Verified in `src/lib/reminders/scheduler-tick.test.ts`.
+- [x] **NSV01-0535** — Domain error isolation: Unhandled error in one domain does NOT halt or prevent other domains from executing. Status: PASS. Evidence: Verified in `src/lib/reminders/scheduler-tick.test.ts`.
+- [x] **NSV01-0536** — Durable delivery claim & bounded retry preserved in scheduler tick: Same delivery row updated in-place across retry cycles, zero duplicate claims created. Status: PASS. Evidence: Verified in `src/lib/reminders/scheduler-tick.test.ts`.
 
 ## Review B
 

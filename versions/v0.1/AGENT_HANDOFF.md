@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestones 0-5 COMPLETE — Durable Bounded Retry Policy Implemented & Fully Re-Verified`
-- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes Verified (c4d5995) + Codex Delta Review PASS (18cfe9b)`
-- Last verified implementation checkpoint: `18cfe9b` — all 86/86 tests PASS, build PASS, typecheck PASS
+- Current milestone: `Milestones 0-5 COMPLETE — Scheduler Domain Isolation & Durable Retry Fully Re-Verified`
+- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes (c4d5995) + Retry Policy (18cfe9b) + Scheduler Domain Isolation Verified`
+- Last verified implementation checkpoint: `PENDING-COMMIT` — all 92/92 tests PASS, build PASS, typecheck PASS
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -22,24 +22,24 @@ Older uncommitted `main` work from September was originally preserved in `stash@
 
 The original stash `stash@{0}` remains preserved and intact as a safety copy. No agent may apply/pop/drop it without explicit owner approval.
 
-## Known baseline evidence (Durable Retry Policy — re-verified 2026-10-05)
+## Known baseline evidence (Scheduler Domain Isolation — re-verified 2026-10-05)
 
 - `npm run test:analysis-contract`: 5/5 PASS;
 - `npm run typecheck`: PASS (0 errors);
 - `npm run build`: PASS (18/18 static pages, exit 0);
 - `npm run test:today`: 5/5 PASS;
 - `npm run test:finance`: 23/23 PASS;
-- `npm run test:reminders`: 45/45 PASS;
+- `npm run test:reminders`: 51/51 PASS;
 - `npm run test:security`: 11/11 PASS;
-- `npm run test:life-hub`: 86/86 PASS;
+- `npm run test:life-hub`: 92/92 PASS;
 - `./scripts/verify-v01-local.sh`: PASS (clean exit 0);
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-**READY FOR FINAL OWNER MERGE REVIEW — DO NOT MERGE.**
+**READY FOR OWNER MERGE — SCHEDULER DOMAIN ISOLATION VERIFIED — DO NOT MERGE.**
 
-PR #132 is mergeable, all release blockers are resolved, and the durable retry policy is fully verified. Awaiting owner final approval to merge to `main`.
+PR #132 is mergeable, all release blockers are resolved, durable retry policy is in place, and scheduler cross-domain isolation is fully verified. Awaiting owner final merge approval.
 
 ## Active blockers
 
@@ -103,6 +103,42 @@ Blockers/open questions:
 ```
 
 ## History
+
+### Final Owner-Review Bug Resolution — Scheduler Domain Isolation (2026-10-05)
+
+- Resolved final owner-review bug: In `src/lib/scheduler.ts`, cron callback executed `if (activeReminders.length === 0) return;` before Hydration and Wealth/Obligation sections, halting the cron tick when zero active meal reminders existed.
+- Completely removed global cross-domain dependency between Health/Meal, Hydration, and Wealth/Obligation reminders:
+  1. **Isolated Execution Domains (`src/lib/scheduler.ts`)**:
+     - Extracted testable orchestration function `processSchedulerTick(options?: ProcessSchedulerTickOptions): Promise<SchedulerTickResult>`;
+     - Wrapped each of the three domains (Health/Meal, Hydration, Wealth/Obligation) in its own dedicated `try/catch` error boundary;
+     - Zero records or an error in one domain never halts or skips execution of other domains;
+     - Anchored `sentAt` and `failedAt` timestamps to the tick reference `now` for deterministic retry calculations;
+     - Added `.unref()` to the 60-minute hydration auto-delete timer so Node.js test runners exit cleanly without waiting;
+     - Preserved single `startScheduler()` cron entry point running every minute (`* * * * *`).
+  2. **Preserved Invariants**:
+     - Retained max 3 retry attempts with [5m, 15m] backoff policy (`MAX_DELIVERY_ATTEMPTS = 3`);
+     - Retained persistent retry state (`attemptCount`, `lastAttemptAt`, `nextRetryAt`) in PostgreSQL;
+     - Retained single durable delivery claim creation and in-place updates;
+     - Retained snooze behavior, stale occurrence suppression, and Food/Water regression protection.
+  3. **Comprehensive Verification (`src/lib/reminders/scheduler-tick.test.ts`)**:
+     - Added 6 deterministic unit/integration test cases (NSV01-0531..0536) covering:
+       - NSV01-0531: Zero meal reminders does NOT skip Hydration reminders;
+       - NSV01-0532: Zero meal reminders does NOT skip Wealth/Obligation reminders;
+       - NSV01-0533: Zero hydration settings does NOT skip Wealth/Obligation reminders;
+       - NSV01-0534: Zero obligations does NOT break Health or Hydration reminders;
+       - NSV01-0535: Domain error isolation prevents one failing domain from halting others;
+       - NSV01-0536: Durable delivery retry and deduplication invariants preserved across scheduler ticks.
+  4. **Software Verification Suite**:
+     - `test:analysis-contract`: 5/5 PASS;
+     - `typecheck`: PASS (0 errors);
+     - `build`: PASS (18/18 static pages, exit 0);
+     - `test:today`: 5/5 PASS;
+     - `test:finance`: 23/23 PASS;
+     - `test:reminders`: 51/51 PASS (up from 45/45);
+     - `test:security`: 11/11 PASS;
+     - `test:life-hub`: 92/92 PASS (up from 86/86);
+     - `./scripts/verify-v01-local.sh`: PASS (clean exit 0);
+     - `git diff --check`: PASS (clean).
 
 ### Review C — Final Local Release Candidate Review Gate
 
