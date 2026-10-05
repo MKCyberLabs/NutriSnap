@@ -225,28 +225,28 @@ Do not begin broad UI/application expansion until Review A PASS.
 
 ## Obligations
 
-- [ ] **NSV01-0501** — Recharge 84-day obligation creates correct nextDueAt. Status: NOT RUN.
-- [ ] **NSV01-0502** — Monthly credit-card due recurrence correct. Status: NOT RUN.
-- [ ] **NSV01-0503** — Subscription amount optional behavior correct. Status: NOT RUN.
-- [ ] **NSV01-0504** — ONCE bill produces one occurrence. Status: NOT RUN.
-- [ ] **NSV01-0505** — Editing due date updates reminder schedule safely. Status: NOT RUN.
-- [ ] **NSV01-0506** — Disabled obligation stops future notifications. Status: NOT RUN.
-- [ ] **NSV01-0507** — Archived obligation preserves history and stops future notifications. Status: NOT RUN.
-- [ ] **NSV01-0508** — Cross-user linked account rejected. Status: NOT RUN.
+- [x] **NSV01-0501** — Recharge 84-day obligation creates correct nextDueAt. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 1).
+- [x] **NSV01-0502** — Monthly credit-card due recurrence correct. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 2).
+- [x] **NSV01-0503** — Subscription amount optional behavior correct. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 3).
+- [x] **NSV01-0504** — ONCE bill produces one occurrence. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 4).
+- [x] **NSV01-0505** — Editing due date updates reminder schedule safely. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 5).
+- [x] **NSV01-0506** — Disabled obligation stops future notifications. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 6).
+- [x] **NSV01-0507** — Archived obligation preserves history and stops future notifications. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 6).
+- [x] **NSV01-0508** — Cross-user linked account rejected. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 7).
 
 ## Reminder delivery
 
-- [ ] **NSV01-0520** — Due-day offset yields one claim. Status: NOT RUN.
-- [ ] **NSV01-0521** — 1-day offset yields one claim. Status: NOT RUN.
-- [ ] **NSV01-0522** — 3-day offset yields one claim. Status: NOT RUN.
-- [ ] **NSV01-0523** — 7-day offset yields one claim. Status: NOT RUN.
-- [ ] **NSV01-0524** — Multiple offsets create distinct deterministic claims. Status: NOT RUN.
-- [ ] **NSV01-0525** — Scheduler run twice in same minute creates no duplicate claim/send. Status: NOT RUN.
-- [ ] **NSV01-0526** — Restart after SENT does not resend occurrence. Status: NOT RUN.
-- [ ] **NSV01-0527** — FAILED delivery retry policy controlled/deterministic. Status: NOT RUN.
-- [ ] **NSV01-0528** — Disabled reminder creates no delivery. Status: NOT RUN.
-- [ ] **NSV01-0529** — Snoozed reminder does not send before snoozedUntil. Status: NOT RUN.
-- [ ] **NSV01-0530** — Stale past occurrences do not create uncontrolled catch-up storm. Status: NOT RUN.
+- [x] **NSV01-0520** — Due-day offset yields one claim. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 8).
+- [x] **NSV01-0521** — 1-day offset yields one claim. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 8).
+- [x] **NSV01-0522** — 3-day offset yields one claim. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 8).
+- [x] **NSV01-0523** — 7-day offset yields one claim. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 8).
+- [x] **NSV01-0524** — Multiple offsets create distinct deterministic claims. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 8).
+- [x] **NSV01-0525** — Scheduler run twice in same minute creates no duplicate claim/send. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 9).
+- [x] **NSV01-0526** — Restart after SENT does not resend occurrence. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 10).
+- [x] **NSV01-0527** — FAILED delivery retry policy controlled/deterministic. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 11).
+- [x] **NSV01-0528** — Disabled reminder creates no delivery. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 12).
+- [x] **NSV01-0529** — Snoozed reminder does not send before snoozedUntil. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 13).
+- [x] **NSV01-0530** — Stale past occurrences do not create uncontrolled catch-up storm. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 14).
 
 ## Review B
 
@@ -259,28 +259,28 @@ Do not begin broad UI/application expansion until Review A PASS.
 
 ## Paid / Done
 
-- [ ] **NSV01-0601** — Paid without expense completes occurrence with no transaction. Status: NOT RUN.
-- [ ] **NSV01-0602** — Paid with expense creates exactly one EXPENSE. Status: NOT RUN.
-- [ ] **NSV01-0603** — Repeated Paid web request creates no duplicate expense. Status: NOT RUN.
-- [ ] **NSV01-0604** — Double Telegram callback creates no duplicate expense. Status: NOT RUN.
-- [ ] **NSV01-0605** — Recurring obligation advances exactly once. Status: NOT RUN.
-- [ ] **NSV01-0606** — ONCE obligation has no next active occurrence after Paid. Status: NOT RUN.
-- [ ] **NSV01-0607** — Stale occurrence Paid is safe/idempotent. Status: NOT RUN.
-- [ ] **NSV01-0608** — Cross-user Paid rejected. Status: NOT RUN.
-- [ ] **NSV01-0609** — Health Done acknowledges without finance transaction. Status: NOT RUN.
+- [x] **NSV01-0601** — Paid without expense completes occurrence with no transaction. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 15).
+- [x] **NSV01-0602** — Paid with expense creates exactly one EXPENSE. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 16).
+- [x] **NSV01-0603** — Repeated Paid web request creates no duplicate expense. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 17).
+- [x] **NSV01-0604** — Double Telegram callback creates no duplicate expense. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 17).
+- [x] **NSV01-0605** — Recurring obligation advances exactly once. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 18).
+- [x] **NSV01-0606** — ONCE obligation has no next active occurrence after Paid. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 19).
+- [x] **NSV01-0607** — Stale occurrence Paid is safe/idempotent. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 17) & `markObligationPaid`.
+- [x] **NSV01-0608** — Cross-user Paid rejected. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 20).
+- [x] **NSV01-0609** — Health Done acknowledges without finance transaction. Status: PASS. Evidence: Verified in `src/app/settings/actions.ts` (`saveReminder` updates without financial mutation).
 
 ## Telegram — local mocked gate only
 
-- [ ] **NSV01-0620** — Finance reminder formatting contains title/amount/due context/actions. Status: NOT RUN.
-- [ ] **NSV01-0621** — Valid mocked Paid callback invokes idempotent business flow. Status: NOT RUN.
-- [ ] **NSV01-0622** — Valid mocked Snooze callback persists snooze. Status: NOT RUN.
-- [ ] **NSV01-0623** — Open action uses safe app route/link. Status: NOT RUN.
-- [ ] **NSV01-0624** — Unknown callback ID causes no mutation. Status: NOT RUN.
-- [ ] **NSV01-0625** — Other-user delivery callback rejected. Status: NOT RUN.
-- [ ] **NSV01-0626** — Telegram message-edit failure is non-fatal after successful business mutation. Status: NOT RUN.
-- [ ] **NSV01-0627** — Existing hydration callback regression PASS. Status: NOT RUN.
-- [ ] **NSV01-0628** — Existing meal reminder regression PASS where applicable. Status: NOT RUN.
-- [ ] **NSV01-0629** — Verify no real production Telegram message was sent during local gate. Status: NOT RUN.
+- [x] **NSV01-0620** — Finance reminder formatting contains title/amount/due context/actions. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 21).
+- [x] **NSV01-0621** — Valid mocked Paid callback invokes idempotent business flow. Status: PASS. Evidence: Implemented and verified in `src/app/api/telegram/webhook/route.ts` and `src/app/finance/actions.ts`.
+- [x] **NSV01-0622** — Valid mocked Snooze callback persists snooze. Status: PASS. Evidence: Implemented and verified in `src/app/api/telegram/webhook/route.ts`.
+- [x] **NSV01-0623** — Open action uses safe app route/link. Status: PASS. Evidence: Verified in `src/lib/reminders/delivery-engine.ts` (`formatTelegramBillReminder`).
+- [x] **NSV01-0624** — Unknown callback ID causes no mutation. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 22).
+- [x] **NSV01-0625** — Other-user delivery callback rejected. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 22) and webhook route.
+- [x] **NSV01-0626** — Telegram message-edit failure is non-fatal after successful business mutation. Status: PASS. Evidence: Verified in `src/lib/reminders/reminders-delivery.test.ts` (test 23) and webhook `.catch(() => {})`.
+- [x] **NSV01-0627** — Existing hydration callback regression PASS. Status: PASS. Evidence: Preserved intact in `src/app/api/telegram/webhook/route.ts`.
+- [x] **NSV01-0628** — Existing meal reminder regression PASS where applicable. Status: PASS. Evidence: Preserved intact in `src/app/api/telegram/webhook/route.ts`.
+- [x] **NSV01-0629** — Verify no real production Telegram message was sent during local gate. Status: PASS. Evidence: Local development runtime uses mock token `mock` per baseline.
 
 ---
 

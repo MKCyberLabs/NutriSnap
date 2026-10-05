@@ -1,6 +1,6 @@
 # NutriSnap v0.1 — Status / Resume Point
 
-Status: **MILESTONE 3 COMPLETE — WEALTH ACCOUNTS & TRANSACTIONS VERIFIED**
+Status: **MILESTONE 4 COMPLETE — OBLIGATIONS & REMINDERS VERIFIED; REVIEW B READY**
 
 Target branch: `feature/v0.1-health-wealth`
 
@@ -10,22 +10,24 @@ GitHub execution issue: **#131**
 
 ## Current phase
 
-`Milestone 4 — Obligations and Reminders Core`
+`Review B Gate — Wealth & Reminders Engine Integration`
 
 - Milestone 0 preflight checks (NSV01-0101..0110) are complete and PASS.
 - Milestone 1 foundation implementation (NSV01-0201..0239) is complete and PASS.
 - Independent Review A (NSV01-0250..0251) performed by Codex: EXPLICIT PASS (12/12 criteria verified).
 - Milestone 2 shell implementation (NSV01-0301..0315) is complete and PASS.
-- Milestone 3 accounts & transactions core (NSV01-0401..0430) is complete and PASS:
-  - Account types BANK, CASH, WALLET, CREDIT_CARD verified;
-  - Zero/negative amount rejection and exact Decimal precision verified;
-  - Transfer invariant validation (distinct accounts, no income/expense inflation) verified;
-  - Derived balance calculation exact across deposits, expenses, and transfers;
-  - Category breakdown reconciles exactly to total expense;
-  - Server-authoritative totals ignore client-side manipulated sums;
-  - Negative authorization & cross-user access rejection verified;
-  - 40/40 `npm run test:life-hub` unit/contract tests PASS;
-  - Next.js build: 18/18 routes pass;
+- Milestone 3 accounts & transactions core (NSV01-0401..0430) is complete and PASS.
+- Milestone 4 obligations, reminder engine & Telegram contract (NSV01-0501..0530, NSV01-0601..0629) is complete and PASS:
+  - Recharge 84-day, monthly credit-card, subscriptions, and ONCE bills recurrence verified;
+  - Unified reminder delivery engine with deterministic offsets (0, 1440, 4320, 10080 min) verified;
+  - Reminder delivery claim deduplication (`@@unique([reminderId, occurrenceKey, offsetMinutes, channel])`) verified;
+  - Scheduler run idempotency, restart after SENT safety, and controlled FAILED retry policy verified;
+  - Snooze preservation without recurrence drift, disable/archive suppression, and stale storm protection verified;
+  - Idempotent Mark-Paid with exactly-once optional expense creation verified;
+  - Telegram webhook `/water`, `/expense`, `/reminders` commands and `paid_{id}_{key}` / `snz_{id}_{key}` callback handlers verified;
+  - Resilient Telegram message-edit error handling verified;
+  - 63/63 `npm run test:life-hub` unit/contract tests PASS;
+  - Next.js build: 18/18 static routes pass;
   - Local software gate `./scripts/verify-v01-local.sh` PASS.
 
 Shared cross-agent memory is now established so AGY-Manickam, AGY-Rohit and Codex can switch/resume without depending on their private memory.
@@ -94,15 +96,20 @@ The following are retained for history but are not the active execution path on 
 
 ## Next action
 
-1. Proceed to Milestone 4 (Obligations, reminder engine, durable idempotency, Telegram contract).
-2. Verify obligation recurrence execution (84-day recharge, monthly credit-card, subscriptions, once-only bills).
-3. Verify reminder delivery claim deduplication (`@@unique([reminderId, occurrenceKey, offsetMinutes, channel])`).
-4. Verify idempotent Mark-Paid with optional single expense creation.
-5. Verify Telegram command/callback contract (`/start`, `/log`, `/water`, `/expense`, `/reminders`, mark-paid callback) with production safeguard preserved.
-6. Prepare for Review B gate (Codex independent review).
+1. Commit and push Milestone 4 Checkpoint (`feature/v0.1-health-wealth`).
+2. Conduct independent Review B with Codex evaluating the 11 criteria in `REVIEW_GUIDE.md`.
+3. Upon Review B PASS: Run Phase 7 security/authorization checks and final full verification gate (`./scripts/verify-v01-local.sh`).
+4. Conduct independent Review C (Final release candidate review) via Codex.
+5. Prepare PR description and report completion to owner Manickam.
 
 ## Latest implementation checkpoint
 
+- **Milestone 4 — Obligations, Reminders Engine & Telegram Contract Checkpoint**:
+  - Implemented unified reminders delivery engine (`src/lib/reminders/delivery-engine.ts`) with deterministic offsets (0, 1440, 4320, 10080 min), claim key generation, delivery eligibility, and Telegram bill reminder formatting;
+  - Unified cron scheduler (`src/lib/scheduler.ts`) handling both health and obligation reminders with atomic claim creation;
+  - Enhanced Telegram webhook (`src/app/api/telegram/webhook/route.ts`) with `/water`, `/expense`, `/reminders` commands and `paid_{id}_{key}`, `snz_{id}_{key}` callback handlers with resilient message-edit error handling;
+  - Added comprehensive deterministic tests (`src/lib/reminders/reminders-delivery.test.ts`) covering 23 test scenarios (39 tests in `test:reminders`, 63 tests across `test:life-hub`);
+  - All 63 `npm run test:life-hub` tests passing, typecheck PASS, build PASS (18/18 static pages), `./scripts/verify-v01-local.sh` PASS.
 - **Milestone 3 — Wealth Accounts & Transactions Core Checkpoint**:
   - Full CRUD and schema validation for BANK, CASH, WALLET, CREDIT_CARD;
   - Positive Decimal amount enforcement and negative/zero/malformed rejection;

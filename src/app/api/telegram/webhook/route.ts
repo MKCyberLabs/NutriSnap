@@ -266,6 +266,210 @@ bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
   }
 });
 
+// --- Health + Wealth Unified Callbacks & Commands ---
+
+bot.callbackQuery(/^paid_([^_]+)_(.+)$/, async (ctx) => {
+  const obligationId = ctx.match[1];
+  const occurrenceKey = ctx.match[2];
+
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) {
+    await ctx.answerCallbackQuery({ text: 'Access Denied', show_alert: true });
+    return;
+  }
+
+  // Verify ownership
+  const obligation = await prisma.obligation.findUnique({
+    where: { id: obligationId },
+    select: { id: true, userId: true, title: true, amount: true }
+  });
+
+  if (!obligation || obligation.userId !== user.id) {
+    await ctx.answerCallbackQuery({ text: 'Unauthorized or not found', show_alert: true });
+    return;
+  }
+
+  try {
+    const { markObligationPaid } = await import('@/app/finance/actions');
+    const result = await markObligationPaid(user.id, {
+      obligationId,
+      occurrenceKey,
+      createExpense: true,
+    });
+
+    await ctx.answerCallbackQuery({
+      text: result.alreadyCompleted ? 'Already marked paid!' : 'Marked as paid!',
+    });
+
+    if (ctx.callbackQuery.message) {
+      const amtStr = obligation.amount ? ` ₹${obligation.amount}` : '';
+      await ctx.api.editMessageText(
+        ctx.callbackQuery.message.chat.id,
+        ctx.callbackQuery.message.message_id,
+        `✅ **Paid:** ${obligation.title}${amtStr}\nOccurrence: ${occurrenceKey}`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => {
+        // NSV01-0626: Message edit failure is non-fatal after business mutation succeeds
+      });
+    }
+  } catch (err: any) {
+    await ctx.answerCallbackQuery({
+      text: err?.message || 'Failed to mark paid',
+      show_alert: true,
+    });
+  }
+});
+
+bot.callbackQuery(/^snz_([^_]+)_(.+)$/, async (ctx) => {
+  const obligationId = ctx.match[1];
+  const occurrenceKey = ctx.match[2];
+
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) {
+    await ctx.answerCallbackQuery({ text: 'Access Denied', show_alert: true });
+    return;
+  }
+
+  const obligation = await prisma.obligation.findUnique({
+    where: { id: obligationId },
+    select: { userId: true, title: true }
+  });
+
+  if (!obligation || obligation.userId !== user.id) {
+    await ctx.answerCallbackQuery({ text: 'Unauthorized', show_alert: true });
+    return;
+  }
+
+  const snoozeDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // Snooze 24h
+
+  await prisma.reminderDelivery.updateMany({
+    where: {
+      obligationId,
+      occurrenceKey,
+      channel: 'TELEGRAM',
+    },
+    data: {
+      status: 'SNOOZED',
+      snoozedUntil: snoozeDate,
+    }
+  });
+
+  await ctx.answerCallbackQuery({ text: 'Snoozed for 24 hours' });
+
+  if (ctx.callbackQuery.message) {
+    await ctx.api.editMessageText(
+      ctx.callbackQuery.message.chat.id,
+      ctx.callbackQuery.message.message_id,
+      `⏰ **Snoozed:** ${obligation.title}\nReminder postponed for 24 hours.`,
+      { parse_mode: 'Markdown' }
+    ).catch(() => {});
+  }
+});
+
+bot.command('water', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply('Access Denied.');
+
+  const match = ctx.match?.trim();
+  if (match) {
+    const amountMl = parseInt(match, 10);
+    if (!isNaN(amountMl) && amountMl > 0) {
+      await prisma.hydrationLog.create({
+        data: { userId: user.id, amountMl }
+      });
+      return ctx.reply(`💧 Logged **${amountMl} ml** of water. Keep staying hydrated!`, { parse_mode: 'Markdown' });
+    }
+  }
+
+  const keyboard = new InlineKeyboard()
+    .text('💧 250 ml', 'hyd_250')
+    .text('💧 500 ml', 'hyd_500')
+    .row()
+    .text('Custom ml', 'hyd_custom');
+
+  return ctx.reply('How much water would you like to log?', { reply_markup: keyboard });
+});
+
+bot.command('expense', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply('Access Denied.');
+
+  const match = ctx.match?.trim();
+  if (!match) {
+    return ctx.reply('Usage: `/expense [amount] [category] [optional note]`\nExample: `/expense 450 Food Lunch at cafe`', {
+      parse_mode: 'Markdown',
+    });
+  }
+
+  const parts = match.split(/\s+/);
+  const amountStr = parts[0];
+  const category = parts[1] || 'Other';
+  const note = parts.slice(2).join(' ') || null;
+
+  try {
+    const { recordTransaction, getAccounts } = await import('@/app/finance/actions');
+    const accounts = await getAccounts(user.id);
+    if (accounts.length === 0) {
+      return ctx.reply('⚠️ Please create a financial account first on the web dashboard before logging expenses.');
+    }
+
+    await recordTransaction(user.id, {
+      type: 'EXPENSE',
+      amount: amountStr,
+      category,
+      accountId: accounts[0].id,
+      occurredAt: new Date(),
+      note,
+    });
+
+    return ctx.reply(`💸 Logged expense of **₹${amountStr}** under **${category}** from ${accounts[0].name}.`, {
+      parse_mode: 'Markdown',
+    });
+  } catch (err: any) {
+    return ctx.reply(`❌ Failed to record expense: ${err?.message || 'Invalid input'}`);
+  }
+});
+
+bot.command('reminders', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply('Access Denied.');
+
+  const [mealReminders, obligations] = await Promise.all([
+    prisma.reminder.findMany({ where: { userId: user.id, isActive: true } }),
+    prisma.obligation.findMany({ where: { userId: user.id, isActive: true, isArchived: false } })
+  ]);
+
+  let msg = '🔔 **Your Active Reminders & Schedules**\n\n';
+
+  if (mealReminders.length > 0) {
+    msg += '**Health & Meals:**\n';
+    for (const r of mealReminders) {
+      msg += `• ${r.title || r.category}: daily at ${r.time || r.timeOfDay}\n`;
+    }
+    msg += '\n';
+  }
+
+  if (obligations.length > 0) {
+    msg += '**Wealth & Obligations:**\n';
+    for (const ob of obligations) {
+      const amt = ob.amount ? ` (₹${ob.amount})` : '';
+      const due = ob.nextDueAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      msg += `• ${ob.title}${amt} - Due ${due} [${ob.recurrenceType}]\n`;
+    }
+  }
+
+  if (mealReminders.length === 0 && obligations.length === 0) {
+    msg += 'No active reminders configured.';
+  }
+
+  return ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
 bot.command('summary', async (ctx) => {
   const telegramId = String(ctx.from!.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });

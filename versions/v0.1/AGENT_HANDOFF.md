@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestone 3 — Wealth Accounts & Transactions Core complete`
-- Current review gate: `Review A PASSED` (next gate: Review B after Milestone 4)
-- Last verified implementation checkpoint: Milestone 3 Accounts & Transactions Checkpoint
+- Current milestone: `Milestone 4 — Obligations, Reminders Engine & Telegram Contract complete`
+- Current review gate: `Review B READY` (next gate: Review C after Milestone 5 / Phase 7)
+- Last verified implementation checkpoint: Milestone 4 Obligations, Reminder Engine & Telegram Checkpoint
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -29,20 +29,16 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 - `npm run build`: PASS (18/18 static pages);
 - `npm run test:today`: 5/5 PASS;
 - `npm run test:finance`: 19/19 PASS;
-- `npm run test:reminders`: 16/16 PASS;
-- `npm run test:life-hub`: 40/40 PASS;
+- `npm run test:reminders`: 39/39 PASS;
+- `npm run test:life-hub`: 63/63 PASS;
 - `./scripts/verify-v01-local.sh`: PASS;
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-1. Commit and push Milestone 3 Checkpoint to `feature/v0.1-health-wealth`.
-2. Proceed to Milestone 4 (Obligations, reminder engine, durable idempotency, Telegram contract):
-   - Recharge 84-day, monthly credit card due, subscription recurrence tests;
-   - Reminder delivery claim deduplication (`@@unique([reminderId, occurrenceKey, offsetMinutes, channel])`);
-   - Idempotent Mark-Paid with optional single expense creation;
-   - Telegram command/callback contract (`/start`, `/log`, `/water`, `/expense`, `/reminders`, mark-paid callback) preserving production safety.
-3. Prepare for independent Review B gate (Codex).
+1. Commit and push Milestone 4 Checkpoint to `feature/v0.1-health-wealth`.
+2. Codex executes independent Review B against pushed commit SHA in read-only mode evaluating the 11 Review B criteria in `REVIEW_GUIDE.md`.
+3. Upon Review B PASS: complete Phase 7 security/authorization checks, run final verification gate, and invoke Codex for Review C.
 
 ## Active blockers
 
@@ -52,9 +48,9 @@ None at this checkpoint.
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 3 checkpoint commit & Milestone 4 implementation | `WRITE-SAME-TREE-SEQUENTIAL` | `a27d7b1` | IN PROGRESS |
-| 2 | Codex | Architecture/security/reviewer | Review A completed (PASS); Standby for Review B | `READ-ONLY` | Checkpoint SHA | IDLE |
-| 3 | AGY-Rohit | Bounded implementation/test helper | none yet | assign per task | n/a | IDLE |
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 4 commit & orchestration to Review B/C | `WRITE-SAME-TREE-SEQUENTIAL` | Checkpoint SHA | IN PROGRESS |
+| 2 | Codex | Architecture/security/reviewer | Independent Review B on Wealth + Reminders Engine | `READ-ONLY` | Checkpoint SHA | ASSIGNED |
+| 3 | AGY-Rohit | Bounded implementation/test helper | none needed (Milestones 1-4 complete & passing) | assign per task | n/a | IDLE |
 
 When opening a secondary pane, replace the relevant row with:
 
@@ -106,6 +102,15 @@ Blockers/open questions:
 ```
 
 ## History
+
+### Milestone 4 — Obligations, Reminders Engine & Telegram Contract Checkpoint
+
+- Implemented unified reminders delivery engine `src/lib/reminders/delivery-engine.ts` with deterministic delivery offset calculations (0, 1440, 4320, 10080 minutes), atomic claim key generation, delivery eligibility evaluation, stale occurrence catch-up protection, and Telegram bill reminder formatting.
+- Integrated unified obligations and wealth reminders checking into the single cron scheduler in `src/lib/scheduler.ts`, enforcing durable claim creation before sending and status tracking (`PENDING`, `SENT`, `FAILED`).
+- Enhanced Telegram webhook bot in `src/app/api/telegram/webhook/route.ts` with `/water`, `/expense`, and `/reminders` commands, plus `paid_{id}_{key}` and `snz_{id}_{key}` callback handlers with server-side ownership verification, idempotent mark-paid execution with optional linked expense creation, snooze persistence, and non-fatal message-edit error handling.
+- Implemented comprehensive deterministic test suite `src/lib/reminders/reminders-delivery.test.ts` covering 23 test scenarios (39 tests in `test:reminders`, 63 tests across `test:life-hub`).
+- Full local software verification `./scripts/verify-v01-local.sh`: PASS (all 63 tests pass, typecheck 0 errors, build 18/18 static pages, git diff check clean).
+- Marked Phase 5 (NSV01-0501..0530) and Phase 6 (NSV01-0601..0629) as PASS in `versions/v0.1/COMPLETE_VERIFICATION_PLAN.md`.
 
 ### Milestone 3 — Wealth Accounts & Transactions Core Checkpoint
 

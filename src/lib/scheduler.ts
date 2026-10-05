@@ -3,6 +3,12 @@ import { prisma } from './prisma';
 import { Bot } from 'grammy';
 import { TZDate } from '@date-fns/tz';
 import { format, startOfDay } from 'date-fns';
+import {
+  calculateDeliverySchedules,
+  shouldDeliverNow,
+  formatTelegramBillReminder,
+  ObligationDeliveryTarget
+} from './reminders/delivery-engine';
 
 let isStarted = false;
 
@@ -155,6 +161,127 @@ export function startScheduler() {
             } catch (telegramErr) {
               console.error(`Failed to send eye rest reminder to ${setting.user.telegramId}:`, telegramErr);
             }
+          }
+        }
+      }
+
+      // --- 3. Wealth & Obligation Reminders (Unified Engine) ---
+      const activeObligations = await prisma.obligation.findMany({
+        where: { isActive: true, isArchived: false },
+        include: { user: true, reminders: true },
+      });
+
+      const now = new Date();
+      for (const ob of activeObligations) {
+        if (!ob.user.telegramId) continue;
+
+        const target: ObligationDeliveryTarget = {
+          id: ob.id,
+          userId: ob.userId,
+          title: ob.title,
+          kind: ob.kind,
+          amount: ob.amount ? ob.amount.toString() : null,
+          nextDueAt: ob.nextDueAt,
+          reminderOffsetsMin: ob.reminderOffsetsMin,
+          isActive: ob.isActive,
+          isArchived: ob.isArchived,
+        };
+
+        const schedules = calculateDeliverySchedules(target, now);
+
+        for (const sched of schedules) {
+          const existingDelivery = await prisma.reminderDelivery.findFirst({
+            where: {
+              obligationId: ob.id,
+              occurrenceKey: sched.occurrenceKey,
+              offsetMinutes: sched.offsetMinutes,
+              channel: 'TELEGRAM',
+            },
+          });
+
+          const eligibility = shouldDeliverNow({
+            scheduledFor: sched.scheduledFor,
+            now,
+            snoozedUntil: existingDelivery?.snoozedUntil,
+            isStale: sched.isStale,
+            deliveryStatus: (existingDelivery?.status as any) || null,
+          });
+
+          if (!eligibility.shouldSend) {
+            continue;
+          }
+
+          // Atomic claim creation if not already present
+          let delivery = existingDelivery;
+          if (!delivery) {
+            try {
+              let reminderId = ob.reminders?.[0]?.id;
+              if (!reminderId) {
+                const createdReminder = await prisma.reminder.create({
+                  data: {
+                    userId: ob.userId,
+                    domain: 'FINANCE',
+                    type: 'OBLIGATION',
+                    title: ob.title,
+                    obligationId: ob.id,
+                    isActive: true,
+                  },
+                });
+                reminderId = createdReminder.id;
+              }
+
+              delivery = await prisma.reminderDelivery.create({
+                data: {
+                  userId: ob.userId,
+                  reminderId,
+                  obligationId: ob.id,
+                  occurrenceKey: sched.occurrenceKey,
+                  scheduledFor: sched.scheduledFor,
+                  offsetMinutes: sched.offsetMinutes,
+                  channel: 'TELEGRAM',
+                  status: 'PENDING',
+                },
+              });
+            } catch {
+              continue;
+            }
+          }
+
+          // Deliver via Telegram
+          const payload = formatTelegramBillReminder({
+            obligationId: ob.id,
+            title: ob.title,
+            kind: ob.kind,
+            amount: ob.amount ? ob.amount.toString() : null,
+            nextDueAt: ob.nextDueAt,
+            occurrenceKey: sched.occurrenceKey,
+            offsetMinutes: sched.offsetMinutes,
+            appBaseUrl: process.env.NEXTAUTH_URL || 'https://nutrisnap.app',
+          });
+
+          try {
+            const sent = await bot.api.sendMessage(ob.user.telegramId, payload.text, {
+              parse_mode: 'Markdown',
+              reply_markup: payload.reply_markup,
+            });
+
+            await prisma.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: {
+                status: 'SENT',
+                sentAt: new Date(),
+                telegramMessageId: sent.message_id,
+              },
+            });
+            console.log(`[Scheduler] Sent bill reminder ${ob.title} to user ${ob.user.id}`);
+          } catch (sendErr: any) {
+            await prisma.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: {
+                status: 'FAILED',
+                failureReason: sendErr?.message || 'Send error',
+              },
+            });
           }
         }
       }
