@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestones 0-5 COMPLETE — ALL Release Blockers Resolved & Fully Re-Verified`
-- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes Verified at c4d5995`
-- Last verified implementation checkpoint: `c4d5995` — all 86/86 tests PASS, build PASS, typecheck PASS
+- Current milestone: `Milestones 0-5 COMPLETE — Durable Bounded Retry Policy Implemented & Fully Re-Verified`
+- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes Verified at c4d5995 + Retry Policy Verified`
+- Last verified implementation checkpoint: `18cfe9b` — all 86/86 tests PASS, build PASS, typecheck PASS
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -22,7 +22,7 @@ Older uncommitted `main` work from September was originally preserved in `stash@
 
 The original stash `stash@{0}` remains preserved and intact as a safety copy. No agent may apply/pop/drop it without explicit owner approval.
 
-## Known baseline evidence (SHA c4d5995 — re-verified 2026-10-05)
+## Known baseline evidence (Durable Retry Policy — re-verified 2026-10-05)
 
 - `npm run test:analysis-contract`: 5/5 PASS;
 - `npm run typecheck`: PASS (0 errors);
@@ -32,13 +32,14 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 - `npm run test:reminders`: 45/45 PASS;
 - `npm run test:security`: 11/11 PASS;
 - `npm run test:life-hub`: 86/86 PASS;
+- `./scripts/verify-v01-local.sh`: PASS (clean exit 0);
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-**READY FOR OWNER RE-REVIEW — DO NOT MERGE.**
+**READY FOR FINAL OWNER MERGE REVIEW — DO NOT MERGE.**
 
-PR #132 is mergeable and all release blockers are resolved and re-verified. Awaiting owner approval for merge to `main`.
+PR #132 is mergeable, all release blockers are resolved, and the durable retry policy is fully verified. Awaiting owner final approval to merge to `main`.
 
 ## Active blockers
 
@@ -48,7 +49,7 @@ None. All release blockers resolved and verified. PR #132 awaiting final owner a
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | All implementation & verification complete | `WRITE-SAME-TREE-SEQUENTIAL` | `c4d5995` | COMPLETE |
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | All implementation & verification complete | `WRITE-SAME-TREE-SEQUENTIAL` | `18cfe9b` | COMPLETE |
 | 2 | Codex | Architecture/security/reviewer | Review A (533db7f PASS), B (67b81bf PASS), C (3875e31 PASS) | `READ-ONLY` | various | COMPLETE |
 | 3 | AGY-Rohit | Bounded implementation/test helper | All slices integrated and verified | n/a | n/a | IDLE |
 
@@ -109,15 +110,28 @@ Blockers/open questions:
 - Verdict: EXPLICIT PASS across all 16 Review C criteria in `REVIEW_GUIDE.md` (0 required repairs, scope/production boundaries respected).
 - Verified scope compliance, Food/Water regression protection, current-user Today view-model scoping, deterministic financial math and recurrence, idempotency of Paid/Done/Snooze, Telegram mock isolation, lack of payment initiation/credential fields, complete software verification evidence, and clean git state.
 
-### Release Blocker Resolution — SHA c4d5995 (2026-10-05)
+### Final Owner-Review Blocker Resolution — Durable Bounded Retry Policy (2026-10-05)
 
-- Owner-review found 4 concrete release blockers after Review C PASS at `3875e31`.
-- All 4 blockers resolved in single commit `c4d5995` (pushed to `origin/feature/v0.1-health-wealth`):
-  1. **Session migration coverage**: Added `Session` table DDL + indexes + cascade FK to `migration.sql`; added `src/lib/migration/main-to-v01-migration.test.ts` with live PostgreSQL 15 container test (NSV01-0226..0229).
-  2. **Decouple Telegram from browser cookies**: Extracted `src/lib/finance/finance-service.ts` (trusted domain service layer); refactored `src/app/finance/actions.ts` to thin wrapper; fixed Telegram webhook to import from finance-service; added `src/lib/telegram/telegram-finance.test.ts` (NSV01-0630..0632).
-  3. **Validation, recurrence, negative authorization**: Added `isValidTransactionCategory`/`normalizeTransactionCategory` to `finance.ts`; fixed `WEEKLY` interval recurrence (biweekly) and `YEARLY` interval math; replaced synthetic security assertions with real `financeService.*` calls; added `ObligationItem` explicit return type.
-  4. **Real DB-backed acceptance**: Added `src/lib/scenario/db-acceptance.test.ts` — 16-step acceptance scenario against real PostgreSQL 15 container (NSV01-1101..1116).
-- Full re-verification at SHA `c4d5995` (2026-10-05):
+- Resolved final owner-review blocker: permanent Telegram Wealth reminder delivery failures could retry every minute in `src/lib/scheduler.ts`.
+- Implemented durable, bounded retry policy across delivery engine, scheduler, database schema, and webhook:
+  1. **Schema & Migration**: Added `attemptCount` (Int, default 0), `lastAttemptAt` (DateTime?), `nextRetryAt` (DateTime?) to `ReminderDelivery` in `prisma/schema.prisma` and `migration.sql` (with idempotent `ALTER TABLE` fallback); updated Prisma client; verified with live PostgreSQL container in `src/lib/migration/main-to-v01-migration.test.ts`.
+  2. **Delivery Engine (`src/lib/reminders/delivery-engine.ts`)**:
+     - Exported `MAX_DELIVERY_ATTEMPTS = 3` and `RETRY_BACKOFF_MINUTES = [5, 15]`;
+     - `calculateNextRetryAt(attemptCount, fromDate, backoffMinutes, maxAttempts)` returns next retry timestamp or `null` when max attempts reached;
+     - `evaluateDeliveryFailure` and `evaluateDeliverySuccess` produce deterministic retry state transitions;
+     - `shouldDeliverNow` evaluates `attemptCount >= maxAttempts` (refusing 4th automatic attempt), suppresses delivery during active backoff window (`now < nextRetryAt`), allows retry after backoff, and preserves existing SENT, ACKNOWLEDGED, SNOOZED, and stale suppression rules.
+  3. **Scheduler (`src/lib/scheduler.ts`)**:
+     - Passes durable attempt fields to `shouldDeliverNow`;
+     - Reuses existing delivery claim in-place (never creates duplicate delivery rows for retries);
+     - Updates `attemptCount`, `lastAttemptAt`, and `nextRetryAt` on failure;
+     - On successful delivery, records `status: 'SENT'`, updates `attemptCount`, clears `nextRetryAt`.
+  4. **Webhook & Payment Lifecycle**:
+     - Telegram snooze resets `attemptCount: 0, nextRetryAt: null` for post-snooze delivery attempt;
+     - Marking obligation paid acknowledges any FAILED deliveries for the occurrence.
+  5. **Verification**:
+     - Replaced test-only `evaluateRetry()` in `src/lib/reminders/reminders-delivery.test.ts` (NSV01-0527) with comprehensive 10-proof suite verifying all requirements against production code;
+     - Added real PostgreSQL 15 persistence & in-place update assertions in `src/lib/scenario/db-acceptance.test.ts`.
+- Full software verification gate:
   - `test:analysis-contract`: 5/5 PASS;
   - `typecheck`: 0 errors;
   - `build`: 18/18 static routes, exit 0;
@@ -125,8 +139,8 @@ Blockers/open questions:
   - `test:reminders`: 45/45 PASS;
   - `test:security`: 11/11 PASS;
   - `test:life-hub`: 86/86 PASS;
+  - `./scripts/verify-v01-local.sh`: PASS (clean);
   - `git diff --check`: PASS (clean).
-- PR #132 remains open and awaiting owner final approval (no merge without explicit owner authorization).
 
 
 ### Milestone 5 — Security, Acceptance Scenario & Full Verification Checkpoint
