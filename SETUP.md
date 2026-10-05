@@ -1,6 +1,6 @@
 # NutriSnap Database Setup & Deployment Guide
 
-This document provides a comprehensive guide for initializing, syncing, seeding, and exporting the NutriSnap PostgreSQL database using pure Docker commands. This approach avoids needing to install Node.js, `tsx`, or the full suite of Prisma dependencies on the host system.
+This guide covers development containers, schema updates, admin seeding, and database backups. Schema updates can run in a temporary Docker container; the seed script runs from a checkout with Node.js dependencies installed.
 
 ## 🚀 Rapid Development Workflow (Hot-Reload)
 
@@ -36,33 +36,15 @@ When moving to a new system or anytime you add a new table, column, or relations
 Instead of installing Node modules locally, run a temporary Node container attached to the Docker network. This container securely passes the internal database URL and executes `prisma db push`:
 
 ```bash
-docker run --rm -v $(pwd)/prisma:/prisma -w /prisma \
+docker run --rm --env-file .env -v $(pwd)/prisma:/prisma -w /prisma \
   --network proxy \
-  -e DATABASE_URL="postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap" \
   node:18-alpine sh -c "npm install prisma && npx prisma db push --schema=/prisma/schema.prisma"
 ```
 *(Make sure to adjust the `--network` flag if your docker-compose file uses a different internal network name).*
 
 ## 3. Seeding the Database (Super Admin)
 
-The authentication system requires the Global Admin to exist in the database. To instantly insert the user without having to compile TypeScript or use bcrypt libraries manually, execute the following raw SQL `INSERT` statement via the `psql` command line built into your PostgreSQL container:
-
-```bash
-docker exec nutrisnap_db psql -U nutrisnap -d nutrisnap -c "
-  INSERT INTO \"User\" (id, email, name, password, role, onboarded, \"updatedAt\") 
-  VALUES (
-    'clwxxx1234567890abcdef', 
-    'admin@mkcyberlabs.in', 
-    'MK CyberLabs Admin', 
-    '\$2b\$12\$CuBxTsNNvuZnfwaUY7cj.uwCviLeneXIpqVTLUKNeIT/eESDFRhvq', 
-    'ADMIN', 
-    true, 
-    NOW()
-  ) ON CONFLICT DO NOTHING;
-"
-```
-
-This hashes the password to: **`ProductionPassword123!`**
+Set a unique `ADMIN_INITIAL_PASSWORD` in your ignored `.env` file, then run `npx tsx prisma/seed.ts` from a checkout with dependencies installed. The seed script hashes the password and skips an existing admin. Never use a published example password for an admin account.
 
 ## 4. Exporting & Backing Up (Docker CLI)
 
