@@ -10,9 +10,9 @@ Do not rely on private agent memory for project state. Re-read this file after a
 - Active branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: **#131 — NutriSnap v0.1 Health + Wealth — Herdr execution**
 - Execution system: **OpenClaw / Herdr**
-- Primary lead: **AGY-Manickam**
+- Primary lead/orchestrator/integrator: **AGY-Manickam**
 - Primary bounded implementation helper: **AGY-Rohit**
-- Independent architecture/review agent: **Codex**
+- Independent architecture/security/review agent: **Codex**
 - Owner: Manickam; owner retains merge, production, credential and destructive-operation authority.
 
 Paperclip-specific files under `versions/v0.1/` are historical on this branch and do not control execution.
@@ -45,24 +45,27 @@ Existing Food and Water behavior are regression-protected and must continue to w
 2. `versions/v0.1/AGENT_HANDOFF.md` — current live resume point.
 3. `versions/v0.1/STATUS.md` — milestone/checkpoint status.
 4. `versions/v0.1/AGENT_SKILLS.md` — shared operating workflow.
-5. `versions/v0.1/HEALTH_WEALTH_ROADMAP.md` — product milestones.
-6. `versions/v0.1/MASTER_PLAN.md` — detailed product scope.
-7. `versions/v0.1/ARCHITECTURE.md` — domain/schema/migration rules.
-8. `versions/v0.1/IMPLEMENTATION_CHECKLIST.md` — implementation completeness.
-9. `versions/v0.1/TEST_MATRIX.md` — deterministic behavior/security tests.
-10. `versions/v0.1/COMPLETE_VERIFICATION_PLAN.md` — authoritative mark-as-you-go verification.
-11. `versions/v0.1/OPEN_QUESTIONS.md` — `NSV01-Q###` blocker protocol.
-12. `docs/DEVELOPMENT_BASELINE.md` — isolated development environment.
+5. `versions/v0.1/HERDR_PANEL_WORKFLOW.md` — split-panel / multi-agent rules.
+6. `versions/v0.1/HEALTH_WEALTH_ROADMAP.md` — product milestones.
+7. `versions/v0.1/MASTER_PLAN.md` — detailed product scope.
+8. `versions/v0.1/ARCHITECTURE.md` — domain/schema/migration rules.
+9. `versions/v0.1/IMPLEMENTATION_CHECKLIST.md` — implementation completeness.
+10. `versions/v0.1/TEST_MATRIX.md` — deterministic behavior/security tests.
+11. `versions/v0.1/COMPLETE_VERIFICATION_PLAN.md` — authoritative mark-as-you-go verification.
+12. `versions/v0.1/OPEN_QUESTIONS.md` — `NSV01-Q###` blocker protocol.
+13. `docs/DEVELOPMENT_BASELINE.md` — isolated development environment.
 
 For AGY-Manickam long-run execution also read `versions/v0.1/HERDR_MASTER_PROMPT.md` and `versions/v0.1/HERDR_EXECUTION_PLAN.md`.
 
-## Role contract
+## Token-efficient role contract
 
 ### AGY-Manickam
 
-Primary integrator and long-running Herdr lead.
+Primary **lead + orchestrator + integrator + long-running implementer**.
 
 - Own milestone sequencing and integration.
+- Keep the main Herdr pane/session.
+- Use the larger AGY token budget for normal implementation and orchestration.
 - May delegate bounded, well-defined slices to AGY-Rohit or Codex.
 - Must not delegate the entire milestone and disappear from integration responsibility.
 - Runs/collects deterministic evidence before checkpointing.
@@ -77,6 +80,7 @@ Bounded implementation engineer.
 
 - Read this file + `AGENT_HANDOFF.md` before editing.
 - Work only on the exact delegated slice.
+- Prefer focused implementation/test work that can be independently verified.
 - Do not create/switch feature branches unless explicitly instructed.
 - Do not invent product/accounting/recurrence/security semantics.
 - Run relevant focused tests and `git diff --check`.
@@ -85,13 +89,50 @@ Bounded implementation engineer.
 
 ### Codex
 
-Architecture/review/debugging agent.
+Architecture / security / difficult-debugging / independent-review agent.
+
+**Codex is NOT the default orchestrator for v0.1.** Use AGY-Manickam for orchestration to conserve Codex tokens.
+
+Use Codex primarily for:
+
+- Review A / Review B / Review C;
+- schema/migration architecture;
+- recurrence/idempotency reasoning;
+- authorization/security review;
+- difficult debugging where a second reasoning pass is valuable;
+- a very small isolated repair only when explicitly delegated.
+
+During an independent review Codex is read-only by default.
 
 - Use `versions/v0.1/REVIEW_GUIDE.md` for Review A/B/C.
 - Review the actual branch diff and evidence; do not infer runtime PASS from code inspection.
 - Verdicts must be explicit: `PASS`, `FAIL`, or `BLOCKED` with actionable findings.
 - Do not broadly rewrite implementation during an independent review unless the owner/lead explicitly changes the task from review to repair.
-- Small isolated repair/debug work is acceptable only when explicitly delegated.
+
+## Herdr split-panel default
+
+Herdr/OpenClaw may run multiple agents in the same overall panel using split panes/tabs.
+
+Default layout:
+
+```text
+Pane 1: AGY-Manickam  -> lead/orchestrator/integrator
+Pane 2: Codex         -> read-only architecture/review/security when needed
+Pane 3: AGY-Rohit     -> bounded implementation/test slice when useful
+```
+
+Before opening a second agent pane, AGY-Manickam must record the assignment in `versions/v0.1/AGENT_HANDOFF.md`.
+
+Every secondary pane reads `AGENTS.md`, `AGENT_HANDOFF.md`, `STATUS.md`, `AGENT_SKILLS.md`, and the exact assigned source-of-truth section before acting.
+
+### Concurrency rule
+
+- Read-only review may happen in parallel against an exact pushed SHA.
+- Only one agent may write the main worktree at a time.
+- If AGY-Manickam and AGY-Rohit must both write concurrently, Rohit must use a separate Git worktree/helper branch and report a commit SHA for AGY-Manickam to inspect/cherry-pick.
+- Never let two agents concurrently edit the same files in `/home/openclaw/Projects/NutriSnap`.
+
+The complete procedure is authoritative in `versions/v0.1/HERDR_PANEL_WORKFLOW.md`.
 
 ## Current development/runtime boundary
 
@@ -164,9 +205,9 @@ Never use `git reset --hard`, `git clean -fd`, or force-push to solve an unclear
 
 ### Owner stash warning
 
-The OpenClaw clone may contain a stash created before switching from `main` to this v0.1 branch, containing older September work.
+The OpenClaw clone contains an owner-controlled historical stash from `main`. The useful September work has already been recovered, validated, committed on `recovery/september-wip`, and integrated into `feature/v0.1-health-wealth`; the original stash remains preserved as a safety copy.
 
-Treat **all pre-existing stashes as owner-owned**. Do not `stash pop`, `stash apply`, `stash drop`, rewrite, or inspect secret-bearing content beyond what is necessary without explicit owner instruction. Never apply an old `main` stash onto `feature/v0.1-health-wealth` automatically.
+Treat all pre-existing stashes as owner-owned. Do not `stash pop`, `stash apply`, `stash drop`, rewrite, or automatically reuse them without explicit owner instruction.
 
 ## Testing rules
 
@@ -213,7 +254,8 @@ After completing a meaningful verified slice, the integrating agent updates it w
 - working-tree/remote state;
 - next action;
 - blockers/open question IDs;
-- delegated work still outstanding.
+- delegated work still outstanding;
+- active split panes and write mode if another agent is running.
 
 Do not erase useful history; move completed handoff entries into its history section when updating the current state.
 
