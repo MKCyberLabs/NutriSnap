@@ -46,6 +46,8 @@ Expected branch:
 
 `feature/v0.1-health-wealth`
 
+Always fetch/pull before comparing against an older planning SHA because the shared-memory files themselves advance the branch.
+
 If the worktree is safe, synchronize only with:
 
 ```bash
