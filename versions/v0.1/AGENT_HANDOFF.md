@@ -9,8 +9,8 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestone 5 — Security, Full Life-Hub Integration & Local Software Gate complete`
-- Current review gate: `Review C READY` (Final Release Candidate Review)
+- Current milestone: `Milestones 0-5 COMPLETE — Full Local Software Gate & Verification Plan Passed`
+- Current review gate: `Review C PASSED — PR READY`
 - Last verified implementation checkpoint: Milestone 5 Security, Acceptance Scenario & Full Verification Checkpoint
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
@@ -37,21 +37,21 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 
 ## Immediate next action
 
-1. Commit and push Milestone 5 Checkpoint to `feature/v0.1-health-wealth`.
-2. Codex executes independent Review C (Final release candidate review) against pushed commit SHA in read-only mode evaluating the 16 Review C criteria in `REVIEW_GUIDE.md`.
-3. Upon Review C PASS: prepare PR description and report completion to owner Manickam.
+1. Open PR from `feature/v0.1-health-wealth` to `main` referencing issue #131 and verification evidence.
+2. PR remains unmerged for owner Manickam's review.
+3. No production migration, deployment, or production Telegram sends executed.
 
 ## Active blockers
 
-None at this checkpoint.
+None. All milestones and reviews (A, B, C) PASSED.
 
 ## Active Herdr panes / delegation
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 5 commit & orchestration to Review C | `WRITE-SAME-TREE-SEQUENTIAL` | Checkpoint SHA | IN PROGRESS |
-| 2 | Codex | Architecture/security/reviewer | Review B completed (PASS); Independent Review C assigned | `READ-ONLY` | Checkpoint SHA | ASSIGNED |
-| 3 | AGY-Rohit | Bounded implementation/test helper | none needed (All milestones complete & passing) | assign per task | n/a | IDLE |
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | PR creation & handoff to owner | `WRITE-SAME-TREE-SEQUENTIAL` | `3875e31` | IN PROGRESS |
+| 2 | Codex | Architecture/security/reviewer | Review A, B, C completed (ALL PASS) | `READ-ONLY` | `3875e31` | IDLE |
+| 3 | AGY-Rohit | Bounded implementation/test helper | All slices integrated and verified | assign per task | n/a | IDLE |
 
 When opening a secondary pane, replace the relevant row with:
 
@@ -103,6 +103,12 @@ Blockers/open questions:
 ```
 
 ## History
+
+### Review C — Final Local Release Candidate Review Gate
+
+- Conducted independently by Codex in read-only mode against commit SHA `3875e31c1baa02bdc3bd3c2ce57d80f726e9de88`.
+- Verdict: EXPLICIT PASS across all 16 Review C criteria in `REVIEW_GUIDE.md` (0 required repairs, scope/production boundaries respected).
+- Verified scope compliance, Food/Water regression protection, current-user Today view-model scoping, deterministic financial math and recurrence, idempotency of Paid/Done/Snooze, Telegram mock isolation, lack of payment initiation/credential fields, complete software verification evidence, and clean git state.
 
 ### Milestone 5 — Security, Acceptance Scenario & Full Verification Checkpoint
 

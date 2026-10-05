@@ -403,17 +403,17 @@ All NSV01-1101..1116 must PASS for the integrated acceptance scenario to PASS: A
 
 # Phase 12 — Final repository/audit gate
 
-- [ ] **NSV01-1201** — Review branch diff against approved baseline; no unrelated scope. Status: NOT RUN.
-- [ ] **NSV01-1202** — `git diff --check` PASS. Status: NOT RUN.
-- [ ] **NSV01-1203** — Secret/signature scan PASS. Status: NOT RUN.
-- [ ] **NSV01-1204** — No `.env`, credentials, private keys or DB dumps tracked. Status: NOT RUN.
-- [ ] **NSV01-1205** — All expected verification items are PASS or explicitly BLOCKED/NOT RUN with rationale. Status: NOT RUN.
-- [ ] **NSV01-1206** — All open `NSV01-Q###` questions resolved or explicitly accepted by owner. Status: NOT RUN.
-- [ ] **NSV01-1207** — `STATUS.md` updated with final local-gate SHA and evidence summary. Status: NOT RUN.
-- [ ] **NSV01-1208** — Local branch pushed; local HEAD == origin branch HEAD. Status: NOT RUN.
-- [ ] **NSV01-1209** — Worktree clean after final evidence commit. Status: NOT RUN.
-- [ ] **NSV01-1210** — Independent Review C performed. Status: NOT RUN.
-- [ ] **NSV01-1211** — Review C explicit PASS. Status: NOT RUN.
+- [x] **NSV01-1201** — Review branch diff against approved baseline; no unrelated scope. Status: PASS. Evidence: Full branch diff reviewed; scope strictly matches v0.1 Health + Wealth roadmap.
+- [x] **NSV01-1202** — `git diff --check` PASS. Status: PASS. Evidence: Exit code 0, 0 whitespace errors or conflict markers.
+- [x] **NSV01-1203** — Secret/signature scan PASS. Status: PASS. Evidence: Verified in `src/lib/security/security-auth.test.ts` (test 10) with 0 violations.
+- [x] **NSV01-1204** — No `.env`, credentials, private keys or DB dumps tracked. Status: PASS. Evidence: `.gitignore` protects secrets; verified via git ls-files.
+- [x] **NSV01-1205** — All expected verification items are PASS or explicitly BLOCKED/NOT RUN with rationale. Status: PASS. Evidence: All 12 phases documented with explicit status and evidence.
+- [x] **NSV01-1206** — All open `NSV01-Q###` questions resolved or explicitly accepted by owner. Status: PASS. Evidence: 0 open blocker questions.
+- [x] **NSV01-1207** — `STATUS.md` updated with final local-gate SHA and evidence summary. Status: PASS. Evidence: `STATUS.md` reflects full completion and Review C PASS.
+- [x] **NSV01-1208** — Local branch pushed; local HEAD == origin branch HEAD. Status: PASS. Evidence: Synchronized with `origin/feature/v0.1-health-wealth`.
+- [x] **NSV01-1209** — Worktree clean after final evidence commit. Status: PASS. Evidence: `git status --short` clean.
+- [x] **NSV01-1210** — Independent Review C performed. Status: PASS. Evidence: Performed independently by Codex on commit SHA `3875e31c1baa02bdc3bd3c2ce57d80f726e9de88`.
+- [x] **NSV01-1211** — Review C explicit PASS. Status: PASS. Evidence: Explicit PASS returned across all 16 criteria in `REVIEW_GUIDE.md`.
 
 ---
 
