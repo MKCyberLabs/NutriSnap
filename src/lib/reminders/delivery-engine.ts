@@ -68,21 +68,115 @@ export function calculateDeliverySchedules(
   return schedules;
 }
 
+export const MAX_DELIVERY_ATTEMPTS = 3;
+export const RETRY_BACKOFF_MINUTES = [5, 15]; // attempt 1 failure -> +5m; attempt 2 failure -> +15m; attempt 3 -> max reached
+
+/**
+ * Calculates next retry time for a failed delivery attempt.
+ * - attemptCount: total attempts made so far (1 after first failure, 2 after second, 3 after third)
+ * - fromDate: timestamp of the failed attempt
+ * Returns Date of next eligible retry, or null if maximum attempts have been reached.
+ */
+export function calculateNextRetryAt(
+  attemptCount: number,
+  fromDate: Date = new Date(),
+  backoffMinutes: number[] = RETRY_BACKOFF_MINUTES,
+  maxAttempts: number = MAX_DELIVERY_ATTEMPTS
+): Date | null {
+  if (attemptCount >= maxAttempts) {
+    return null;
+  }
+  const delayMin = backoffMinutes[attemptCount - 1] ?? backoffMinutes[backoffMinutes.length - 1];
+  return new Date(fromDate.getTime() + delayMin * 60 * 1000);
+}
+
+export function evaluateDeliveryFailure(params: {
+  currentAttemptCount: number;
+  failedAt?: Date;
+  failureReason?: string;
+  maxAttempts?: number;
+  backoffMinutes?: number[];
+}): {
+  status: 'FAILED';
+  attemptCount: number;
+  lastAttemptAt: Date;
+  nextRetryAt: Date | null;
+  failureReason: string;
+  canRetry: boolean;
+} {
+  const {
+    currentAttemptCount,
+    failedAt = new Date(),
+    failureReason = 'Send error',
+    maxAttempts = MAX_DELIVERY_ATTEMPTS,
+    backoffMinutes = RETRY_BACKOFF_MINUTES,
+  } = params;
+
+  const newAttemptCount = currentAttemptCount + 1;
+  const nextRetryAt = calculateNextRetryAt(newAttemptCount, failedAt, backoffMinutes, maxAttempts);
+
+  return {
+    status: 'FAILED',
+    attemptCount: newAttemptCount,
+    lastAttemptAt: failedAt,
+    nextRetryAt,
+    failureReason,
+    canRetry: nextRetryAt !== null,
+  };
+}
+
+export function evaluateDeliverySuccess(params: {
+  currentAttemptCount: number;
+  sentAt?: Date;
+}): {
+  status: 'SENT';
+  attemptCount: number;
+  lastAttemptAt: Date;
+  nextRetryAt: null;
+  sentAt: Date;
+} {
+  const { currentAttemptCount, sentAt = new Date() } = params;
+  return {
+    status: 'SENT',
+    attemptCount: currentAttemptCount + 1,
+    lastAttemptAt: sentAt,
+    nextRetryAt: null,
+    sentAt,
+  };
+}
+
+export interface ShouldDeliverNowParams {
+  scheduledFor: Date;
+  now: Date;
+  snoozedUntil?: Date | null;
+  isStale?: boolean;
+  deliveryStatus?: 'PENDING' | 'SENT' | 'ACKNOWLEDGED' | 'SNOOZED' | 'FAILED' | null;
+  attemptCount?: number;
+  lastAttemptAt?: Date | null;
+  nextRetryAt?: Date | null;
+  maxAttempts?: number;
+}
+
 /**
  * Evaluates whether a scheduled delivery should be sent right now.
  * Pure logic enforcing:
  * - Time window eligibility
  * - Snooze suppression (no send before snoozedUntil)
  * - Stale past occurrence suppression (no uncontrolled catch-up storms)
+ * - Durable bounded retry policy with backoff and max 3 attempts
  */
-export function shouldDeliverNow(params: {
-  scheduledFor: Date;
-  now: Date;
-  snoozedUntil?: Date | null;
-  isStale?: boolean;
-  deliveryStatus?: 'PENDING' | 'SENT' | 'ACKNOWLEDGED' | 'SNOOZED' | 'FAILED' | null;
-}): { shouldSend: boolean; reason: string } {
-  const { scheduledFor, now, snoozedUntil, isStale, deliveryStatus } = params;
+export function shouldDeliverNow(params: ShouldDeliverNowParams): { shouldSend: boolean; reason: string } {
+  const {
+    scheduledFor,
+    now,
+    snoozedUntil,
+    isStale,
+    deliveryStatus,
+    attemptCount = 0,
+    lastAttemptAt,
+    nextRetryAt,
+    maxAttempts = MAX_DELIVERY_ATTEMPTS,
+  } = params;
 
   // 1. If already sent or acknowledged, never resend!
   if (deliveryStatus === 'SENT' || deliveryStatus === 'ACKNOWLEDGED') {
@@ -99,12 +193,42 @@ export function shouldDeliverNow(params: {
     return { shouldSend: false, reason: 'Suppressed: stale past occurrence' };
   }
 
-  // 4. Must be at or after the scheduled time
+  // 4. If delivery previously failed, enforce durable bounded retry policy
+  if (deliveryStatus === 'FAILED') {
+    if (attemptCount >= maxAttempts) {
+      return {
+        shouldSend: false,
+        reason: `Max retry attempts reached (${attemptCount}/${maxAttempts})`,
+      };
+    }
+
+    if (nextRetryAt && now.getTime() < nextRetryAt.getTime()) {
+      return {
+        shouldSend: false,
+        reason: `Retry backoff active until ${nextRetryAt.toISOString()}`,
+      };
+    }
+
+    if (!nextRetryAt && lastAttemptAt) {
+      const calculatedRetryAt = calculateNextRetryAt(attemptCount, lastAttemptAt, RETRY_BACKOFF_MINUTES, maxAttempts);
+      if (calculatedRetryAt && now.getTime() < calculatedRetryAt.getTime()) {
+        return {
+          shouldSend: false,
+          reason: `Retry backoff active until ${calculatedRetryAt.toISOString()}`,
+        };
+      }
+    }
+  }
+
+  // 5. Must be at or after the scheduled time
   if (now.getTime() < scheduledFor.getTime()) {
     return { shouldSend: false, reason: 'Future scheduled time not yet reached' };
   }
 
-  return { shouldSend: true, reason: 'Eligible for delivery' };
+  return {
+    shouldSend: true,
+    reason: deliveryStatus === 'FAILED' ? 'Eligible for retry' : 'Eligible for delivery',
+  };
 }
 
 /**

@@ -53,6 +53,20 @@ test('NSV01-0226: Migration SQL contains complete Session table definition, inde
     sql.includes('REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE'),
     'Session must reference User with CASCADE delete'
   );
+
+  // 4. ReminderDelivery retry policy fields
+  assert.ok(
+    sql.includes('"attemptCount" INTEGER NOT NULL DEFAULT 0'),
+    'ReminderDelivery must have attemptCount column with default 0'
+  );
+  assert.ok(
+    sql.includes('"lastAttemptAt" TIMESTAMP(3)'),
+    'ReminderDelivery must have lastAttemptAt column'
+  );
+  assert.ok(
+    sql.includes('"nextRetryAt" TIMESTAMP(3)'),
+    'ReminderDelivery must have nextRetryAt column'
+  );
 });
 
 test('NSV01-0227: Upgrade path from main schema adds Session without table-not-found errors', () => {
@@ -214,4 +228,13 @@ test('NSV01-0229: Real PostgreSQL test container verifies upgrade from main sche
   "`).toString().trim();
 
   assert.ok(reminderCheck.includes('rem-1|Lunch|HEALTH'), 'Legacy reminder must be backfilled to HEALTH domain');
+
+  // 6. Verify ReminderDelivery table has attemptCount, lastAttemptAt, nextRetryAt
+  const deliveryCheck = execSync(`docker exec -i nutrisnap_test_db psql -U nutrisnap_test -d ${dbName} -t -A -c "
+    INSERT INTO \\"ReminderDelivery\\" (\\"id\\", \\"userId\\", \\"reminderId\\", \\"occurrenceKey\\", \\"scheduledFor\\", \\"offsetMinutes\\", \\"channel\\", \\"status\\", \\"attemptCount\\", \\"lastAttemptAt\\", \\"nextRetryAt\\")
+    VALUES ('del-test-1', 'usr-real-test', 'rem-1', '2026-10-05', NOW(), 0, 'TELEGRAM', 'FAILED', 1, NOW(), NOW() + INTERVAL '5 minutes');
+    SELECT \\"id\\", \\"status\\", \\"attemptCount\\" FROM \\"ReminderDelivery\\" WHERE \\"id\\" = 'del-test-1';
+  "`).toString().trim();
+
+  assert.ok(deliveryCheck.includes('del-test-1|FAILED|1'), 'ReminderDelivery with retry state must be functional after migration');
 });

@@ -7,7 +7,10 @@ import {
   calculateDeliverySchedules,
   shouldDeliverNow,
   formatTelegramBillReminder,
-  ObligationDeliveryTarget
+  ObligationDeliveryTarget,
+  MAX_DELIVERY_ATTEMPTS,
+  evaluateDeliverySuccess,
+  evaluateDeliveryFailure,
 } from './reminders/delivery-engine';
 
 let isStarted = false;
@@ -205,6 +208,9 @@ export function startScheduler() {
             snoozedUntil: existingDelivery?.snoozedUntil,
             isStale: sched.isStale,
             deliveryStatus: (existingDelivery?.status as any) || null,
+            attemptCount: existingDelivery?.attemptCount ?? 0,
+            lastAttemptAt: existingDelivery?.lastAttemptAt ?? null,
+            nextRetryAt: existingDelivery?.nextRetryAt ?? null,
           });
 
           if (!eligibility.shouldSend) {
@@ -240,6 +246,7 @@ export function startScheduler() {
                   offsetMinutes: sched.offsetMinutes,
                   channel: 'TELEGRAM',
                   status: 'PENDING',
+                  attemptCount: 0,
                 },
               });
             } catch {
@@ -265,23 +272,44 @@ export function startScheduler() {
               reply_markup: payload.reply_markup,
             });
 
+            const successState = evaluateDeliverySuccess({
+              currentAttemptCount: delivery.attemptCount || 0,
+              sentAt: new Date(),
+            });
+
             await prisma.reminderDelivery.update({
               where: { id: delivery.id },
               data: {
-                status: 'SENT',
-                sentAt: new Date(),
+                status: successState.status,
+                sentAt: successState.sentAt,
                 telegramMessageId: sent.message_id,
+                attemptCount: successState.attemptCount,
+                lastAttemptAt: successState.lastAttemptAt,
+                nextRetryAt: successState.nextRetryAt,
               },
             });
             console.log(`[Scheduler] Sent bill reminder ${ob.title} to user ${ob.user.id}`);
           } catch (sendErr: any) {
+            const failureState = evaluateDeliveryFailure({
+              currentAttemptCount: delivery.attemptCount || 0,
+              failedAt: new Date(),
+              failureReason: sendErr?.message || 'Send error',
+            });
+
             await prisma.reminderDelivery.update({
               where: { id: delivery.id },
               data: {
-                status: 'FAILED',
-                failureReason: sendErr?.message || 'Send error',
+                status: failureState.status,
+                failureReason: failureState.failureReason,
+                attemptCount: failureState.attemptCount,
+                lastAttemptAt: failureState.lastAttemptAt,
+                nextRetryAt: failureState.nextRetryAt,
               },
             });
+            console.error(
+              `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for reminder ${ob.title}:`,
+              sendErr?.message
+            );
           }
         }
       }

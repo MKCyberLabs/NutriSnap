@@ -26,6 +26,7 @@ GitHub execution issue: **#131**
   - Enforced approved category vocabulary server-side and strengthened negative authorization tests;
   - Fixed WEEKLY interval recurrence (interval >= 1) and YEARLY interval math (interval > 1);
   - Added real PostgreSQL-backed 16-step acceptance scenario (`src/lib/scenario/db-acceptance.test.ts`);
+  - Implemented durable bounded retry policy for Wealth reminder deliveries (`attemptCount`, `lastAttemptAt`, `nextRetryAt`, max 3 attempts, [5m, 15m] backoff) with 10-proof test suite and PostgreSQL persistence;
   - Security & negative authorization test suite (11/11 PASS);
   - Cookie-independent Telegram test suite (3/3 PASS);
   - All 86 `npm run test:life-hub` tests PASS;

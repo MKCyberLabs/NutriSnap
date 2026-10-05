@@ -632,11 +632,12 @@ export async function markObligationPaid(
       where: {
         obligationId: obligation.id,
         occurrenceKey,
-        status: { in: ['PENDING', 'SENT', 'SNOOZED'] }
+        status: { in: ['PENDING', 'SENT', 'SNOOZED', 'FAILED'] }
       },
       data: {
         status: 'ACKNOWLEDGED',
         acknowledgedAt: new Date(),
+        nextRetryAt: null,
       }
     });
 

@@ -12,6 +12,11 @@ import {
   generateDeliveryClaimKey,
   formatTelegramBillReminder,
   ObligationDeliveryTarget,
+  MAX_DELIVERY_ATTEMPTS,
+  RETRY_BACKOFF_MINUTES,
+  calculateNextRetryAt,
+  evaluateDeliveryFailure,
+  evaluateDeliverySuccess,
 } from './delivery-engine';
 import {
   parseAndValidateAmount,
@@ -237,21 +242,219 @@ test('NSV01-0526: Restart after SENT does not resend occurrence', () => {
   assert.match(decision.reason, /Already delivered/);
 });
 
-test('NSV01-0527: FAILED delivery retry policy is controlled', () => {
+test('NSV01-0527: FAILED delivery retry policy is controlled and bounded', () => {
   const scheduledFor = new Date('2026-10-05T08:00:00Z');
-  const now = new Date('2026-10-05T08:01:00Z');
+  const now = new Date('2026-10-05T08:00:00Z');
 
-  // When failed, it is eligible for retry unless attempts exceeded
-  function evaluateRetry(attemptCount: number, maxAttempts: number = 3) {
-    if (attemptCount >= maxAttempts) {
-      return { retry: false, reason: 'Max retry attempts exceeded' };
-    }
-    return { retry: true, reason: 'Eligible for retry' };
-  }
+  // Proof 1: initial PENDING delivery may send
+  const initialPendingDecision = shouldDeliverNow({
+    scheduledFor,
+    now,
+    deliveryStatus: 'PENDING',
+    attemptCount: 0,
+  });
+  assert.equal(initialPendingDecision.shouldSend, true, 'Proof 1: initial PENDING delivery must be eligible to send');
+  assert.equal(initialPendingDecision.reason, 'Eligible for delivery');
 
-  assert.equal(evaluateRetry(1).retry, true);
-  assert.equal(evaluateRetry(2).retry, true);
-  assert.equal(evaluateRetry(3).retry, false);
+  // Proof 2: first failure increments attempt state
+  const fail1 = evaluateDeliveryFailure({
+    currentAttemptCount: 0,
+    failedAt: now,
+    failureReason: 'Telegram network timeout',
+  });
+  assert.equal(fail1.status, 'FAILED');
+  assert.equal(fail1.attemptCount, 1, 'Proof 2: first failure increments attemptCount from 0 to 1');
+  assert.equal(fail1.lastAttemptAt.getTime(), now.getTime(), 'Proof 2: lastAttemptAt recorded');
+  assert.ok(fail1.nextRetryAt, 'Proof 2: nextRetryAt calculated');
+  assert.equal(
+    fail1.nextRetryAt.getTime(),
+    new Date('2026-10-05T08:05:00Z').getTime(),
+    'Proof 2: first retry scheduled 5 minutes later'
+  );
+  assert.equal(fail1.canRetry, true);
+
+  // Proof 3: immediate next-minute run does NOT resend if backoff has not elapsed
+  const minute1Now = new Date('2026-10-05T08:01:00Z');
+  const immediateRetryDecision = shouldDeliverNow({
+    scheduledFor,
+    now: minute1Now,
+    deliveryStatus: 'FAILED',
+    attemptCount: fail1.attemptCount,
+    lastAttemptAt: fail1.lastAttemptAt,
+    nextRetryAt: fail1.nextRetryAt,
+  });
+  assert.equal(
+    immediateRetryDecision.shouldSend,
+    false,
+    'Proof 3: immediate next-minute run does NOT resend if backoff has not elapsed'
+  );
+  assert.match(immediateRetryDecision.reason, /Retry backoff active until/);
+
+  // Proof 4: eligible retry occurs after backoff
+  const minute5Now = new Date('2026-10-05T08:05:00Z');
+  const eligibleRetryDecision = shouldDeliverNow({
+    scheduledFor,
+    now: minute5Now,
+    deliveryStatus: 'FAILED',
+    attemptCount: fail1.attemptCount,
+    lastAttemptAt: fail1.lastAttemptAt,
+    nextRetryAt: fail1.nextRetryAt,
+  });
+  assert.equal(
+    eligibleRetryDecision.shouldSend,
+    true,
+    'Proof 4: eligible retry occurs after backoff has elapsed'
+  );
+  assert.equal(eligibleRetryDecision.reason, 'Eligible for retry');
+
+  // Proof 5: maximum 3 attempts
+  // Attempt 2 fails at 08:05:00Z -> backoff 15 min -> 08:20:00Z
+  const fail2 = evaluateDeliveryFailure({
+    currentAttemptCount: fail1.attemptCount,
+    failedAt: minute5Now,
+    failureReason: 'Telegram 502 Bad Gateway',
+  });
+  assert.equal(fail2.attemptCount, 2, 'Proof 5: attemptCount is now 2');
+  assert.equal(
+    fail2.nextRetryAt?.getTime(),
+    new Date('2026-10-05T08:20:00Z').getTime(),
+    'Proof 5: second backoff is 15 minutes'
+  );
+  assert.equal(fail2.canRetry, true);
+
+  // Attempt 3 fails at 08:20:00Z -> max attempts (3) reached
+  const minute20Now = new Date('2026-10-05T08:20:00Z');
+  const fail3 = evaluateDeliveryFailure({
+    currentAttemptCount: fail2.attemptCount,
+    failedAt: minute20Now,
+    failureReason: 'Telegram 403 Forbidden',
+  });
+  assert.equal(fail3.attemptCount, 3, 'Proof 5: attemptCount is now 3 (maximum attempts)');
+  assert.equal(fail3.nextRetryAt, null, 'Proof 5: no nextRetryAt after reaching max attempts');
+  assert.equal(fail3.canRetry, false, 'Proof 5: canRetry is false after 3 attempts');
+
+  // Proof 6: fourth automatic attempt is refused
+  const minute21Now = new Date('2026-10-05T08:21:00Z');
+  const fourthAttemptDecision = shouldDeliverNow({
+    scheduledFor,
+    now: minute21Now,
+    deliveryStatus: 'FAILED',
+    attemptCount: fail3.attemptCount,
+    lastAttemptAt: fail3.lastAttemptAt,
+    nextRetryAt: fail3.nextRetryAt,
+  });
+  assert.equal(
+    fourthAttemptDecision.shouldSend,
+    false,
+    'Proof 6: fourth automatic attempt is refused when attemptCount >= 3'
+  );
+  assert.match(fourthAttemptDecision.reason, /Max retry attempts reached/);
+
+  // Proof 7: restart with persisted FAILED/attempt state does not reset retry count
+  const rehydratedDbRow = {
+    id: 'del-persisted-1',
+    status: 'FAILED' as const,
+    attemptCount: 2,
+    lastAttemptAt: new Date('2026-10-05T08:05:00Z'),
+    nextRetryAt: new Date('2026-10-05T08:20:00Z'),
+  };
+  const restartBeforeBackoff = shouldDeliverNow({
+    scheduledFor,
+    now: new Date('2026-10-05T08:10:00Z'),
+    deliveryStatus: rehydratedDbRow.status,
+    attemptCount: rehydratedDbRow.attemptCount,
+    lastAttemptAt: rehydratedDbRow.lastAttemptAt,
+    nextRetryAt: rehydratedDbRow.nextRetryAt,
+  });
+  assert.equal(
+    restartBeforeBackoff.shouldSend,
+    false,
+    'Proof 7: restart does not reset attempt count or bypass backoff'
+  );
+
+  const restartAfterBackoff = shouldDeliverNow({
+    scheduledFor,
+    now: new Date('2026-10-05T08:20:00Z'),
+    deliveryStatus: rehydratedDbRow.status,
+    attemptCount: rehydratedDbRow.attemptCount,
+    lastAttemptAt: rehydratedDbRow.lastAttemptAt,
+    nextRetryAt: rehydratedDbRow.nextRetryAt,
+  });
+  assert.equal(
+    restartAfterBackoff.shouldSend,
+    true,
+    'Proof 7: persisted attempt state allows attempt 3 at scheduled backoff time'
+  );
+
+  // Proof 8: successful retry changes to SENT and never resends
+  const successRetry = evaluateDeliverySuccess({
+    currentAttemptCount: 1, // retry after 1 failure succeeded
+    sentAt: minute5Now,
+  });
+  assert.equal(successRetry.status, 'SENT');
+  assert.equal(successRetry.attemptCount, 2);
+  assert.equal(successRetry.nextRetryAt, null);
+
+  const afterSentDecision = shouldDeliverNow({
+    scheduledFor,
+    now: new Date('2026-10-05T08:06:00Z'),
+    deliveryStatus: successRetry.status,
+    attemptCount: successRetry.attemptCount,
+    lastAttemptAt: successRetry.lastAttemptAt,
+    nextRetryAt: successRetry.nextRetryAt,
+  });
+  assert.equal(afterSentDecision.shouldSend, false, 'Proof 8: once SENT, delivery never resends');
+  assert.match(afterSentDecision.reason, /Already delivered/);
+
+  // Proof 9: snooze and stale suppression still work
+  const snoozedDecision = shouldDeliverNow({
+    scheduledFor,
+    now: minute5Now,
+    deliveryStatus: 'FAILED',
+    attemptCount: 1,
+    snoozedUntil: new Date('2026-10-06T08:00:00Z'), // Snoozed 24h
+  });
+  assert.equal(
+    snoozedDecision.shouldSend,
+    false,
+    'Proof 9: snooze suppresses delivery even if retry backoff has elapsed'
+  );
+  assert.match(snoozedDecision.reason, /Snoozed until/);
+
+  const staleDecision = shouldDeliverNow({
+    scheduledFor: new Date('2026-08-01T08:00:00Z'),
+    now: minute5Now,
+    deliveryStatus: 'FAILED',
+    attemptCount: 1,
+    isStale: true,
+  });
+  assert.equal(
+    staleDecision.shouldSend,
+    false,
+    'Proof 9: stale occurrence suppresses delivery even if retry eligible'
+  );
+  assert.match(staleDecision.reason, /Suppressed: stale past occurrence/);
+
+  // Proof 10: duplicate durable claim is not created
+  const claimStore = new Map<string, { id: string; status: string; attemptCount: number }>();
+  const claimKey = generateDeliveryClaimKey({
+    targetId: 'ob-claim-1',
+    occurrenceKey: '2026-10-05',
+    offsetMinutes: 0,
+    channel: 'TELEGRAM',
+  });
+
+  claimStore.set(claimKey, { id: 'del-uuid-1', status: 'PENDING', attemptCount: 0 });
+  const existingClaim = claimStore.get(claimKey)!;
+  claimStore.set(claimKey, {
+    ...existingClaim,
+    status: fail1.status,
+    attemptCount: fail1.attemptCount,
+  });
+
+  assert.equal(claimStore.size, 1, 'Proof 10: exactly one durable claim exists');
+  assert.equal(claimStore.get(claimKey)?.id, 'del-uuid-1', 'Proof 10: retry reuses same claim ID');
+  assert.equal(claimStore.get(claimKey)?.attemptCount, 1);
 });
 
 test('NSV01-0528: Disabled reminder creates no delivery', () => {

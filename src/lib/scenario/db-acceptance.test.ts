@@ -178,6 +178,36 @@ test('NSV01-1101..1116: Real PostgreSQL-backed Health + Wealth Acceptance Scenar
       /Unique constraint failed/
     );
 
+    // Verify retry state persistence in real PostgreSQL
+    const delRetry = await testPrisma.reminderDelivery.create({
+      data: {
+        userId,
+        reminderId: reminder.id,
+        obligationId,
+        occurrenceKey,
+        scheduledFor: new Date('2026-10-14T09:00:00.000Z'),
+        offsetMinutes: 1440,
+        channel: 'TELEGRAM',
+        status: 'FAILED',
+        attemptCount: 1,
+        lastAttemptAt: new Date(),
+        nextRetryAt: new Date(Date.now() + 5 * 60 * 1000),
+      }
+    });
+    assert.equal(delRetry.attemptCount, 1);
+    assert.ok(delRetry.nextRetryAt);
+
+    // Update retry state in-place (same row, no duplicate)
+    const updatedDel = await testPrisma.reminderDelivery.update({
+      where: { id: delRetry.id },
+      data: {
+        attemptCount: 2,
+        nextRetryAt: new Date(Date.now() + 15 * 60 * 1000),
+      }
+    });
+    assert.equal(updatedDel.id, delRetry.id);
+    assert.equal(updatedDel.attemptCount, 2);
+
     // --- Step 10 & 11: Mark recharge Paid with expense creation ---
     const paidResult1 = await financeService.markObligationPaid(userId, {
       obligationId,

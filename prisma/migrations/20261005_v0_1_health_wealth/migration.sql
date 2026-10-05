@@ -123,6 +123,9 @@ CREATE TABLE IF NOT EXISTS "ReminderDelivery" (
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "telegramMessageId" INTEGER,
     "failureReason" TEXT,
+    "attemptCount" INTEGER NOT NULL DEFAULT 0,
+    "lastAttemptAt" TIMESTAMP(3),
+    "nextRetryAt" TIMESTAMP(3),
     "sentAt" TIMESTAMP(3),
     "acknowledgedAt" TIMESTAMP(3),
     "snoozedUntil" TIMESTAMP(3),
@@ -131,6 +134,11 @@ CREATE TABLE IF NOT EXISTS "ReminderDelivery" (
 
     CONSTRAINT "ReminderDelivery_pkey" PRIMARY KEY ("id")
 );
+
+ALTER TABLE "ReminderDelivery"
+  ADD COLUMN IF NOT EXISTS "attemptCount" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "lastAttemptAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "nextRetryAt" TIMESTAMP(3);
 
 -- 8. Create Session table
 CREATE TABLE IF NOT EXISTS "Session" (

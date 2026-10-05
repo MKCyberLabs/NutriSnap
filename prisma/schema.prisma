@@ -231,6 +231,9 @@ model ReminderDelivery {
   status            String      @default("PENDING")  // PENDING | SENT | ACKNOWLEDGED | SNOOZED | FAILED
   telegramMessageId Int?
   failureReason     String?
+  attemptCount      Int         @default(0)
+  lastAttemptAt     DateTime?
+  nextRetryAt       DateTime?
   sentAt            DateTime?
   acknowledgedAt    DateTime?
   snoozedUntil      DateTime?

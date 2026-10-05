@@ -353,6 +353,8 @@ bot.callbackQuery(/^snz_([^_]+)_(.+)$/, async (ctx) => {
     data: {
       status: 'SNOOZED',
       snoozedUntil: snoozeDate,
+      attemptCount: 0,
+      nextRetryAt: null,
     }
   });
 
