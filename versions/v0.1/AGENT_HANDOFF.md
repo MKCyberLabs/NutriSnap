@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestone 1 — Data foundation complete`
-- Current review gate: `Review A`
-- Last verified implementation checkpoint: Milestone 1 Foundation Checkpoint
+- Current milestone: `Milestone 2 — Health + Wealth shell / Today complete`
+- Current review gate: `Review A PASSED` (next gate: Review B after Milestone 4)
+- Last verified implementation checkpoint: Milestone 2 Shell & Today Checkpoint
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -26,23 +26,21 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 
 - `npm run test:analysis-contract`: 5/5 PASS;
 - `npm run typecheck`: PASS (0 errors);
-- `npm run build`: PASS (15/15 static pages);
+- `npm run build`: PASS (18/18 static pages);
+- `npm run test:today`: 5/5 PASS;
 - `npm run test:finance`: 8/8 PASS;
 - `npm run test:reminders`: 16/16 PASS;
-- `npm run test:life-hub`: 24/24 PASS;
+- `npm run test:life-hub`: 29/29 PASS;
 - `./scripts/verify-v01-local.sh`: PASS;
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-1. Commit and push the Milestone 1 Foundation Checkpoint to `feature/v0.1-health-wealth`.
-2. Conduct independent Review A on the Foundation Checkpoint. Codex reads `REVIEW_GUIDE.md` (Review A section) in read-only mode to evaluate:
-   - Schema & Decimal money representation (`FinancialAccount`, `FinancialTransaction`, `Obligation`, `ObligationOccurrence`, `ReminderDelivery`, generalized `Reminder`);
-   - Migration and backfill strategy (`prisma/migrations/20261005_v0_1_health_wealth/migration.sql`);
-   - Recurrence engine deterministic invariants (`src/lib/recurrence/recurrence.ts`);
-   - Delivery claim deduplication;
-   - Ownership boundaries and security negatives (`src/lib/finance/finance.ts`).
-3. Do not start broad Today/Finance UI before Review A PASS.
+1. Commit and push Milestone 2 Checkpoint to `feature/v0.1-health-wealth`.
+2. Proceed to Milestone 3 (Wealth Accounts & Transactions Core):
+   - Accounts CRUD and Derived balance calculation verification;
+   - Transaction entry (Income, Expense, Transfer) and category breakdown reconciliation;
+   - Negative authorization and security tests (cross-user rejections, same-account transfer rejections).
 
 ## Active blockers
 
@@ -52,8 +50,8 @@ None at this checkpoint.
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 1 Foundation Checkpoint & commit | `WRITE-SAME-TREE-SEQUENTIAL` | `de2f901` | IN PROGRESS |
-| 2 | Codex | Architecture/security/reviewer | Review A (schema, migration, recurrence, Decimal money, delivery idempotency, ownership boundaries) | `READ-ONLY` | Checkpoint SHA | ASSIGNED |
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 2 checkpoint commit & Milestone 3 implementation | `WRITE-SAME-TREE-SEQUENTIAL` | `533db7f` | IN PROGRESS |
+| 2 | Codex | Architecture/security/reviewer | Review A completed (PASS); Standby for Review B | `READ-ONLY` | Checkpoint SHA | IDLE |
 | 3 | AGY-Rohit | Bounded implementation/test helper | none yet | assign per task | n/a | IDLE |
 
 When opening a secondary pane, replace the relevant row with:
@@ -106,6 +104,40 @@ Blockers/open questions:
 ```
 
 ## History
+
+### Milestone 2 — Health + Wealth Shell / Today Checkpoint
+
+- Shared module registry (`src/lib/navigation.ts`) wired into desktop navigation and mobile bottom navigation bar (`src/components/layout/Navbar.tsx`) with 360px viewport compatibility.
+- Authenticated `/today` overview page (`src/app/today/page.tsx`) with user-scoped Food, Water, Wealth, and Reminders cards and partial-module failure protection.
+- Quick Add Modal component (`src/components/quick-add/QuickAddModal.tsx`) with tabs for Food, Water, Expense, Income, and Reminders.
+- Authenticated `/finance` and `/reminders` route shells created and wired into production route tree.
+- Unit and contract tests for Today aggregation added (`src/lib/today/today.test.ts`), passing 5/5 tests.
+- Full verification: `npm run test:analysis-contract` (5/5 PASS), `npm run typecheck` (0 errors), `npm run build` (18/18 static pages), `npm run test:life-hub` (29/29 PASS), `./scripts/verify-v01-local.sh` (PASS).
+
+### Review A — Data Foundation & Schema Review Gate
+
+- Conducted by Codex in read-only mode against commit SHA `533db7fe2b49f1ad30fe76bb77693b6d5bfe5e72`.
+- Verdict: EXPLICIT PASS.
+- All 12 criteria verified:
+  1. Decimal money representation;
+  2. Financial relations coherence;
+  3. Transfer invariants (distinct accounts, no income/expense inflation);
+  4. Legacy meal reminder migration/backfill survival;
+  5. Decoupling of generic finance reminders from meal categories;
+  6. Month-end clamping without drift;
+  7. Every-N-days anchoring;
+  8. Snooze anchor preservation;
+  9. Delivery claim deduplication;
+  10. Idempotent Mark-Paid with exactly-once optional expense creation;
+  11. Server-side authenticated ownership boundaries;
+  12. Non-destructive migration safety.
+
+### Milestone 1 — Data Foundation Checkpoint
+
+- Generalized Prisma schema with Decimal money and domain scoping (`FinancialAccount`, `FinancialTransaction`, `Obligation`, `ObligationOccurrence`, `ReminderDelivery`, generalized `Reminder`).
+- Pure recurrence engine (`src/lib/recurrence/recurrence.ts`) and finance domain invariants (`src/lib/finance/finance.ts`).
+- Non-destructive migration SQL delta (`prisma/migrations/20261005_v0_1_health_wealth/migration.sql`).
+- All 24 foundation tests passed; local software gate passed; committed as `533db7f`.
 
 ### Historical WIP recovery (September 27 WIP)
 

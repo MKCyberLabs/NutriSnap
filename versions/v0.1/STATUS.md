@@ -1,6 +1,6 @@
 # NutriSnap v0.1 — Status / Resume Point
 
-Status: **MILESTONE 1 COMPLETE — FOUNDATION VERIFIED — READY FOR REVIEW A**
+Status: **MILESTONE 2 COMPLETE — HEALTH + WEALTH SHELL / TODAY VERIFIED**
 
 Target branch: `feature/v0.1-health-wealth`
 
@@ -10,10 +10,20 @@ GitHub execution issue: **#131**
 
 ## Current phase
 
-`Milestone 1 — Data foundation & Review A gate`
+`Milestone 3 — Wealth Accounts & Transactions Core`
 
-Milestone 0 preflight checks (NSV01-0101..0110) are complete and PASS.
-Milestone 1 foundation implementation (NSV01-0201..0239) is complete and PASS with 24/24 unit/contract tests and full `./scripts/verify-v01-local.sh` PASS. Ready for independent Review A.
+- Milestone 0 preflight checks (NSV01-0101..0110) are complete and PASS.
+- Milestone 1 foundation implementation (NSV01-0201..0239) is complete and PASS.
+- Independent Review A (NSV01-0250..0251) performed by Codex: EXPLICIT PASS (12/12 criteria verified).
+- Milestone 2 shell implementation (NSV01-0301..0315) is complete and PASS:
+  - Shared module registry (`MODULE_REGISTRY`) driving desktop and mobile bottom navigation;
+  - Authenticated `/today` overview page with Health (Food & Water) and Wealth (Finances & Reminders);
+  - Quick Add modal supporting Food, Water, Expense, Income, and Reminder;
+  - Authenticated route shells for `/finance` and `/reminders`;
+  - Error isolation and partial-module failure protection verified;
+  - 29/29 `npm run test:life-hub` unit tests pass;
+  - Next.js build: 18/18 routes successfully compiled;
+  - Local software gate `./scripts/verify-v01-local.sh` PASS.
 
 Shared cross-agent memory is now established so AGY-Manickam, AGY-Rohit and Codex can switch/resume without depending on their private memory.
 
@@ -81,19 +91,24 @@ The following are retained for history but are not the active execution path on 
 
 ## Next action
 
-1. Independent Review A (Codex read-only inspection of schema diff, SQL migration delta, recurrence engine, and finance domain invariants).
-2. Upon Review A PASS, proceed to Milestone 2 (Today + Health/Wealth shell + Quick Add).
-3. Do not start broad Today/Finance UI before Review A is explicitly PASS.
+1. Proceed to Milestone 3 (Wealth accounts and transactions core).
+2. Implement accounts CRUD, derived balance calculation verification, transaction entry (income, expense, transfer), monthly summary aggregation, and category breakdown reconciliation.
+3. Add security negative authorization tests (cross-user mutation rejections, same-account transfer rejections).
+4. Run verification and checkpoint commits.
 
 ## Latest implementation checkpoint
 
+- **Milestone 2 — Health + Wealth Shell / Today Checkpoint**:
+  - Module Registry & Navigation: Created `src/lib/navigation.ts` defining `MODULE_REGISTRY` (`Today`, `Food`, `Water`, `Money`, `Reminders`). Wired into `src/components/layout/Navbar.tsx` for desktop and mobile bottom navigation with 360px viewport support.
+  - Today Read-Model & Overview: Implemented `src/app/today/page.tsx` and `src/app/today/actions.ts` aggregating Food, Water, Wealth, and Reminders with partial-module failure protection and strict user scoping.
+  - Quick Add Modal: Implemented `src/components/quick-add/QuickAddModal.tsx` supporting Food, Water, Expense, Income, and Reminders.
+  - Route Shells: Implemented `/finance` (`src/app/finance/page.tsx`) and `/reminders` (`src/app/reminders/page.tsx`).
+  - Tests & Verification: `test:today` (5/5 PASS), `test:life-hub` (29/29 PASS), `test:finance` (8/8 PASS), `test:reminders` (16/16 PASS), `typecheck` (PASS), `build` (18/18 static pages generated), `./scripts/verify-v01-local.sh` (PASS).
+- **Review A Gate**:
+  - Performed independently by Codex on SHA `533db7fe2b49f1ad30fe76bb77693b6d5bfe5e72`.
+  - Verdict: EXPLICIT PASS (12/12 criteria passed, 0 required repairs).
 - **Milestone 1 — Data Foundation Checkpoint**:
-  - Schema Generalized: Added `FinancialAccount`, `FinancialTransaction`, `Obligation`, `ObligationOccurrence`, `ReminderDelivery`, and generalized `Reminder` (with `Decimal` money, domain scoping, and recurrence representation).
-  - Migration & Backfill: Documented SQL migration in `prisma/migrations/20261005_v0_1_health_wealth/migration.sql` with zero data loss, safe constraint replacement, and idempotent legacy meal backfill.
-  - Recurrence Engine: Pure deterministic engine in `src/lib/recurrence/recurrence.ts` handling ONCE, DAILY, WEEKLY, MONTHLY (month-end clamp without drift), YEARLY (leap-day rule), EVERY_N_DAYS (28/56/84), timezone preservation (Asia/Kolkata), DST transitions, and snooze anchor preservation.
-  - Finance Domain Logic: Invariants enforced in `src/lib/finance/finance.ts` for account types, transaction types, Decimal currency, transfer account separation and user ownership, derived balance, and monthly totals (excluding transfers).
-  - Tests: `test:finance` (8/8 PASS), `test:reminders` (16/16 PASS), `test:life-hub` (24/24 PASS), `test:analysis-contract` (5/5 PASS), `typecheck` (PASS), `build` (PASS), `./scripts/verify-v01-local.sh` (PASS).
-  - Ready for Review A.
+  - Schema Generalized, Migration SQL documented, Recurrence engine verified, Finance domain invariants verified.
 
 ## Open blockers
 
