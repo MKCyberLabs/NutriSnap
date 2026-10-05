@@ -357,24 +357,41 @@ bot.on('message', async (ctx, next) => {
       return ctx.reply("❌ Invalid format. Please use HH:MM format (e.g. 08:00 or 14:30).");
     }
 
-    await prisma.reminder.upsert({
+    const existingReminder = await prisma.reminder.findFirst({
       where: {
-        userId_category: {
-          userId: user.id,
-          category
-        }
-      },
-      update: {
-        time: text,
-        isActive: true
-      },
-      create: {
         userId: user.id,
         category,
-        time: text,
-        isActive: true
+        domain: 'HEALTH'
       }
     });
+
+    if (existingReminder) {
+      await prisma.reminder.update({
+        where: { id: existingReminder.id },
+        data: {
+          time: text,
+          timeOfDay: text,
+          isActive: true
+        }
+      });
+    } else {
+      await prisma.reminder.create({
+        data: {
+          userId: user.id,
+          domain: 'HEALTH',
+          type: 'MEAL',
+          title: category,
+          category,
+          mealCategory: category,
+          time: text,
+          timeOfDay: text,
+          recurrenceType: 'DAILY',
+          recurrenceInterval: 1,
+          reminderOffsetsMin: [0],
+          isActive: true
+        }
+      });
+    }
     
     return ctx.reply(`✅ Your ${category} reminder is set to ${text}!`);
   } else if (ctx.message?.reply_to_message && ctx.message.reply_to_message.text?.includes("amount of water you drank (in ml)")) {

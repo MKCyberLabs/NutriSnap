@@ -1,6 +1,6 @@
 # NutriSnap v0.1 — Status / Resume Point
 
-Status: **PLANNING COMPLETE — SHARED AGENT MEMORY READY — HERDR EXECUTION NOT YET STARTED**
+Status: **MILESTONE 1 COMPLETE — FOUNDATION VERIFIED — READY FOR REVIEW A**
 
 Target branch: `feature/v0.1-health-wealth`
 
@@ -10,9 +10,10 @@ GitHub execution issue: **#131**
 
 ## Current phase
 
-`Milestone 0 — Baseline and branch`
+`Milestone 1 — Data foundation & Review A gate`
 
-Implementation has not started under the Herdr execution contract yet.
+Milestone 0 preflight checks (NSV01-0101..0110) are complete and PASS.
+Milestone 1 foundation implementation (NSV01-0201..0239) is complete and PASS with 24/24 unit/contract tests and full `./scripts/verify-v01-local.sh` PASS. Ready for independent Review A.
 
 Shared cross-agent memory is now established so AGY-Manickam, AGY-Rohit and Codex can switch/resume without depending on their private memory.
 
@@ -80,31 +81,19 @@ The following are retained for history but are not the active execution path on 
 
 ## Next action
 
-AGY-Manickam should:
-
-1. fetch origin;
-2. stay on `feature/v0.1-health-wealth`;
-3. pull `--ff-only` if the worktree is safe;
-4. read root `AGENTS.md`, `AGENT_HANDOFF.md`, this file, and `AGENT_SKILLS.md`;
-5. read `HERDR_MASTER_PROMPT.md` and the remaining active source-of-truth files;
-6. inspect branch/worktree/schema/routes/actions/scheduler/tests before edits;
-7. begin at the first unfinished item in `COMPLETE_VERIFICATION_PLAN.md`;
-8. execute Milestone 0 / Milestone 1 in bounded verified checkpoints;
-9. update both `STATUS.md` and `AGENT_HANDOFF.md` after each meaningful checkpoint;
-10. stop major UI expansion until Review A PASS.
-
-AGY-Rohit or Codex may be switched in only for role-appropriate bounded work after reading the same shared memory.
+1. Independent Review A (Codex read-only inspection of schema diff, SQL migration delta, recurrence engine, and finance domain invariants).
+2. Upon Review A PASS, proceed to Milestone 2 (Today + Health/Wealth shell + Quick Add).
+3. Do not start broad Today/Finance UI before Review A is explicitly PASS.
 
 ## Latest implementation checkpoint
 
-- **Historical September WIP Recovery**: Integrated onto `feature/v0.1-health-wealth` (commits `2cfcc11..60821a3`):
-  - `2cfcc11`: `fix(auth): preserve September authentication and session security improvements`
-  - `2bb984a`: `fix(upload): recover validated upload route and telegram image handling changes`
-  - `ac6c1aa`: `feat(ai): protect meal analysis with authenticated server action and input validation`
-  - `c12fc28`: `build(config): pin dependencies, enforce strict build checks and environment variables`
-  - `60821a3`: `docs: recover repository guidelines, deployment guides, test script and recovery notes`
-- **Validation**: Analysis contract (5/5 PASS), typecheck (PASS), Next.js production build (PASS), git diff check (clean).
-- **Branch HEAD**: Resulting v0.1 baseline SHA ready for Milestone 0 / Milestone 1.
+- **Milestone 1 — Data Foundation Checkpoint**:
+  - Schema Generalized: Added `FinancialAccount`, `FinancialTransaction`, `Obligation`, `ObligationOccurrence`, `ReminderDelivery`, and generalized `Reminder` (with `Decimal` money, domain scoping, and recurrence representation).
+  - Migration & Backfill: Documented SQL migration in `prisma/migrations/20261005_v0_1_health_wealth/migration.sql` with zero data loss, safe constraint replacement, and idempotent legacy meal backfill.
+  - Recurrence Engine: Pure deterministic engine in `src/lib/recurrence/recurrence.ts` handling ONCE, DAILY, WEEKLY, MONTHLY (month-end clamp without drift), YEARLY (leap-day rule), EVERY_N_DAYS (28/56/84), timezone preservation (Asia/Kolkata), DST transitions, and snooze anchor preservation.
+  - Finance Domain Logic: Invariants enforced in `src/lib/finance/finance.ts` for account types, transaction types, Decimal currency, transfer account separation and user ownership, derived balance, and monthly totals (excluding transfers).
+  - Tests: `test:finance` (8/8 PASS), `test:reminders` (16/16 PASS), `test:life-hub` (24/24 PASS), `test:analysis-contract` (5/5 PASS), `typecheck` (PASS), `build` (PASS), `./scripts/verify-v01-local.sh` (PASS).
+  - Ready for Review A.
 
 ## Open blockers
 

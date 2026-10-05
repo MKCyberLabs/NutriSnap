@@ -33,6 +33,11 @@ model User {
   hydrationSetting      HydrationSetting?
   hydrationLogs         HydrationLog[]
   sessions              Session[]
+  financialAccounts     FinancialAccount[]
+  financialTransactions FinancialTransaction[]
+  obligations           Obligation[]
+  obligationOccurrences ObligationOccurrence[]
+  reminderDeliveries    ReminderDelivery[]
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }
@@ -92,17 +97,153 @@ model FoodItem {
 }
 
 model Reminder {
-  id        String   @id @default(cuid())
-  userId    String
-  category  String
-  time      String
-  isActive  Boolean  @default(true)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String             @id @default(cuid())
+  userId             String
+  domain             String             @default("HEALTH") // HEALTH | FINANCE
+  type               String             @default("MEAL")   // MEAL | HYDRATION | GENERIC | OBLIGATION
+  title              String             @default("")
+  category           String?
+  time               String?
+  timeOfDay          String?
+  scheduledAt        DateTime?
+  recurrenceType     String?
+  recurrenceInterval Int?
+  activeDays         String[]           @default([])
+  reminderOffsetsMin Int[]              @default([0])
+  isActive           Boolean            @default(true)
+  obligationId       String?
+  mealCategory       String?
+  snoozedUntil       DateTime?
+  lastTriggeredAt    DateTime?
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  obligation         Obligation?        @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+  deliveries         ReminderDelivery[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  @@unique([userId, category])
+  @@index([userId, isActive])
+  @@index([userId, domain])
+  @@index([obligationId])
+}
+
+model FinancialAccount {
+  id             String                 @id @default(cuid())
+  userId         String
+  name           String
+  type           String                 // BANK | CASH | WALLET | CREDIT_CARD
+  institution    String?
+  openingBalance Decimal                @default(0) @db.Decimal(14, 2)
+  creditLimit    Decimal?               @db.Decimal(14, 2)
+  isActive       Boolean                @default(true)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions   FinancialTransaction[] @relation("AccountTransactions")
+  transfersTo    FinancialTransaction[] @relation("TransferAccountTransactions")
+  obligations    Obligation[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([userId, isActive])
+  @@index([userId, type])
+}
+
+model FinancialTransaction {
+  id                   String                @id @default(cuid())
+  userId               String
+  type                 String                // INCOME | EXPENSE | TRANSFER
+  amount               Decimal               @db.Decimal(14, 2)
+  category             String
+  occurredAt           DateTime
+  accountId            String
+  transferAccountId    String?
+  obligationId         String?
+  note                 String?
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account              FinancialAccount      @relation("AccountTransactions", fields: [accountId], references: [id], onDelete: Cascade)
+  transferAccount      FinancialAccount?     @relation("TransferAccountTransactions", fields: [transferAccountId], references: [id], onDelete: SetNull)
+  obligation           Obligation?           @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+  obligationOccurrence ObligationOccurrence?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([accountId])
+  @@index([transferAccountId])
+  @@index([obligationId])
+}
+
+model Obligation {
+  id                 String                 @id @default(cuid())
+  userId             String
+  title              String
+  kind               String                 // RECHARGE | CREDIT_CARD | BILL | SUBSCRIPTION | RENT | EMI | INSURANCE | OTHER
+  amount             Decimal?               @db.Decimal(14, 2)
+  accountId          String?
+  dueAt              DateTime
+  recurrenceType     String                 // ONCE | DAILY | WEEKLY | MONTHLY | YEARLY | EVERY_N_DAYS
+  recurrenceInterval Int?
+  reminderOffsetsMin Int[]                  @default([0])
+  isActive           Boolean                @default(true)
+  isArchived         Boolean                @default(false)
+  notes              String?
+  lastCompletedAt    DateTime?
+  nextDueAt          DateTime
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account            FinancialAccount?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  transactions       FinancialTransaction[]
+  occurrences        ObligationOccurrence[]
+  reminders          Reminder[]
+  deliveries         ReminderDelivery[]
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([userId, isActive])
+  @@index([userId, nextDueAt])
+}
+
+model ObligationOccurrence {
+  id            String                @id @default(cuid())
+  userId        String
+  obligationId  String
+  occurrenceKey String
+  dueDate       DateTime
+  status        String                @default("COMPLETED") // COMPLETED | SKIPPED
+  paidAt        DateTime              @default(now())
+  transactionId String?               @unique
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  obligation    Obligation            @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([obligationId, occurrenceKey])
   @@index([userId])
+}
+
+model ReminderDelivery {
+  id                String      @id @default(cuid())
+  userId            String
+  reminderId        String
+  obligationId      String?
+  occurrenceKey     String
+  scheduledFor      DateTime
+  offsetMinutes     Int
+  channel           String      @default("TELEGRAM") // TELEGRAM | APP
+  status            String      @default("PENDING")  // PENDING | SENT | ACKNOWLEDGED | SNOOZED | FAILED
+  telegramMessageId Int?
+  failureReason     String?
+  sentAt            DateTime?
+  acknowledgedAt    DateTime?
+  snoozedUntil      DateTime?
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminder          Reminder    @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  obligation        Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([reminderId, occurrenceKey, offsetMinutes, channel])
+  @@index([userId, status])
+  @@index([scheduledFor])
+  @@index([obligationId])
 }
 
 model HydrationSetting {

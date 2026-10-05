@@ -11,6 +11,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:analysis-contract": "tsx --test src/lib/python-analysis-response.test.ts",
+    "test:finance": "tsx --test src/lib/finance/finance.test.ts",
+    "test:reminders": "tsx --test src/lib/recurrence/recurrence.test.ts src/lib/migration/migration-backfill.test.ts",
+    "test:life-hub": "tsx --test src/lib/finance/finance.test.ts src/lib/recurrence/recurrence.test.ts src/lib/migration/migration-backfill.test.ts",
     "prisma:seed": "prisma db seed"
   },
   "dependencies": {

@@ -34,31 +34,48 @@ async function verifyReminderOwner(id: string) {
 export async function getReminders(userId: string) {
   await verifyAuth(userId);
   return prisma.reminder.findMany({
-    where: { userId },
+    where: { userId, domain: 'HEALTH' },
     orderBy: { time: 'asc' }
   });
 }
 
 export async function saveReminder(userId: string, category: string, time: string, isActive: boolean = true) {
   await verifyAuth(userId);
-  await prisma.reminder.upsert({
+  const existing = await prisma.reminder.findFirst({
     where: {
-      userId_category: {
-        userId,
-        category
-      }
-    },
-    update: {
-      time,
-      isActive
-    },
-    create: {
       userId,
       category,
-      time,
-      isActive
+      domain: 'HEALTH'
     }
   });
+
+  if (existing) {
+    await prisma.reminder.update({
+      where: { id: existing.id },
+      data: {
+        time,
+        timeOfDay: time,
+        isActive
+      }
+    });
+  } else {
+    await prisma.reminder.create({
+      data: {
+        userId,
+        domain: 'HEALTH',
+        type: 'MEAL',
+        title: category,
+        category,
+        mealCategory: category,
+        time,
+        timeOfDay: time,
+        recurrenceType: 'DAILY',
+        recurrenceInterval: 1,
+        reminderOffsetsMin: [0],
+        isActive
+      }
+    });
+  }
 
   revalidatePath('/settings');
   return { success: true };

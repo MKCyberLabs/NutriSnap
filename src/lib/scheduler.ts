@@ -30,17 +30,19 @@ export function startScheduler() {
       for (const reminder of activeReminders) {
         if (!reminder.user.telegramId) continue;
         
-        console.log(`[Scheduler] Reminder: ${reminder.category} at ${reminder.time} for user ${reminder.user.timezone}`);
+        // Handle legacy and health meal reminders
+        if (reminder.category && reminder.time) {
+          console.log(`[Scheduler] Reminder: ${reminder.category} at ${reminder.time} for user ${reminder.user.timezone}`);
 
-        const userTimezone = reminder.user.timezone || 'UTC';
-        const nowInTz = new TZDate(new Date(), userTimezone);
-        
-        // Current time in HH:mm in user's timezone
-        const hours = String(nowInTz.getHours()).padStart(2, '0');
-        const minutes = String(nowInTz.getMinutes()).padStart(2, '0');
-        const currentTimeString = `${hours}:${minutes}`;
+          const userTimezone = reminder.user.timezone || 'UTC';
+          const nowInTz = new TZDate(new Date(), userTimezone);
 
-        if (currentTimeString === reminder.time) {
+          // Current time in HH:mm in user's timezone
+          const hours = String(nowInTz.getHours()).padStart(2, '0');
+          const minutes = String(nowInTz.getMinutes()).padStart(2, '0');
+          const currentTimeString = `${hours}:${minutes}`;
+
+          if (currentTimeString === reminder.time) {
           // It is exactly the minute of the reminder.
           // Check if they already logged this category today
           const tzDateString = new Intl.DateTimeFormat('en-US', { 
@@ -78,6 +80,7 @@ export function startScheduler() {
           }
         }
       }
+    }
 
       // --- Hydration Reminders ---
       const activeHydrationSettings = await prisma.hydrationSetting.findMany({
