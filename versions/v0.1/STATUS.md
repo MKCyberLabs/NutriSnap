@@ -51,7 +51,7 @@ These are baseline results and must be rerun where required after implementation
 
 The OpenClaw clone was switched to `feature/v0.1-health-wealth` with a clean working tree.
 
-Older uncommitted `main` work was preserved in a Git stash before switching. Treat pre-existing stashes as owner-owned historical WIP. Do not apply/pop/drop them without explicit owner instruction.
+Older uncommitted `main` work from September was originally preserved in `stash@{0}`. Per owner instructions, this WIP was recovered, audited, and committed to `recovery/september-wip`, verified, and cherry-picked into `feature/v0.1-health-wealth` (commits `2cfcc11..60821a3`). The original stash `stash@{0}` remains preserved intact.
 
 ## Active execution files
 
@@ -97,7 +97,14 @@ AGY-Rohit or Codex may be switched in only for role-appropriate bounded work aft
 
 ## Latest implementation checkpoint
 
-None yet under Herdr execution.
+- **Historical September WIP Recovery**: Integrated onto `feature/v0.1-health-wealth` (commits `2cfcc11..60821a3`):
+  - `2cfcc11`: `fix(auth): preserve September authentication and session security improvements`
+  - `2bb984a`: `fix(upload): recover validated upload route and telegram image handling changes`
+  - `ac6c1aa`: `feat(ai): protect meal analysis with authenticated server action and input validation`
+  - `c12fc28`: `build(config): pin dependencies, enforce strict build checks and environment variables`
+  - `60821a3`: `docs: recover repository guidelines, deployment guides, test script and recovery notes`
+- **Validation**: Analysis contract (5/5 PASS), typecheck (PASS), Next.js production build (PASS), git diff check (clean).
+- **Branch HEAD**: Resulting v0.1 baseline SHA ready for Milestone 0 / Milestone 1.
 
 ## Open blockers
 

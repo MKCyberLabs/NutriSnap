@@ -19,19 +19,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 
 The OpenClaw clone was switched cleanly from `main` to `feature/v0.1-health-wealth`.
 
-Before switching, older uncommitted `main` work from September was preserved in a Git stash (`stash@{0}` at the time of creation).
+Older uncommitted `main` work from September was originally preserved in `stash@{0}`. Per owner instructions, this WIP was recovered and evaluated on branch `recovery/september-wip`, validated via test suite and build checks, and cherry-picked into `feature/v0.1-health-wealth` (commits `2cfcc11`, `2bb984a`, `ac6c1aa`, `c12fc28`, `60821a3`).
 
-That stash is **owner-owned historical WIP**.
-
-Agents must NOT automatically:
-
-- `git stash pop`;
-- `git stash apply`;
-- `git stash drop`;
-- merge its contents into the v0.1 branch;
-- discard it.
-
-If stash handling becomes relevant, stop and ask the owner.
+The original stash `stash@{0}` remains preserved and intact until final confirmation.
 
 ## Known baseline evidence
 
@@ -121,6 +111,23 @@ Blockers/open questions:
 ```
 
 ## History
+
+### Historical WIP recovery (September 27 WIP)
+
+- Stash `stash@{0}` recovered onto `recovery/september-wip` and pushed to remote origin.
+- 5 modular commits created and cherry-picked onto `feature/v0.1-health-wealth`:
+  - `2cfcc11`: `fix(auth): preserve September authentication and session security improvements`
+  - `2bb984a`: `fix(upload): recover validated upload route and telegram image handling changes`
+  - `ac6c1aa`: `feat(ai): protect meal analysis with authenticated server action and input validation`
+  - `c12fc28`: `build(config): pin dependencies, enforce strict build checks and environment variables`
+  - `60821a3`: `docs: recover repository guidelines, deployment guides, test script and recovery notes`
+- All regression checks executed and PASS:
+  - `npx prisma generate`: PASS (Prisma Client v6.12.0)
+  - `npm run test:analysis-contract`: 5/5 PASS
+  - `npm run typecheck`: PASS (0 errors)
+  - `npm run build`: PASS (15/15 routes generated)
+  - `git diff --check`: PASS (clean)
+- Original `stash@{0}` preserved intact.
 
 ### Shared-memory setup
 
