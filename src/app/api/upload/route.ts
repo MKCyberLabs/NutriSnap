@@ -1,10 +1,30 @@
-
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'path';
-import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
-import crypto from 'crypto';
+import { getSessionUser } from '@/lib/session';
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const imageTypes = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+} as const;
+
+function hasImageSignature(buffer: Buffer, extension: keyof typeof imageTypes): boolean {
+  if (extension === '.jpg' || extension === '.jpeg') {
+    return buffer.length >= 3 && buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+  }
+  if (extension === '.png') {
+    return buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  }
+  if (extension === '.webp') {
+    return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+  }
+  return buffer.toString('ascii', 0, 6) === 'GIF87a' || buffer.toString('ascii', 0, 6) === 'GIF89a';
+}
 
 /**
  * API Route to handle local file uploads for meal photos.
@@ -13,53 +33,36 @@ import crypto from 'crypto';
 export async function POST(request: NextRequest) {
   try {
     // 🛡️ Sentinel: Enforce Authentication for File Uploads
-    const cookieStore = await cookies();
-    const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
-
-    if (!sessionId) {
-      console.warn('Unauthorized upload attempt');
-      return NextResponse.json({ error: 'Unauthorized: Missing session token' }, { status: 401 });
-    }
-
-    // Validate session against database to ensure it's a real user
-    const user = await prisma.user.findUnique({
-      where: { id: sessionId },
-      select: { id: true }, // Only fetch ID to minimize payload
-    });
-
-    if (!user) {
-      console.warn('Invalid session upload attempt');
-      return NextResponse.json({ error: 'Unauthorized: Invalid session token' }, { status: 401 });
+    const user = await getSessionUser();
+    if (!user || user.requiresPasswordReset) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const file = formData.get('file');
 
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
+    const extension = path.extname(file.name).toLowerCase();
+    if (!(extension in imageTypes)) {
+      return NextResponse.json({ error: 'Unsupported image type' }, { status: 400 });
+    }
+    const imageExtension = extension as keyof typeof imageTypes;
+    if (file.type !== imageTypes[imageExtension] || file.size === 0 || file.size > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: 'Invalid image type or size' }, { status: 400 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (!hasImageSignature(buffer, imageExtension)) {
+      return NextResponse.json({ error: 'Invalid image content' }, { status: 400 });
+    }
     
     // Ensure the upload directory exists
     const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch (e) {
-      // Directory might already exist
-    }
-
-    // Generate a unique filename: timestamp_uuid.extension
-    const fileExtension = path.extname(file.name).toLowerCase() || '.png';
-
-    // Security Enhancement: Validate file extension
-    // Excluded '.svg' to prevent Stored XSS vulnerabilities
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
-    if (!allowedExtensions.includes(fileExtension)) {
-      return NextResponse.json({ error: 'Unsupported file type. Only images are allowed.' }, { status: 400 });
-    }
-
-    const uniqueFilename = `${Date.now()}_${crypto.randomUUID()}${fileExtension}`;
+    await mkdir(uploadDir, { recursive: true });
+    const uniqueFilename = `${randomUUID()}${imageExtension}`;
     const filePath = path.join(uploadDir, uniqueFilename);
 
     // Save to disk

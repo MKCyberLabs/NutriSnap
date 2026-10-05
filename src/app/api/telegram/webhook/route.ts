@@ -6,7 +6,7 @@ import { askNutritionFlow } from '@/ai/flows/ask-nutrition';
 import { NotFoodError } from '@/lib/errors';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 import { TZDate } from '@date-fns/tz';
 import { startOfDay, endOfDay, formatISO } from 'date-fns';
@@ -35,9 +35,11 @@ function calculateNutrientTargets(user: any) {
   };
 }
 
-if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN !== 'mock') {
-  // Register commands with Telegram so they appear in the autocomplete menu
-  bot.api.setMyCommands([
+let commandsRegistered = false;
+
+async function registerCommands() {
+  if (commandsRegistered) return;
+  await bot.api.setMyCommands([
     { command: 'help', description: 'Show all available commands' },
     { command: 'goals', description: 'View your daily nutrition goals and remaining limits' },
     { command: 'summary', description: 'View your daily nutrition progress and biometric targets' },
@@ -45,7 +47,8 @@ if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN !== 'mock')
     { command: 'settimezone', description: 'Set your local timezone (e.g., /settimezone America/New_York)' },
     { command: 'ask', description: 'Ask the AI about your nutritional habits' },
     { command: 'reminder', description: 'Set meal reminders' }
-  ]).catch(console.error);
+  ]);
+  commandsRegistered = true;
 }
 
 bot.command('help', async (ctx) => {
@@ -459,6 +462,9 @@ bot.on('message', async (ctx) => {
     if (hasPhoto) {
       const photo = ctx.message!.photo![ctx.message!.photo!.length - 1];
       const file = await ctx.api.getFile(photo.file_id);
+      if (!file.file_path || (file.file_size ?? 0) > 10 * 1024 * 1024) {
+        throw new Error('Telegram image is unavailable or too large');
+      }
       const fileLink = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
 
       const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
@@ -466,13 +472,15 @@ bot.on('message', async (ctx) => {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
       
-      const extMatch = file.file_path?.match(/\.([^.]+)$/);
-      const ext = extMatch ? `.${extMatch[1]}` : '.jpg';
-      const filename = `${Date.now()}_${telegramId}_${crypto.randomUUID()}${ext}`;
+      const extMatch = file.file_path?.match(/\.(jpg|jpeg|png|webp|gif)$/i);
+      const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.jpg';
+      const filename = `${randomUUID()}${ext}`;
       const filePath = path.join(uploadsDir, filename);
 
       const response = await fetch(fileLink);
+      if (!response.ok) throw new Error('Failed to download Telegram image');
       const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > 10 * 1024 * 1024) throw new Error('Telegram image is too large');
       fs.writeFileSync(filePath, Buffer.from(buffer));
       
       localImagePath = `/uploads/${filename}`;
@@ -624,12 +632,16 @@ _${analysisResult.healthInsight}_${goalsMsg}`;
 export async function POST(req: NextRequest) {
   try {
     const secret = req.headers.get('x-telegram-bot-api-secret-token');
-    if (process.env.TELEGRAM_WEBHOOK_SECRET && secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    if (!process.env.TELEGRAM_WEBHOOK_SECRET || !process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN === 'mock') {
+      return NextResponse.json({ error: 'Webhook is not configured' }, { status: 503 });
+    }
+    if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
     const update = await req.json();
     await bot.init();
+    await registerCommands();
     
     // Process the update in the background so we can respond with 200 OK immediately
     // This prevents Telegram from retrying the webhook and sending duplicate responses
