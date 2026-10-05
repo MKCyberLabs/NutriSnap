@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
+import { revokeSession } from '@/lib/session';
 
 export async function POST() {
-  const response = NextResponse.json({ success: true });
-  response.cookies.delete('nutrisnap_session_id');
-  return response;
+  await revokeSession();
+  return NextResponse.json({ success: true });
 }

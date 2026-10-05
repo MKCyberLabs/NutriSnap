@@ -2,27 +2,30 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { cookies } from 'next/headers';
+import { requireUser } from '@/lib/session';
+import { z } from 'zod';
+
+const hydrationSettingSchema = z.object({
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  intervalMinutes: z.number().int().min(1).max(1440),
+  activeDays: z.array(z.string()).max(7),
+  isActive: z.boolean(),
+});
 
 async function verifyAuth(userId: string) {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
-  if (!sessionId || sessionId !== userId) {
-    throw new Error('Unauthorized');
-  }
+  await requireUser(userId);
 }
 
 async function verifyReminderOwner(id: string) {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
-  if (!sessionId) throw new Error('Unauthorized');
+  const user = await requireUser();
 
   const reminder = await prisma.reminder.findUnique({
     where: { id },
     select: { userId: true }
   });
 
-  if (!reminder || reminder.userId !== sessionId) {
+  if (!reminder || reminder.userId !== user.id) {
     throw new Error('Unauthorized');
   }
 }
@@ -106,11 +109,12 @@ export async function getHydrationSetting(userId: string) {
   });
 }
 
-export async function saveHydrationSetting(userId: string, data: any) {
+export async function saveHydrationSetting(userId: string, data: unknown) {
   await verifyAuth(userId);
+  const setting = hydrationSettingSchema.parse(data);
   return prisma.hydrationSetting.upsert({
     where: { userId },
-    update: data,
-    create: { userId, ...data }
+    update: setting,
+    create: { userId, ...setting }
   });
 }

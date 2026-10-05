@@ -1,19 +1,12 @@
 'use server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { requireUser } from '@/lib/session';
+import { passwordPolicy } from '@/lib/validation';
 
 async function verifyAdmin() {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
-  if (!sessionId) throw new Error('Unauthorized: No session token');
-  
-  const user = await prisma.user.findUnique({
-    where: { id: sessionId },
-    select: { id: true, role: true }
-  });
-  
-  if (!user || user.role !== 'ADMIN') {
+  const user = await requireUser();
+  if (user.role !== 'ADMIN') {
     throw new Error('Forbidden: Requires ADMIN role');
   }
   return user;
@@ -44,7 +37,8 @@ export async function createDbUser(userData: any) {
     if (!userData.password && !initialPassword) {
       throw new Error('No password provided and ADMIN_INITIAL_PASSWORD is not set');
     }
-    const hashedPassword = await bcrypt.hash(userData.password || initialPassword!, 10);
+    const newPassword = passwordPolicy.parse(userData.password || initialPassword);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
     const user = await prisma.user.create({
       data: {
         email: userData.email,
@@ -77,6 +71,7 @@ export async function updateDbUser(userId: string, userData: any) {
       telegramId: userData.telegramId || null,
     };
     if (userData.password) {
+      passwordPolicy.parse(userData.password);
       updateData.password = await bcrypt.hash(userData.password, 10);
     }
     
@@ -84,6 +79,7 @@ export async function updateDbUser(userId: string, userData: any) {
       where: { id: userId },
       data: updateData
     });
+    if (userData.password) await prisma.session.deleteMany({ where: { userId } });
     // Remove password field to prevent hash leak to frontend
     const { password, ...userWithoutPassword } = user;
     return { success: true, user: userWithoutPassword };
@@ -103,4 +99,3 @@ export async function deleteDbUser(userId: string) {
     return { success: false };
   }
 }
-

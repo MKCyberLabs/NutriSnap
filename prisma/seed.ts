@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { PrismaClient } from './generated/client';
 import bcrypt from 'bcryptjs';
 
@@ -18,6 +19,9 @@ async function main() {
   if (!initialPassword) {
     console.error('CRITICAL ERROR: ADMIN_INITIAL_PASSWORD environment variable is not set.');
     process.exit(1);
+  }
+  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(initialPassword)) {
+    throw new Error('ADMIN_INITIAL_PASSWORD must meet the application password policy');
   }
 
   // Check if the Super Admin already exists to prevent duplicate seeding
