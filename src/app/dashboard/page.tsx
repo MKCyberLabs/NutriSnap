@@ -12,10 +12,8 @@ import {
   UserMetrics,
 } from "@/lib/types";
 import { MealCategoryCard } from "@/components/dashboard/MealCategoryCard";
-import {
-  mealNutritionalAnalysis,
-  MealNutritionalAnalysisOutput,
-} from "@/ai/flows/meal-nutritional-analysis";
+import { analyzeMeal } from "@/ai/actions/analyze-meal";
+import type { MealNutritionalAnalysisOutput } from "@/ai/flows/meal-nutritional-analysis";
 import {
   fetchUserLogs,
   saveMealLog,
@@ -530,7 +528,7 @@ export default function DashboardPage() {
     if (!text.trim()) return;
     setIsAddingItem(logId);
     try {
-      const result = await mealNutritionalAnalysis({ mealDescription: text });
+      const result = await analyzeMeal({ mealDescription: text });
       const updatedLogs = logs.map((log) => {
         if (log.id !== logId) return log;
         const newItems: FoodItem[] = (result.foodItems || []).map((item) => ({
@@ -1239,7 +1237,7 @@ export default function DashboardPage() {
                                               </AlertDialogTitle>
                                               <AlertDialogDescription>
                                                 Are you sure you want to remove
-                                                "{item.name}" from this meal?
+                                                &quot;{item.name}&quot; from this meal?
                                                 This action cannot be undone.
                                               </AlertDialogDescription>
                                             </AlertDialogHeader>

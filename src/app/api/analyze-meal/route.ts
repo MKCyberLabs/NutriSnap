@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { mealNutritionalAnalysis } from '@/ai/flows/meal-nutritional-analysis';
 import { NotFoodError } from '@/lib/errors';
 import healthMatrixMock from '@/mocks/health-matrix.json';
-import { cookies } from 'next/headers';
-import { prisma } from '@/lib/prisma';
+import { getSessionUser } from '@/lib/session';
 
 /**
  * Health Matrix API Route
@@ -13,22 +12,9 @@ import { prisma } from '@/lib/prisma';
 export async function POST(req: NextRequest) {
   try {
     // 🛡️ Sentinel: Enforce Authentication for AI endpoints
-    const cookieStore = await cookies();
-    const sessionId = cookieStore.get('nutrisnap_session_id')?.value;
-
-    if (!sessionId) {
-      console.warn('Unauthorized analysis attempt');
-      return NextResponse.json({ error: 'Unauthorized: Missing session token' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: sessionId },
-      select: { id: true },
-    });
-
-    if (!user) {
-      console.warn('Invalid session analysis attempt');
-      return NextResponse.json({ error: 'Unauthorized: Invalid session token' }, { status: 401 });
+    const user = await getSessionUser();
+    if (!user || user.requiresPasswordReset) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();
