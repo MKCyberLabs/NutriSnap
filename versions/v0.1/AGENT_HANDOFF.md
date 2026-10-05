@@ -13,7 +13,7 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Current review gate: none yet
 - Last verified implementation checkpoint: none yet
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
-- Shared-memory files added after that planning baseline; always pull `origin/feature/v0.1-health-wealth` before relying on the SHA above as current HEAD.
+- Shared-memory files and recovered historical WIP have advanced the branch beyond that planning SHA; always fetch/pull before relying on a stale SHA as current HEAD.
 
 ## OpenClaw workspace note
 
@@ -21,7 +21,7 @@ The OpenClaw clone was switched cleanly from `main` to `feature/v0.1-health-weal
 
 Older uncommitted `main` work from September was originally preserved in `stash@{0}`. Per owner instructions, this WIP was recovered and evaluated on branch `recovery/september-wip`, validated via test suite and build checks, and cherry-picked into `feature/v0.1-health-wealth` (commits `2cfcc11`, `2bb984a`, `ac6c1aa`, `c12fc28`, `60821a3`).
 
-The original stash `stash@{0}` remains preserved and intact until final confirmation.
+The original stash `stash@{0}` remains preserved and intact as a safety copy. No agent may apply/pop/drop it without explicit owner approval.
 
 ## Known baseline evidence
 
@@ -48,37 +48,47 @@ The next active agent should:
 
 1. read root `AGENTS.md` completely;
 2. read this file and `STATUS.md`;
-3. fetch origin and confirm branch/worktree state;
-4. pull `--ff-only` if safe;
-5. read `AGENT_SKILLS.md` plus the active v0.1 source-of-truth files;
-6. begin `Milestone 0` from the first unfinished item in `COMPLETE_VERIFICATION_PLAN.md`;
-7. inspect current schema/routes/actions/scheduler/tests before editing;
-8. rerun feasible baseline checks;
-9. update `STATUS.md` and this handoff before the first implementation checkpoint;
-10. proceed into Milestone 1 foundation only after the baseline is understood.
+3. read `AGENT_SKILLS.md` and `HERDR_PANEL_WORKFLOW.md`;
+4. fetch origin and confirm branch/worktree state;
+5. pull `--ff-only` if safe;
+6. read the active v0.1 source-of-truth files;
+7. begin `Milestone 0` from the first unfinished item in `COMPLETE_VERIFICATION_PLAN.md`;
+8. inspect current schema/routes/actions/scheduler/tests before editing;
+9. rerun feasible baseline checks;
+10. update `STATUS.md` and this handoff before the first implementation checkpoint;
+11. proceed into Milestone 1 foundation only after the baseline is understood.
 
 Do not start broad Today/Finance UI before Review A PASS.
 
 ## Active blockers
 
-None at shared-memory creation time.
+None at this checkpoint.
 
 If a real ambiguity appears, record the next `NSV01-Q###` in `OPEN_QUESTIONS.md` and stop only that affected path.
 
-## Delegation state
+## Active Herdr panes / delegation
 
-No bounded implementation/review subtask is currently recorded as outstanding.
+Default state before implementation starts:
 
-When delegating, add an entry here containing:
+| Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
+|---|---|---|---|---|---|---|
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 0 → Milestone 1 | `WRITE-SAME-TREE-SEQUENTIAL` | fill at session start | READY |
+| 2 | Codex | Architecture/security/reviewer | none yet; reserve for Review A or hard reasoning | `READ-ONLY` | n/a | IDLE |
+| 3 | AGY-Rohit | Bounded implementation/test helper | none yet | assign per task | n/a | IDLE |
 
-- agent;
-- objective;
+When opening a secondary pane, replace the relevant row with:
+
+- exact objective;
 - allowed files/scope;
-- expected tests/evidence;
-- starting SHA;
+- starting full SHA;
+- acceptance tests/evidence;
+- forbidden changes;
+- write mode: `READ-ONLY`, `WRITE-SAME-TREE-SEQUENTIAL`, or `WRITE-SEPARATE-WORKTREE`;
 - status: `ASSIGNED | IN PROGRESS | COMPLETE | BLOCKED`.
 
-Remove it from the active delegation section only after integration is verified; move it into history instead.
+Do not remove a completed row until AGY-Manickam has verified/integrated the result; move it into History afterward.
+
+`HERDR_PANEL_WORKFLOW.md` is authoritative for split-panel concurrency safety.
 
 ## Handoff update template
 
@@ -90,6 +100,11 @@ Current review gate:
 Verified HEAD:
 Remote HEAD:
 Worktree clean?:
+
+Active panes:
+- AGY-Manickam: objective / write mode / status
+- Codex: objective / write mode / status
+- AGY-Rohit: objective / write mode / status
 
 Completed:
 - ...
@@ -134,4 +149,6 @@ Blockers/open questions:
 - Herdr branch prepared and planning package committed.
 - Common repository memory established through root `AGENTS.md`.
 - Cross-agent handoff protocol established in this file.
-- No product implementation claimed by this entry.
+- Token-efficient agent roles fixed: AGY-Manickam orchestrates/integrates, AGY-Rohit implements bounded slices, Codex handles architecture/security/hard debugging/Review A/B/C.
+- Herdr split-panel workflow added with same-worktree write exclusion and separate-worktree rule for true parallel writers.
+- No Health + Wealth product implementation claimed by this entry.
