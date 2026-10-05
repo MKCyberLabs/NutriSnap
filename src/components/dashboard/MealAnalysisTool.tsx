@@ -251,7 +251,7 @@ export function MealAnalysisTool({ category, onAnalysisComplete, onCancel }: Mea
                   clearSelection();
                 }}
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </Button>
             )}
           </div>
