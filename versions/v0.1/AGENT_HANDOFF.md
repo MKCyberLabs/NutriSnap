@@ -9,9 +9,9 @@ This file is operational memory. Keep it concise and current. Long-term product 
 - Branch: `feature/v0.1-health-wealth`
 - GitHub execution issue: #131
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestone 4 — Obligations, Reminders Engine & Telegram Contract complete`
-- Current review gate: `Review B READY` (next gate: Review C after Milestone 5 / Phase 7)
-- Last verified implementation checkpoint: Milestone 4 Obligations, Reminder Engine & Telegram Checkpoint
+- Current milestone: `Milestone 5 — Security, Full Life-Hub Integration & Local Software Gate complete`
+- Current review gate: `Review C READY` (Final Release Candidate Review)
+- Last verified implementation checkpoint: Milestone 5 Security, Acceptance Scenario & Full Verification Checkpoint
 - Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
 
 ## OpenClaw workspace note
@@ -30,15 +30,16 @@ The original stash `stash@{0}` remains preserved and intact as a safety copy. No
 - `npm run test:today`: 5/5 PASS;
 - `npm run test:finance`: 19/19 PASS;
 - `npm run test:reminders`: 39/39 PASS;
-- `npm run test:life-hub`: 63/63 PASS;
+- `npm run test:security`: 10/10 PASS;
+- `npm run test:life-hub`: 74/74 PASS;
 - `./scripts/verify-v01-local.sh`: PASS;
 - `git diff --check`: PASS (clean).
 
 ## Immediate next action
 
-1. Commit and push Milestone 4 Checkpoint to `feature/v0.1-health-wealth`.
-2. Codex executes independent Review B against pushed commit SHA in read-only mode evaluating the 11 Review B criteria in `REVIEW_GUIDE.md`.
-3. Upon Review B PASS: complete Phase 7 security/authorization checks, run final verification gate, and invoke Codex for Review C.
+1. Commit and push Milestone 5 Checkpoint to `feature/v0.1-health-wealth`.
+2. Codex executes independent Review C (Final release candidate review) against pushed commit SHA in read-only mode evaluating the 16 Review C criteria in `REVIEW_GUIDE.md`.
+3. Upon Review C PASS: prepare PR description and report completion to owner Manickam.
 
 ## Active blockers
 
@@ -48,9 +49,9 @@ None at this checkpoint.
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 4 commit & orchestration to Review B/C | `WRITE-SAME-TREE-SEQUENTIAL` | Checkpoint SHA | IN PROGRESS |
-| 2 | Codex | Architecture/security/reviewer | Independent Review B on Wealth + Reminders Engine | `READ-ONLY` | Checkpoint SHA | ASSIGNED |
-| 3 | AGY-Rohit | Bounded implementation/test helper | none needed (Milestones 1-4 complete & passing) | assign per task | n/a | IDLE |
+| 1 | AGY-Manickam | Lead/orchestrator/integrator | Milestone 5 commit & orchestration to Review C | `WRITE-SAME-TREE-SEQUENTIAL` | Checkpoint SHA | IN PROGRESS |
+| 2 | Codex | Architecture/security/reviewer | Review B completed (PASS); Independent Review C assigned | `READ-ONLY` | Checkpoint SHA | ASSIGNED |
+| 3 | AGY-Rohit | Bounded implementation/test helper | none needed (All milestones complete & passing) | assign per task | n/a | IDLE |
 
 When opening a secondary pane, replace the relevant row with:
 
@@ -102,6 +103,19 @@ Blockers/open questions:
 ```
 
 ## History
+
+### Milestone 5 — Security, Acceptance Scenario & Full Verification Checkpoint
+
+- Implemented comprehensive security and authorization test suite `src/lib/security/security-auth.test.ts` (10/10 PASS) covering NSV01-0701..0711 (forged ID rejection, invalid enum/recurrence handling, `MAX_FINANCIAL_AMOUNT` bounding, XSS prevention, schema credential field audit, and secret-pattern scanner).
+- Implemented end-to-end integration acceptance scenario `src/lib/scenario/health-wealth-scenario.test.ts` (PASS) verifying all 16 steps of NSV01-1101..1116.
+- Enforced `MAX_FINANCIAL_AMOUNT = new Prisma.Decimal('999999999999.99')` in `src/lib/finance/finance.ts`.
+- Full local software gate `./scripts/verify-v01-local.sh`: PASS (74/74 life-hub tests, 5/5 analysis contract tests, typecheck 0 errors, build 18/18 static pages, git diff clean).
+- Marked Review B (NSV01-0550..0551), Phase 7 (NSV01-0701..0711), Phase 8 (NSV01-0801..0808), Phase 9, Phase 10, and Phase 11 (NSV01-1101..1116) as PASS in `COMPLETE_VERIFICATION_PLAN.md`.
+
+### Review B — Wealth & Reminders Engine Integration Gate
+
+- Conducted independently by Codex in read-only mode against commit SHA `67b81bf6f6b4a5276c4cea14c3445da5dd3de56e`.
+- Verdict: EXPLICIT PASS across all 11 Review B criteria in `REVIEW_GUIDE.md` (0 required repairs, scope/production boundaries respected).
 
 ### Milestone 4 — Obligations, Reminders Engine & Telegram Contract Checkpoint
 

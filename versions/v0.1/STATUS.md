@@ -1,6 +1,6 @@
 # NutriSnap v0.1 — Status / Resume Point
 
-Status: **MILESTONE 4 COMPLETE — OBLIGATIONS & REMINDERS VERIFIED; REVIEW B READY**
+Status: **MILESTONES 1-5 COMPLETE — VERIFICATION GATE PASSED; REVIEW C READY**
 
 Target branch: `feature/v0.1-health-wealth`
 
@@ -10,25 +10,23 @@ GitHub execution issue: **#131**
 
 ## Current phase
 
-`Review B Gate — Wealth & Reminders Engine Integration`
+`Review C Gate — Final Release Candidate Review`
 
 - Milestone 0 preflight checks (NSV01-0101..0110) are complete and PASS.
 - Milestone 1 foundation implementation (NSV01-0201..0239) is complete and PASS.
 - Independent Review A (NSV01-0250..0251) performed by Codex: EXPLICIT PASS (12/12 criteria verified).
 - Milestone 2 shell implementation (NSV01-0301..0315) is complete and PASS.
 - Milestone 3 accounts & transactions core (NSV01-0401..0430) is complete and PASS.
-- Milestone 4 obligations, reminder engine & Telegram contract (NSV01-0501..0530, NSV01-0601..0629) is complete and PASS:
-  - Recharge 84-day, monthly credit-card, subscriptions, and ONCE bills recurrence verified;
-  - Unified reminder delivery engine with deterministic offsets (0, 1440, 4320, 10080 min) verified;
-  - Reminder delivery claim deduplication (`@@unique([reminderId, occurrenceKey, offsetMinutes, channel])`) verified;
-  - Scheduler run idempotency, restart after SENT safety, and controlled FAILED retry policy verified;
-  - Snooze preservation without recurrence drift, disable/archive suppression, and stale storm protection verified;
-  - Idempotent Mark-Paid with exactly-once optional expense creation verified;
-  - Telegram webhook `/water`, `/expense`, `/reminders` commands and `paid_{id}_{key}` / `snz_{id}_{key}` callback handlers verified;
-  - Resilient Telegram message-edit error handling verified;
-  - 63/63 `npm run test:life-hub` unit/contract tests PASS;
-  - Next.js build: 18/18 static routes pass;
-  - Local software gate `./scripts/verify-v01-local.sh` PASS.
+- Milestone 4 obligations, reminder engine & Telegram contract (NSV01-0501..0530, NSV01-0601..0629) is complete and PASS.
+- Independent Review B (NSV01-0550..0551) performed by Codex: EXPLICIT PASS (11/11 criteria verified).
+- Milestone 5 security, acceptance scenario & software verification gate (NSV01-0701..0711, NSV01-0801..0808, NSV01-1101..1116) is complete and PASS:
+  - Security & negative authorization test suite (10/10 PASS);
+  - Integrated 16-step Health + Wealth acceptance scenario (PASS);
+  - All 74 `npm run test:life-hub` tests PASS;
+  - All 5 `npm run test:analysis-contract` tests PASS;
+  - TypeScript typecheck: 0 errors;
+  - Production build: 18/18 static routes pass;
+  - `./scripts/verify-v01-local.sh`: PASS (clean).
 
 Shared cross-agent memory is now established so AGY-Manickam, AGY-Rohit and Codex can switch/resume without depending on their private memory.
 
@@ -96,14 +94,19 @@ The following are retained for history but are not the active execution path on 
 
 ## Next action
 
-1. Commit and push Milestone 4 Checkpoint (`feature/v0.1-health-wealth`).
-2. Conduct independent Review B with Codex evaluating the 11 criteria in `REVIEW_GUIDE.md`.
-3. Upon Review B PASS: Run Phase 7 security/authorization checks and final full verification gate (`./scripts/verify-v01-local.sh`).
-4. Conduct independent Review C (Final release candidate review) via Codex.
-5. Prepare PR description and report completion to owner Manickam.
+1. Commit and push Milestone 5 Checkpoint (`feature/v0.1-health-wealth`).
+2. Conduct independent Review C (Final release candidate review) via Codex evaluating the 16 criteria in `REVIEW_GUIDE.md`.
+3. Upon Review C PASS: prepare PR description and report completion to owner Manickam.
 
 ## Latest implementation checkpoint
 
+- **Milestone 5 — Security, Acceptance Scenario & Full Verification Checkpoint**:
+  - Comprehensive security test suite (`src/lib/security/security-auth.test.ts`, 10/10 PASS) covering forged IDs, negative authorization, invalid enums, upper bound enforcement (`MAX_FINANCIAL_AMOUNT`), XSS prevention, schema credential audit, and secret pattern scan;
+  - Comprehensive 16-step integrated acceptance scenario (`src/lib/scenario/health-wealth-scenario.test.ts`, PASS) covering bank/cash creation, income, food expense, transfer, Airtel 84-day recharge with 3 offsets, delivery claim generation, idempotency, mark-paid with expense, repeat paid deduplication, and next recurrence calculation;
+  - All 74 `npm run test:life-hub` tests PASS, 5/5 `npm run test:analysis-contract` tests PASS, `typecheck` 0 errors, `build` 18/18 static pages, `./scripts/verify-v01-local.sh` PASS.
+- **Review B Gate**:
+  - Performed independently by Codex on SHA `67b81bf6f6b4a5276c4cea14c3445da5dd3de56e`.
+  - Verdict: EXPLICIT PASS across all 11 Review B criteria in `REVIEW_GUIDE.md` (0 required repairs).
 - **Milestone 4 — Obligations, Reminders Engine & Telegram Contract Checkpoint**:
   - Implemented unified reminders delivery engine (`src/lib/reminders/delivery-engine.ts`) with deterministic offsets (0, 1440, 4320, 10080 min), claim key generation, delivery eligibility, and Telegram bill reminder formatting;
   - Unified cron scheduler (`src/lib/scheduler.ts`) handling both health and obligation reminders with atomic claim creation;

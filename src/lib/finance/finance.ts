@@ -67,6 +67,8 @@ export function isValidObligationKind(kind: string): kind is ObligationKind {
  * Validates and normalizes monetary amount to a positive Prisma.Decimal.
  * Rejects 0, negative amounts, non-numeric values, or values with more than 2 decimal places.
  */
+export const MAX_FINANCIAL_AMOUNT = new Prisma.Decimal('999999999999.99');
+
 export function parseAndValidateAmount(raw: Prisma.Decimal | number | string): Prisma.Decimal {
   let d: Prisma.Decimal;
   try {
@@ -86,6 +88,11 @@ export function parseAndValidateAmount(raw: Prisma.Decimal | number | string): P
   // Check decimal places (max 2 decimal places for INR/currency)
   if (d.decimalPlaces() > 2) {
     throw new Error('Monetary amount cannot have more than 2 decimal places');
+  }
+
+  // Check upper bound for Decimal(14,2) precision
+  if (d.greaterThan(MAX_FINANCIAL_AMOUNT)) {
+    throw new Error('Monetary amount exceeds maximum allowable limit');
   }
 
   return d;
