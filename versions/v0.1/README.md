@@ -4,7 +4,7 @@ Status: **Herdr execution package**
 
 Target branch: `feature/v0.1-health-wealth`
 
-GitHub tracking issue: created for the Herdr execution run.
+GitHub execution issue: **#131 — NutriSnap v0.1 Health + Wealth — Herdr execution**
 
 ## Product goal
 
@@ -26,20 +26,26 @@ NutriSnap
 
 The visible v0.1 navigation may remain `Today / Food / Water / Money / Reminders`; Health + Wealth is the product/domain architecture, not a forced navigation redesign.
 
-## Source of truth
+## Shared-memory rule
+
+Every agent switch, new session, context reset, or long resume starts with the repo-based shared memory. Private agent memory is never authoritative.
 
 Read in this order:
 
-1. `HEALTH_WEALTH_ROADMAP.md` — milestone roadmap and product boundary.
-2. `MASTER_PLAN.md` — detailed v0.1 product behavior.
-3. `ARCHITECTURE.md` — schema, migration, recurrence, idempotency and ownership design.
-4. `HERDR_EXECUTION_PLAN.md` — AGY-Manickam execution workflow and checkpoint rules.
-5. `IMPLEMENTATION_CHECKLIST.md` — implementation completeness checklist.
-6. `TEST_MATRIX.md` — deterministic functional/security matrix.
-7. `COMPLETE_VERIFICATION_PLAN.md` — authoritative mark-as-you-go verification gate.
-8. `OPEN_QUESTIONS.md` — blocker/doubt protocol.
-9. `STATUS.md` — current resume point and latest verified checkpoint.
-10. `HERDR_MASTER_PROMPT.md` — reusable OpenClaw/Herdr AGY-Manickam instruction.
+1. repo root `AGENTS.md` — common memory, role rules, safety and invariants.
+2. `AGENT_HANDOFF.md` — current live cross-agent resume baton.
+3. `STATUS.md` — milestone/checkpoint state.
+4. `AGENT_SKILLS.md` — common Git, delegation, migration, testing and review workflows.
+5. `HEALTH_WEALTH_ROADMAP.md` — milestone roadmap and product boundary.
+6. `MASTER_PLAN.md` — detailed v0.1 product behavior.
+7. `ARCHITECTURE.md` — schema, migration, recurrence, idempotency and ownership design.
+8. `HERDR_EXECUTION_PLAN.md` — AGY-Manickam execution workflow and checkpoint rules.
+9. `IMPLEMENTATION_CHECKLIST.md` — implementation completeness checklist.
+10. `TEST_MATRIX.md` — deterministic functional/security matrix.
+11. `COMPLETE_VERIFICATION_PLAN.md` — authoritative mark-as-you-go verification gate.
+12. `OPEN_QUESTIONS.md` — blocker/doubt protocol.
+13. `HERDR_MASTER_PROMPT.md` — reusable OpenClaw/Herdr AGY-Manickam instruction.
+14. `docs/DEVELOPMENT_BASELINE.md` — isolated dev environment baseline.
 
 `PAPERCLIP_TASK.md`, `PAPERCLIP_EXECUTION.json`, `CHECKPOINT_RECOVERY.md`, and `PROVIDER_RECOVERY_TESTS.md` are retained as historical planning/control artifacts. They are **not** the active execution path for this branch.
 
@@ -47,7 +53,9 @@ Read in this order:
 
 Primary implementation agent: **AGY-Manickam in OpenClaw/Herdr**.
 
-AGY-Manickam may use other agents only for bounded support. It remains responsible for integrating the work, running tests, updating evidence, committing meaningful checkpoints, and pushing this branch.
+AGY-Manickam may use **AGY-Rohit** for bounded implementation slices and **Codex** for independent architecture/review/debugging work. The role contract and handoff rules are in root `AGENTS.md`.
+
+AGY-Manickam remains responsible for integrating work, running/collecting tests, updating evidence, committing meaningful checkpoints, updating `STATUS.md` + `AGENT_HANDOFF.md`, and pushing this branch.
 
 Independent review gates:
 
@@ -69,8 +77,14 @@ Use the isolated Omarchy development environment documented in `docs/DEVELOPMENT
 - No production Prisma destructive operation.
 - No merge to `main` until owner approval.
 
+## Owner stash boundary
+
+The OpenClaw clone may contain an older pre-v0.1 `main` stash. Treat all pre-existing stashes as owner-owned historical WIP. Do not apply/pop/drop them onto this branch without explicit owner instruction.
+
 ## Resume rule
 
-The owner may start or resume AGY-Manickam with only:
+The owner may start **any** of the three agents with only:
 
-> Read `versions/v0.1/HERDR_MASTER_PROMPT.md` and `versions/v0.1/STATUS.md`. Continue from the first unfinished phase on `feature/v0.1-health-wealth`. Treat `COMPLETE_VERIFICATION_PLAN.md` as the authoritative verification checklist. Commit and push meaningful verified checkpoints. Do not merge or deploy production.
+> Read root `AGENTS.md`, then `versions/v0.1/AGENT_HANDOFF.md` and `versions/v0.1/STATUS.md`. Work only on `feature/v0.1-health-wealth`. Continue the exact next action recorded in the handoff within your role. Follow `AGENT_SKILLS.md` and the v0.1 source-of-truth files. Do not touch owner stashes, merge main, deploy production, or invent missing product semantics.
+
+For AGY-Manickam long-run execution also read `versions/v0.1/HERDR_MASTER_PROMPT.md` completely before continuing.
