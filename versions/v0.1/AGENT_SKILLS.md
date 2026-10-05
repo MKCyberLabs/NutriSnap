@@ -52,7 +52,8 @@ When AGY-Manickam delegates to AGY-Rohit or Codex, the request must include:
 - acceptance tests/evidence;
 - what NOT to change;
 - starting branch/SHA;
-- whether commit/push is authorized.
+- whether commit/push is authorized;
+- write mode: `READ-ONLY`, `WRITE-SAME-TREE-SEQUENTIAL`, or `WRITE-SEPARATE-WORKTREE`.
 
 Avoid `implement v0.1` as a delegated task. Prefer slices such as:
 
@@ -249,3 +250,66 @@ A good handoff states:
 - exact next action;
 - blockers;
 - outstanding delegation.
+
+## Skill 14 — Herdr split-panel multi-agent operation
+
+Use `HERDR_PANEL_WORKFLOW.md` as the authoritative procedure.
+
+Default token-efficient layout:
+
+```text
+Pane 1: AGY-Manickam -> lead/orchestrator/integrator/primary implementer
+Pane 2: Codex        -> architecture/security/difficult debugging/review
+Pane 3: AGY-Rohit    -> bounded coding/testing slice
+```
+
+### Codex usage
+
+Codex is not the default orchestrator for this milestone.
+
+Use Codex when higher-value reasoning is needed:
+
+- Review A/B/C;
+- architecture/security review;
+- migration/recurrence/idempotency reasoning;
+- difficult debugging;
+- explicitly authorized small repair.
+
+During independent review Codex is `READ-ONLY` by default.
+
+### Same-worktree writing
+
+Only one agent may write the main worktree at a time.
+
+If Rohit is delegated a write task in the main checkout, AGY-Manickam must stop editing until Rohit finishes, tests, updates the handoff, and returns control.
+
+### True parallel writing
+
+If Manickam and Rohit must write concurrently, create a separate worktree/helper branch from the recorded starting SHA:
+
+```bash
+BASE_SHA=$(git rev-parse HEAD)
+SLUG=<bounded-slice>
+git worktree add ../NutriSnap-rohit-$SLUG -b agent/rohit-$SLUG "$BASE_SHA"
+```
+
+Rohit works only in that worktree. After a verified commit, Rohit reports its full SHA. Manickam inspects and integrates with a normal cherry-pick when appropriate.
+
+Do not delete the helper branch/worktree until integration and tests are verified.
+
+### Split-pane handoff contract
+
+Before opening a second pane, record in `AGENT_HANDOFF.md`:
+
+- agent;
+- objective;
+- starting SHA;
+- allowed files/scope;
+- write mode;
+- acceptance tests;
+- forbidden changes;
+- status.
+
+Every secondary pane must read the shared memory before acting.
+
+Never allow two agents to concurrently edit the same files in the same working tree. Never use destructive Git commands to reconcile agent collisions.
