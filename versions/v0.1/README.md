@@ -1,57 +1,76 @@
-# NutriSnap Life Hub v0.1
+# NutriSnap v0.1 — Health + Wealth
 
-Planning baseline for GitHub Issue #129.
+Status: **Herdr execution package**
 
-## Goal
+Target branch: `feature/v0.1-health-wealth`
 
-Deliver the first Life Hub milestone without breaking existing Food and Water features:
+GitHub tracking issue: created for the Herdr execution run.
+
+## Product goal
+
+NutriSnap v0.1 becomes a small personal Health + Wealth hub without breaking the current Food and Water experience.
 
 ```text
-Today + Food + Water + Finance + Generic Reminders
+NutriSnap
+├── Today
+├── Health
+│   ├── Food
+│   ├── Water
+│   └── Health Reminders
+├── Wealth
+│   ├── Accounts
+│   ├── Transactions
+│   └── Bills / Subscriptions / Recharge / EMI
+└── Shared Reminders + Telegram
 ```
 
-## Files
+The visible v0.1 navigation may remain `Today / Food / Water / Money / Reminders`; Health + Wealth is the product/domain architecture, not a forced navigation redesign.
 
-- `MASTER_PLAN.md` — product scope, phases, non-goals and release gates.
-- `ARCHITECTURE.md` — domain boundaries, proposed schema, migration safety, recurrence and idempotency design.
-- `CHECKPOINT_RECOVERY.md` — mandatory provider-quota interruption, checkpoint and same-task retry contract.
-- `IMPLEMENTATION_CHECKLIST.md` — execution checklist for implementation and review.
-- `TEST_MATRIX.md` — deterministic product verification cases and integrated acceptance scenario.
-- `PROVIDER_RECOVERY_TESTS.md` — deterministic orchestration/recovery cases for quota interruption.
-- `PAPERCLIP_TASK.md` — Paperclip decomposition, review gates, Git policy and final evidence requirements.
+## Source of truth
 
-## Implementation branch
+Read in this order:
 
-`paperclip/gh-129-life-hub-v0.1`
+1. `HEALTH_WEALTH_ROADMAP.md` — milestone roadmap and product boundary.
+2. `MASTER_PLAN.md` — detailed v0.1 product behavior.
+3. `ARCHITECTURE.md` — schema, migration, recurrence, idempotency and ownership design.
+4. `HERDR_EXECUTION_PLAN.md` — AGY-Manickam execution workflow and checkpoint rules.
+5. `IMPLEMENTATION_CHECKLIST.md` — implementation completeness checklist.
+6. `TEST_MATRIX.md` — deterministic functional/security matrix.
+7. `COMPLETE_VERIFICATION_PLAN.md` — authoritative mark-as-you-go verification gate.
+8. `OPEN_QUESTIONS.md` — blocker/doubt protocol.
+9. `STATUS.md` — current resume point and latest verified checkpoint.
+10. `HERDR_MASTER_PROMPT.md` — reusable OpenClaw/Herdr AGY-Manickam instruction.
 
-## Assignment gate
+`PAPERCLIP_TASK.md`, `PAPERCLIP_EXECUTION.json`, `CHECKPOINT_RECOVERY.md`, and `PROVIDER_RECOVERY_TESTS.md` are retained as historical planning/control artifacts. They are **not** the active execution path for this branch.
 
-Do not assign the Life Hub parent until the live Paperclip VM has the provider-quota hardening from `MKCyberLabs/paperclip-infra` Issue #7 deployed and:
+## Execution model
 
-```bash
-bash scripts/verify-provider-quota-recovery.sh
-```
+Primary implementation agent: **AGY-Manickam in OpenClaw/Herdr**.
 
-passes from a clean `paperclip-infra` checkout at or after commit:
+AGY-Manickam may use other agents only for bounded support. It remains responsible for integrating the work, running tests, updating evidence, committing meaningful checkpoints, and pushing this branch.
 
-`48bfd0a6bc6a6bc8be208d574fe2fc38ea008c46`
+Independent review gates:
 
-## Review model
+1. Review A — schema / migration / recurrence / authorization foundation.
+2. Review B — Wealth + Reminder integration.
+3. Review C — final v0.1 local release candidate.
 
-Three explicit gates:
+A review failure blocks only the affected phase until repaired and re-reviewed. Do not discard already verified work.
 
-1. Review A — schema/migration/security architecture.
-2. Review B — Finance + Reminder domain integration.
-3. Review C — final v0.1 integration/release candidate.
+## Development boundary
 
-Each explicit negative review uses the bounded Paperclip repair/re-review path; default max is two negative rounds.
+Use the isolated Omarchy development environment documented in `docs/DEVELOPMENT_BASELINE.md`.
 
-Provider interruption is not a negative review. Quota exhaustion, adapter timeout or provider failure without an explicit reviewer verdict is `UNKNOWN` and must resume/retry on the same child according to `CHECKPOINT_RECOVERY.md`.
+- Local PostgreSQL only.
+- Mock health analysis is acceptable for development.
+- Telegram remains mocked for the local gate.
+- No OpenClaw production DB mutation.
+- No production deployment.
+- No production Prisma destructive operation.
+- No merge to `main` until owner approval.
 
-## Production boundary
+## Resume rule
 
-The task may implement and test schema/migration artifacts in a safe non-production environment, but production migration/deployment is not implicit. It requires owner approval after the PR is reviewed.
+The owner may start or resume AGY-Manickam with only:
 
-## Owner merge
-
-Agents may push the task branch and open a PR. They must not merge to `main`.
+> Read `versions/v0.1/HERDR_MASTER_PROMPT.md` and `versions/v0.1/STATUS.md`. Continue from the first unfinished phase on `feature/v0.1-health-wealth`. Treat `COMPLETE_VERIFICATION_PLAN.md` as the authoritative verification checklist. Commit and push meaningful verified checkpoints. Do not merge or deploy production.
