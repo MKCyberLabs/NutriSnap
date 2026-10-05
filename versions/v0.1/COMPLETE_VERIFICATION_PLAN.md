@@ -421,10 +421,10 @@ All NSV01-1101..1116 must PASS for the integrated acceptance scenario to PASS: A
 
 Only after Phase 12 and Review C PASS:
 
-- [ ] **NSV01-1301** — Open PR from `feature/v0.1-health-wealth` to `main`. Status: NOT RUN.
-- [ ] **NSV01-1302** — PR references Health + Wealth roadmap, test evidence, review verdicts and known limitations. Status: NOT RUN.
-- [ ] **NSV01-1303** — PR records that production migration/deployment has NOT been performed. Status: NOT RUN.
-- [ ] **NSV01-1304** — PR remains unmerged for owner review. Status: NOT RUN.
+- [x] **NSV01-1301** — Open PR from `feature/v0.1-health-wealth` to `main`. Status: PASS. Evidence: PR #132 created (https://github.com/MKCyberLabs/NutriSnap/pull/132).
+- [x] **NSV01-1302** — PR references Health + Wealth roadmap, test evidence, review verdicts and known limitations. Status: PASS. Evidence: PR body links #131 and includes all test counts and Review A/B/C verdicts.
+- [x] **NSV01-1303** — PR records that production migration/deployment has NOT been performed. Status: PASS. Evidence: Explicitly stated in PR body.
+- [x] **NSV01-1304** — PR remains unmerged for owner review. Status: PASS. Evidence: PR is open, unmerged, awaiting owner Manickam's review.
 
 Stop here.
 
