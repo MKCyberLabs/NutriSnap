@@ -1,39 +1,60 @@
 # UI Redesign Status
 
 Branch: `feature/v0.1-ui-redesign`
-Base: `98d013d457a9ab35566b650ebcaf07181ba3a98c`
-State: COMPLETED / READY FOR OWNER UAT
+Base planning checkpoint: `98d013d457a9ab35566b650ebcaf07181ba3a98c`
+UI implementation checkpoint: `8ab57a12b80c3c89e45f3ad0f5c92da10d32fea7`
+State: OWNER UAT / FOOD LIVE AI CORRECTION REQUIRED
 
-## Current phase
+## UI implementation
 
-UI-900 Final verification & gate PASS
+Green v0.1 redesign implementation and automated gate completed.
 
-## Verification evidence
+Owner visually accepted the UI as sufficient for the initial v0.1 baseline, with polish deferred.
 
-- `git diff --check`: PASS (clean formatting and whitespace)
-- `npm run test:analysis-contract`: PASS (5/5 tests)
-- `npm run typecheck`: PASS (0 errors)
-- `npm run build`: PASS (All 22 routes compiled successfully)
-- `npm run test:finance`: PASS (23/23 tests)
-- `npm run test:reminders`: PASS (51/51 tests)
-- `npm run test:today`: PASS (6/6 tests)
-- `npm run test:security`: PASS (22/22 tests, including AUTH-UI-001..011)
-- `npm run test:ui`: PASS (7/7 tests)
-- `npm run test:life-hub`: PASS (93/93 tests)
-- `./scripts/verify-v01-local.sh`: PASS
+## Current release blocker
 
-## Verified behavior fixes
+Food UAT is still serving the static Health Matrix mock:
+- observed meal: chapati + capsicum at ~14:00;
+- displayed food: Grilled Chicken;
+- displayed calories: 450;
+- displayed category: Breakfast.
 
-1. ADMIN successful normal login lands on `/today`, not `/admin`.
-2. USER normal login lands on `/today`.
-3. Food (`/dashboard`) allows ADMIN access and does not force redirect to `/admin`.
-4. Role gate protects `/admin`: non-admin users attempting to open `/admin` are redirected to `/today`.
-5. Universal green brand tokens (`#16A34A`, Inter font, neutral surfaces).
-6. Universal AppShell with DesktopSidebar (232px, nested Money routes) and MobileBottomNav (5 items: Today, Food, Water, Money, More).
-7. Money sub-routes: Overview (`/finance`), Accounts (`/finance/accounts`), Transactions (`/finance/transactions`), Bills & Subscriptions (`/finance/bills`).
-8. Today dashboard (`/today`) with real KPIs, focus checklist, recent user transactions, and health summary.
-9. Reminders, Settings, and Admin pages updated in AppShell with responsive tables, clean modal dialogs, and filters.
-10. All non-negotiable domain invariants, Indian Rupee formatting, and 84-day recharge recurrences preserved.
+The repository mock fixture contains the same Grilled Chicken / 450 kcal signature.
+
+Therefore the next task is not general UI polish.
+
+The next task is:
+**Food Live AI / Python-Gemini UAT correctness.**
+
+## Required next action
+
+AGY-Manickam must read:
+1. `FOOD_LIVE_AI_PLAN.md`
+2. `FOOD_LIVE_AI_TEST_MATRIX.md`
+3. `FOOD_LIVE_AI_MASTER_PROMPT.md`
+
+Then:
+- prove current running UAT environment;
+- disable `USE_MOCK_HEALTH_API`;
+- verify Python service/network/shared upload path;
+- use the real configured image provider;
+- implement deterministic category default + manual override;
+- implement analyze -> review -> save;
+- verify saved data in Food and Today;
+- run complete regression.
+
+## Owner UAT domain
+
+`https://wealth.mkcyberlabs.in`
+
+## Production boundary
+
+Do not touch:
+`nutrisnap.mkcyberlabs.in`
+
+No production deployment.
+No production DB migration.
+No production Telegram.
 
 ## Agent policy
 
