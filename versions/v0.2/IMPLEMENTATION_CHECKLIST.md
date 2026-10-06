@@ -74,6 +74,20 @@
 - [x] V2-6004 durable delivery dedupe retained.
 - [x] V2-6005 Telegram ownership/idempotency.
 
+## V2-650 Payment Lifecycle, Reminder Management & Credit Cards
+- [x] V2-6511 domain-aware Undo Paid (`revertObligationPayment`).
+- [x] V2-6512 loan EMI reversal (`LoanService.revertEmiPayment`).
+- [x] V2-6521 health reminder edit, pause/resume, delete UI.
+- [x] V2-6522 financial obligation edit, pause/resume, delete/archive, payment history.
+- [x] V2-6523 schedule change cancels obsolete future unsent deliveries and preserves history.
+- [x] V2-6531 Credit Card configuration (`creditLimit`, `statementDay`, `paymentDueDay`, `defaultPaymentAccountId`).
+- [x] V2-6532 CreditCardStatement model and service with month-end clamping.
+- [x] V2-6533 CreditCardPayment model and service generating TRANSFER transactions.
+- [x] V2-6534 Partial-payment status (`OPEN | PARTIAL | PAID`), reminder sync, and full-payment completion.
+- [x] V2-6535 Credit Card reversal (`CreditCardService.revertPayment`).
+- [x] V2-6536 Credit Card UI (card list, statements, payment history, partial payment modal).
+- [x] V2-6541 focused test suites and integration verification.
+
 ## V2-700 Final
 - [x] V2-7001 full migration rehearsal.
 - [x] V2-7002 finance tests.

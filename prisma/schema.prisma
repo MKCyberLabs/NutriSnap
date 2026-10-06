@@ -42,6 +42,8 @@ model User {
   loans                 Loan[]
   loanPayments          LoanPayment[]
   wishlistItems         WishlistItem[]
+  creditCardStatements  CreditCardStatement[]
+  creditCardPayments    CreditCardPayment[]
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }
@@ -131,23 +133,30 @@ model Reminder {
 }
 
 model FinancialAccount {
-  id             String                 @id @default(cuid())
-  userId         String
-  name           String
-  type           String                 // BANK | CASH | WALLET | CREDIT_CARD
-  institution    String?
-  openingBalance Decimal                @default(0) @db.Decimal(14, 2)
-  creditLimit    Decimal?               @db.Decimal(14, 2)
-  isActive       Boolean                @default(true)
-  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions   FinancialTransaction[] @relation("AccountTransactions")
-  transfersTo    FinancialTransaction[] @relation("TransferAccountTransactions")
-  obligations    Obligation[]
-  loans          Loan[]
-  loanPayments   LoanPayment[]
-  wishlistItems  WishlistItem[]
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  id                      String                 @id @default(cuid())
+  userId                  String
+  name                    String
+  type                    String                 // BANK | CASH | WALLET | CREDIT_CARD
+  institution             String?
+  openingBalance          Decimal                @default(0) @db.Decimal(14, 2)
+  creditLimit             Decimal?               @db.Decimal(14, 2)
+  statementDay            Int?
+  paymentDueDay           Int?
+  defaultPaymentAccountId String?
+  isActive                Boolean                @default(true)
+  user                    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions            FinancialTransaction[] @relation("AccountTransactions")
+  transfersTo             FinancialTransaction[] @relation("TransferAccountTransactions")
+  obligations             Obligation[]
+  loans                   Loan[]
+  loanPayments            LoanPayment[]
+  wishlistItems           WishlistItem[]
+  defaultPaymentAccount   FinancialAccount?      @relation("DefaultPaymentAccount", fields: [defaultPaymentAccountId], references: [id], onDelete: SetNull)
+  defaultForCreditCards   FinancialAccount[]     @relation("DefaultPaymentAccount")
+  creditCardStatements    CreditCardStatement[]
+  creditCardPaymentsFrom  CreditCardPayment[]    @relation("CreditCardPaymentFromAccount")
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
 
   @@index([userId, isActive])
   @@index([userId, type])
@@ -173,6 +182,7 @@ model FinancialTransaction {
   personalDebt         PersonalDebt?         @relation(fields: [personalDebtId], references: [id], onDelete: SetNull)
   loanPayment          LoanPayment?
   wishlistItem         WishlistItem?
+  creditCardPayment    CreditCardPayment?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -206,6 +216,7 @@ model Obligation {
   reminders          Reminder[]
   deliveries         ReminderDelivery[]
   loan               Loan?
+  creditCardStatements CreditCardStatement[]
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
 
@@ -398,4 +409,51 @@ model WishlistItem {
   @@index([userId, status])
   @@index([userId, priority])
   @@index([userId, targetDate])
+}
+
+model CreditCardStatement {
+  id              String              @id @default(cuid())
+  userId          String
+  accountId       String
+  periodKey       String              // e.g. "2026-10"
+  statementDate   DateTime
+  dueDate         DateTime
+  statementAmount Decimal             @db.Decimal(14, 2)
+  minimumDue      Decimal?            @db.Decimal(14, 2)
+  status          String              @default("OPEN") // OPEN | PARTIAL | PAID | OVERDUE
+  obligationId    String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account         FinancialAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  obligation      Obligation?         @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+  payments        CreditCardPayment[]
+
+  @@unique([accountId, periodKey])
+  @@index([userId, status])
+  @@index([userId, dueDate])
+  @@index([obligationId])
+}
+
+model CreditCardPayment {
+  id            String                @id @default(cuid())
+  userId        String
+  statementId   String
+  fromAccountId String
+  amount        Decimal               @db.Decimal(14, 2)
+  paidAt        DateTime              @default(now())
+  transactionId String?               @unique
+  note          String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statement     CreditCardStatement   @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  fromAccount   FinancialAccount      @relation("CreditCardPaymentFromAccount", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, paidAt(sort: Desc)])
+  @@index([statementId])
 }

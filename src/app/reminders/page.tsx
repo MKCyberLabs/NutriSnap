@@ -30,8 +30,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getAuthSession } from '@/lib/auth-mock';
-import { getReminders, saveReminder } from '@/app/settings/actions';
-import { getObligations, markObligationPaid } from '@/app/finance/actions';
+import { getReminders, saveReminder, deleteReminder } from '@/app/settings/actions';
+import {
+  getObligations,
+  markObligationPaid,
+  revertObligationPayment,
+  toggleObligationActive,
+} from '@/app/finance/actions';
 import {
   Bell,
   Utensils,
@@ -44,6 +49,11 @@ import {
   Smartphone,
   CreditCard,
   Building,
+  RotateCcw,
+  Trash2,
+  Pencil,
+  Pause,
+  Play,
 } from 'lucide-react';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -63,6 +73,12 @@ export default function RemindersPage() {
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [newCategory, setNewCategory] = useState('Breakfast');
   const [newTime, setNewTime] = useState('08:00');
+
+  // Dialog state for editing a health reminder
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingReminder, setEditingReminder] = useState<any>(null);
+  const [editCategory, setEditCategory] = useState('Breakfast');
+  const [editTime, setEditTime] = useState('08:00');
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -160,6 +176,104 @@ export default function RemindersPage() {
       toast({
         title: 'Action Failed',
         description: err?.message || 'Failed to mark obligation paid',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartEdit = (rem: any) => {
+    setEditingReminder(rem);
+    setEditCategory(rem.category || rem.title);
+    setEditTime(rem.time || rem.timeOfDay || '08:00');
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    const session = getAuthSession();
+    if (!session || !editingReminder) return;
+    setSubmitting(true);
+    try {
+      await saveReminder(session.id, editCategory, editTime, editingReminder.isActive);
+      toast({
+        title: 'Reminder Updated',
+        description: `Updated ${editCategory} reminder to ${editTime}.`,
+      });
+      setEditDialogOpen(false);
+      setEditingReminder(null);
+      await loadData(session.id);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err?.message || 'Failed to update reminder',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteHealthReminder = async (rem: any) => {
+    const session = getAuthSession();
+    if (!session) return;
+    if (!confirm(`Delete ${rem.category || rem.title} reminder?`)) return;
+    setSubmitting(true);
+    try {
+      await deleteReminder(rem.id);
+      toast({
+        title: 'Reminder Deleted',
+        description: `Removed ${rem.category || rem.title} reminder.`,
+      });
+      await loadData(session.id);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err?.message || 'Failed to delete reminder',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUndoPaidObligation = async (obligationId: string) => {
+    const session = getAuthSession();
+    if (!session) return;
+    setSubmitting(true);
+    try {
+      await revertObligationPayment(session.id, { obligationId });
+      toast({
+        title: 'Payment Undone',
+        description: 'Latest payment reverted. Schedule restored.',
+      });
+      await loadData(session.id);
+    } catch (err: any) {
+      toast({
+        title: 'Action Failed',
+        description: err?.message || 'Could not revert payment',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleObligation = async (obligationId: string, currentActive: boolean) => {
+    const session = getAuthSession();
+    if (!session) return;
+    setSubmitting(true);
+    try {
+      await toggleObligationActive(session.id, obligationId, !currentActive);
+      toast({
+        title: !currentActive ? 'Obligation Resumed' : 'Obligation Paused',
+        description: 'Status updated.',
+      });
+      await loadData(session.id);
+    } catch (err: any) {
+      toast({
+        title: 'Action Failed',
+        description: err?.message || 'Could not toggle obligation',
         variant: 'destructive',
       });
     } finally {
@@ -334,12 +448,32 @@ export default function RemindersPage() {
                         </div>
                       </div>
 
-                      <Switch
-                        checked={rem.isActive}
-                        onCheckedChange={(checked) => handleToggleReminder(rem, checked)}
-                        aria-label={`Toggle ${rem.category || rem.title} reminder`}
-                        className="data-[state=checked]:bg-[#16A34A]"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStartEdit(rem)}
+                          className="h-8 w-8 p-0 rounded-lg text-[#667085] hover:text-[#16A34A] hover:bg-[#F0F5F2]"
+                          title="Edit reminder"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteHealthReminder(rem)}
+                          className="h-8 w-8 p-0 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+                          title="Delete reminder"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Switch
+                          checked={rem.isActive}
+                          onCheckedChange={(checked) => handleToggleReminder(rem, checked)}
+                          aria-label={`Toggle ${rem.category || rem.title} reminder`}
+                          className="data-[state=checked]:bg-[#16A34A]"
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -420,15 +554,42 @@ export default function RemindersPage() {
                                 : ob.recurrenceType}
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            disabled={submitting}
-                            onClick={() => handleMarkPaid(ob.id, ob.nextDueAt)}
-                            className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            <span>Paid</span>
-                          </Button>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={submitting}
+                              onClick={() => handleToggleObligation(ob.id, ob.isActive)}
+                              className="h-8 w-8 p-0 rounded-lg text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+                              title={ob.isActive ? 'Pause bill reminder' : 'Resume bill reminder'}
+                            >
+                              {ob.isActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                            </Button>
+
+                            {ob.lastCompletedAt && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={submitting}
+                                onClick={() => handleUndoPaidObligation(ob.id)}
+                                className="h-8 px-2 rounded-lg text-[11px] font-semibold text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] flex items-center gap-1"
+                                title="Undo last payment"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                <span>Undo</span>
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              disabled={submitting}
+                              onClick={() => handleMarkPaid(ob.id, ob.nextDueAt)}
+                              className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Paid</span>
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -439,6 +600,63 @@ export default function RemindersPage() {
           )}
         </div>
       )}
+
+      {/* Edit Health Reminder Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[400px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
+          <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
+            <DialogTitle className="text-base font-semibold text-[#111827]">
+              Edit Health Reminder
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-[#344054]">
+                Reminder Category
+              </Label>
+              <Select value={editCategory} onValueChange={setEditCategory}>
+                <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                  <SelectItem value="Breakfast">Breakfast</SelectItem>
+                  <SelectItem value="Lunch">Lunch</SelectItem>
+                  <SelectItem value="Dinner">Dinner</SelectItem>
+                  <SelectItem value="Evening Snack">Evening Snack</SelectItem>
+                  <SelectItem value="Hydration Check">Hydration Check</SelectItem>
+                  <SelectItem value="Vitamins">Vitamins</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-rem-time" className="text-xs font-semibold text-[#344054]">
+                Time of Day
+              </Label>
+              <Input
+                id="edit-rem-time"
+                type="time"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                className="h-11 rounded-[10px] border-[#E5ECE8] text-base font-semibold"
+              />
+            </div>
+            <Button
+              disabled={submitting || !editTime}
+              onClick={handleSaveEdit}
+              className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Update Reminder'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

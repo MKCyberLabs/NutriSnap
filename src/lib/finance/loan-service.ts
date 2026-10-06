@@ -603,3 +603,118 @@ export async function archiveLoan(
 
   return { success: true };
 }
+
+export interface RevertEmiPaymentInput {
+  loanPaymentId?: string;
+  obligationOccurrenceId?: string;
+  loanId?: string;
+  revertToDate?: Date | string;
+}
+
+/**
+ * Reverts an EMI payment atomically (V2-651 / Architecture Section 11):
+ * - Removes the specific LoanPayment record
+ * - Removes the linked EXPENSE transaction (if generated)
+ * - Adds back principalPaid to outstandingPrincipal (if principalPaid was recorded)
+ * - Restores loan status from CLOSED to ACTIVE if needed
+ * - Restores nextEmiDate to the scheduled date of the reverted occurrence
+ * - Idempotent on repeated calls
+ */
+export async function revertEmiPayment(
+  userId: string,
+  input: RevertEmiPaymentInput,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  let payment: any = null;
+  if (input.loanPaymentId) {
+    payment = await db.loanPayment.findUnique({
+      where: { id: input.loanPaymentId },
+      include: { loan: true, transaction: true }
+    });
+  } else if (input.obligationOccurrenceId) {
+    payment = await db.loanPayment.findUnique({
+      where: { obligationOccurrenceId: input.obligationOccurrenceId },
+      include: { loan: true, transaction: true }
+    });
+  } else if (input.loanId) {
+    const payments = await db.loanPayment.findMany({
+      where: { loanId: input.loanId, userId },
+      orderBy: { occurredAt: 'desc' },
+      take: 1,
+      include: { loan: true, transaction: true }
+    });
+    payment = payments[0] || null;
+  }
+
+  if (!payment) {
+    return {
+      success: true,
+      alreadyReversed: true,
+      message: 'Loan payment not found or already reversed',
+    };
+  }
+
+  if (payment.userId !== userId) {
+    throw new Error('Unauthorized: payment belongs to another user');
+  }
+
+  const loan = payment.loan;
+
+  const executeInTransaction = async (tx: any) => {
+    // 1. Delete linked FinancialTransaction if one was created
+    if (payment.transactionId) {
+      await tx.financialTransaction.delete({
+        where: { id: payment.transactionId }
+      });
+    }
+
+    // 2. Delete the LoanPayment
+    await tx.loanPayment.delete({
+      where: { id: payment.id }
+    });
+
+    // 3. Add back principalPaid to outstandingPrincipal if principalPaid was recorded
+    let restoredOutstanding = loan.outstandingPrincipal;
+    if (payment.principalPaid && payment.principalPaid.greaterThan(0)) {
+      restoredOutstanding = loan.outstandingPrincipal.plus(payment.principalPaid);
+    }
+
+    // 4. Restore nextEmiDate
+    const restoredNextEmiDate = input.revertToDate
+      ? new Date(input.revertToDate)
+      : payment.occurredAt;
+
+    const restoredStatus = loan.status === 'CLOSED' ? 'ACTIVE' : loan.status;
+
+    await tx.loan.update({
+      where: { id: loan.id },
+      data: {
+        outstandingPrincipal: restoredOutstanding,
+        nextEmiDate: restoredNextEmiDate,
+        status: restoredStatus,
+      }
+    });
+
+    return {
+      paymentId: payment.id,
+      restoredOutstanding,
+      restoredNextEmiDate,
+      restoredStatus,
+    };
+  };
+
+  const result = typeof db.$transaction === 'function'
+    ? await db.$transaction(executeInTransaction)
+    : await executeInTransaction(db);
+
+  return {
+    success: true,
+    alreadyReversed: false,
+    revertedPaymentId: result.paymentId,
+    restoredOutstanding: result.restoredOutstanding.toString(),
+    restoredNextEmiDate: result.restoredNextEmiDate ? result.restoredNextEmiDate.toISOString() : null,
+    restoredStatus: result.restoredStatus,
+  };
+}

@@ -109,6 +109,19 @@ Desktop + 390px mobile:
 - no horizontal overflow;
 - no console blocking errors.
 
+## I. Payment Lifecycle, Reminder Management & Credit Cards (V2-650)
+
+- V2-T090 Domain-aware Undo Paid (`revertObligationPayment`) reverts occurrence, deletes linked transaction, restores obligation `nextDueAt`, purges pending reminders, idempotent.
+- V2-T091 Loan EMI reversal (`revertEmiPayment`) restores `outstandingPrincipal` by exact `principalPaid`, restores `nextEmiDate`, resets `CLOSED` to `ACTIVE`, deletes linked `EXPENSE`, idempotent.
+- V2-T092 Obligation edit updates future schedule and purges pending unsent reminder deliveries.
+- V2-T093 Obligation Pause / Resume (`toggleObligationActive`) deactivates/reactivates obligation and purges future pending deliveries.
+- V2-T094 Obligation Delete (`deleteObligation`) blocks hard delete when completed occurrences exist (requires archive), safely deletes when 0 occurrences.
+- V2-T095 Month-end clamping helper (`clampDayToMonth`) safely clamps days 29, 30, 31 to 28/29 in Feb and 30 in Apr/Jun/Sep/Nov without overflow.
+- V2-T096 Credit Card statement creation (`createCreditCardStatement`) links statement to obligation, sets periodKey, and schedules due date.
+- V2-T097 Credit Card partial payments reduce pending balance, retain PARTIAL status, create TRANSFER (no income/expense), and advance to PAID when balance is 0.
+- V2-T098 Credit Card payment reversal (`revertCreditCardPayment`) deletes latest payment, deletes TRANSFER transaction, restores balances, resets statement status, restores obligation occurrence.
+- V2-T099 Generic transaction editor and deleter block edits/deletions on CreditCardPayment linked transactions (409 Conflict).
+
 ## Integrated acceptance scenario
 
 1. Bank opening balance ₹50,000.

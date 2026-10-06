@@ -9,6 +9,7 @@ import {
   Archive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { CreditCardDialog } from '@/components/finance/CreditCardDialog';
 
 interface AccountCardProps {
   account: {
@@ -20,10 +21,12 @@ interface AccountCardProps {
     creditLimit?: string | number | null;
     isArchived?: boolean;
   };
+  accounts?: { id: string; name: string; type: string }[];
   onArchive?: (id: string) => void;
+  onRefresh?: () => void;
 }
 
-export function AccountCard({ account, onArchive }: AccountCardProps) {
+export function AccountCard({ account, accounts, onArchive, onRefresh }: AccountCardProps) {
   const getAccountIcon = (type: string) => {
     switch (type) {
       case 'BANK':
@@ -99,8 +102,16 @@ export function AccountCard({ account, onArchive }: AccountCardProps) {
         </div>
       </div>
 
-      {onArchive && (
-        <div className="mt-4 pt-3 border-t border-[#E5ECE8]/60 flex justify-end">
+      <div className="mt-4 pt-3 border-t border-[#E5ECE8]/60 flex items-center justify-between">
+        {isCreditCard ? (
+          <CreditCardDialog
+            account={account}
+            accounts={accounts || []}
+            onRefresh={onRefresh}
+          />
+        ) : <div />}
+
+        {onArchive && (
           <Button
             variant="ghost"
             size="sm"
@@ -110,8 +121,8 @@ export function AccountCard({ account, onArchive }: AccountCardProps) {
             <Archive className="h-3.5 w-3.5" />
             <span>Archive</span>
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

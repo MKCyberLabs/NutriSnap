@@ -1,0 +1,547 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { Prisma, PrismaClient } from '../../../prisma/generated/client';
+const Decimal = Prisma.Decimal;
+import * as financeService from './finance-service';
+import * as loanService from './loan-service';
+import * as creditCardService from './credit-card-service';
+
+const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
+
+test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking', async (t) => {
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userAId = `usr_plc_a_${timestamp}`;
+  const userBId = `usr_plc_b_${timestamp}`;
+
+  // Setup test users
+  await db.user.createMany({
+    data: [
+      { id: userAId, email: `plc_a_${timestamp}@test.com`, name: 'User A PLC', password: 'password123', timezone: 'Asia/Kolkata' },
+      { id: userBId, email: `plc_b_${timestamp}@test.com`, name: 'User B PLC', password: 'password123', timezone: 'Asia/Kolkata' },
+    ]
+  });
+
+  // Setup Accounts for User A
+  const bankA = await db.financialAccount.create({
+    data: {
+      userId: userAId,
+      name: 'HDFC Savings',
+      type: 'BANK',
+      openingBalance: new Decimal(100000),
+      isActive: true,
+    }
+  });
+
+  const cardA = await db.financialAccount.create({
+    data: {
+      userId: userAId,
+      name: 'ICICI Coral Card',
+      type: 'CREDIT_CARD',
+      openingBalance: new Decimal(0),
+      creditLimit: new Decimal(150000),
+      statementDay: 20,
+      paymentDueDay: 10,
+      defaultPaymentAccountId: bankA.id,
+      isActive: true,
+    }
+  });
+
+  // Setup Account for User B
+  const bankB = await db.financialAccount.create({
+    data: {
+      userId: userBId,
+      name: 'SBI Bank B',
+      type: 'BANK',
+      openingBalance: new Decimal(50000),
+      isActive: true,
+    }
+  });
+
+  t.after(async () => {
+    // Cleanup in reverse dependency order
+    await db.creditCardPayment.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.creditCardStatement.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.loanPayment.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.loan.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.reminderDelivery.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.obligationOccurrence.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.reminder.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.financialTransaction.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.obligation.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.financialAccount.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+    await db.user.deleteMany({ where: { id: { in: [userAId, userBId] } } });
+  });
+
+  await t.test('V2-651a: Domain-aware Undo Paid reverts obligation occurrence and transaction', async () => {
+    const obDate = new Date('2026-11-05T10:00:00.000Z');
+    const obligation = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Broadband Fiber',
+        kind: 'BILL',
+        amount: new Decimal(1199),
+        accountId: bankA.id,
+        dueAt: obDate,
+        nextDueAt: obDate,
+        recurrenceType: 'MONTHLY',
+        recurrenceInterval: 1,
+        reminderOffsetsMin: [0],
+        isActive: true,
+      }
+    });
+
+    // 1. Mark as Paid
+    const payRes = await financeService.markObligationPaid(userAId, {
+      obligationId: obligation.id,
+      occurrenceKey: '2026-11-05',
+      createExpense: true,
+      accountId: bankA.id,
+    });
+
+    assert.equal(payRes.success, true);
+    assert.ok(payRes.occurrenceId);
+    assert.ok(payRes.transactionId);
+
+    // Verify expense transaction exists
+    const expenseTx = await db.financialTransaction.findUnique({
+      where: { id: payRes.transactionId! }
+    });
+    assert.ok(expenseTx);
+    assert.equal(expenseTx.type, 'EXPENSE');
+    assert.equal(new Decimal(expenseTx.amount).toString(), '1199');
+
+    // Verify obligation advanced
+    const updatedOb = await db.obligation.findUnique({ where: { id: obligation.id } });
+    assert.ok(updatedOb!.lastCompletedAt);
+    assert.ok(new Date(updatedOb!.nextDueAt).getTime() > obDate.getTime());
+
+    // Generic transaction delete MUST be blocked (409 Conflict protection)
+    await assert.rejects(
+      async () => financeService.deleteTransaction(userAId, payRes.transactionId!),
+      /Linked transaction cannot be deleted directly/
+    );
+
+    // 2. Perform Undo Paid
+    const revertRes = await financeService.revertObligationPayment(userAId, {
+      obligationId: obligation.id,
+      occurrenceKey: '2026-11-05',
+    });
+
+    assert.equal(revertRes.success, true);
+    assert.equal(revertRes.alreadyReversed, false);
+
+    // Linked expense transaction deleted
+    const deletedTx = await db.financialTransaction.findUnique({
+      where: { id: payRes.transactionId! }
+    });
+    assert.equal(deletedTx, null);
+
+    // Occurrence deleted / cleared
+    const occ = await db.obligationOccurrence.findUnique({
+      where: {
+        obligationId_occurrenceKey: {
+          obligationId: obligation.id,
+          occurrenceKey: '2026-11-05',
+        }
+      }
+    });
+    assert.equal(occ, null);
+
+    // Obligation schedule restored to original due date
+    const restoredOb = await db.obligation.findUnique({ where: { id: obligation.id } });
+    assert.equal(restoredOb!.nextDueAt.toISOString(), obDate.toISOString());
+    assert.equal(restoredOb!.lastCompletedAt, null);
+    assert.equal(restoredOb!.isActive, true);
+
+    // 3. Repeated undo call is idempotent
+    const repeatRevert = await financeService.revertObligationPayment(userAId, {
+      obligationId: obligation.id,
+      occurrenceKey: '2026-11-05',
+    });
+    assert.equal(repeatRevert.success, true);
+    assert.equal(repeatRevert.alreadyReversed, true);
+
+    // 4. Occurrence can be paid again cleanly
+    const rePayRes = await financeService.markObligationPaid(userAId, {
+      obligationId: obligation.id,
+      occurrenceKey: '2026-11-05',
+      createExpense: true,
+      accountId: bankA.id,
+    });
+    assert.equal(rePayRes.success, true);
+    assert.equal(rePayRes.alreadyCompleted, false);
+    assert.ok(rePayRes.transactionId);
+  });
+
+  await t.test('V2-651b: Loan EMI reversal adds back principal, deletes expense, and restores schedule', async () => {
+    // Create Loan with linked Obligation
+    const loanRes = await loanService.createLoan(userAId, {
+      name: 'Two Wheeler Loan',
+      loanType: 'VEHICLE',
+      lender: 'Bajaj Finance',
+      openingOutstanding: 50000,
+      emiAmount: 5000,
+      emiGeneratesExpense: true,
+      paymentAccountId: bankA.id,
+      nextEmiDate: '2026-11-10T10:00:00.000Z',
+      createLinkedObligation: true,
+    });
+
+    const loanId = loanRes.loan.id;
+    const loanDb = await db.loan.findUnique({
+      where: { id: loanId },
+      include: { obligation: true }
+    });
+    assert.ok(loanDb!.obligation);
+    const linkedObId = loanDb!.obligation!.id;
+
+    // Record an EMI payment with ₹4,000 principal + ₹1,000 interest
+    const emiDate = new Date('2026-11-10T10:00:00.000Z');
+    const payRes = await loanService.recordEmiPayment(userAId, {
+      loanId,
+      amount: 5000,
+      accountId: bankA.id,
+      principalPaid: 4000,
+      interestPaid: 1000,
+      occurredAt: emiDate,
+    });
+
+    assert.equal(payRes.success, true);
+    assert.equal(payRes.remainingPrincipal, '46000');
+    assert.ok(payRes.transactionId);
+
+    // Outstanding reduced from 50000 to 46000
+    const loanAfterPay = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(new Decimal(loanAfterPay!.outstandingPrincipal).toString(), '46000');
+
+    // Generic transaction delete blocked on EMI transaction
+    await assert.rejects(
+      async () => financeService.deleteTransaction(userAId, payRes.transactionId!),
+      /Linked transaction cannot be deleted directly/
+    );
+
+    // Revert EMI payment via LoanService.revertEmiPayment
+    const revertRes = await loanService.revertEmiPayment(userAId, {
+      loanPaymentId: payRes.paymentId,
+      revertToDate: emiDate,
+    });
+
+    assert.equal(revertRes.success, true);
+    assert.equal(revertRes.alreadyReversed, false);
+    // Principal restored back to 50000
+    assert.equal(new Decimal(revertRes.restoredOutstanding).toString(), '50000');
+
+    // Linked expense transaction deleted
+    const deletedTx = await db.financialTransaction.findUnique({
+      where: { id: payRes.transactionId! }
+    });
+    assert.equal(deletedTx, null);
+
+    // Loan database state verified
+    const loanAfterRevert = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(new Decimal(loanAfterRevert!.outstandingPrincipal).toString(), '50000');
+    assert.equal(loanAfterRevert!.nextEmiDate!.toISOString(), emiDate.toISOString());
+
+    // Repeated revert is idempotent
+    const repeatRevert = await loanService.revertEmiPayment(userAId, {
+      loanPaymentId: payRes.paymentId,
+    });
+    assert.equal(repeatRevert.success, true);
+    assert.equal(repeatRevert.alreadyReversed, true);
+  });
+
+  await t.test('V2-652: Reminder and Obligation Management (Edit, Pause, Delete, Delivery purge)', async () => {
+    // 1. Create recurring obligation
+    const obDate = new Date('2026-12-01T09:00:00.000Z');
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Gym Subscription',
+        kind: 'SUBSCRIPTION',
+        amount: new Decimal(2500),
+        accountId: bankA.id,
+        dueAt: obDate,
+        nextDueAt: obDate,
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Create a dummy reminder delivery claim
+    const reminder = await db.reminder.create({
+      data: {
+        userId: userAId,
+        domain: 'WEALTH',
+        type: 'BILL',
+        title: 'Gym Subscription',
+        obligationId: ob.id,
+        scheduledAt: obDate,
+        recurrenceType: 'MONTHLY',
+      }
+    });
+
+    await db.reminderDelivery.create({
+      data: {
+        userId: userAId,
+        reminderId: reminder.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-12-01',
+        scheduledFor: obDate,
+        offsetMinutes: 0,
+        status: 'PENDING',
+      }
+    });
+
+    // 2. Edit schedule: changes schedule and purges pending deliveries
+    const newDate = new Date('2026-12-15T09:00:00.000Z');
+    await financeService.updateObligation(userAId, ob.id, {
+      dueAt: newDate,
+      amount: 2700,
+    });
+
+    const pendingDeliveries = await db.reminderDelivery.findMany({
+      where: { obligationId: ob.id, status: 'PENDING' }
+    });
+    // Pending deliveries were cleaned up
+    assert.equal(pendingDeliveries.length, 0);
+
+    const updatedOb = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(new Decimal(updatedOb!.amount!).toString(), '2700');
+
+    // 3. Pause obligation
+    await financeService.toggleObligationActive(userAId, ob.id, false);
+    const pausedOb = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(pausedOb!.isActive, false);
+
+    // 4. Resume obligation
+    await financeService.toggleObligationActive(userAId, ob.id, true);
+    const resumedOb = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(resumedOb!.isActive, true);
+
+    // 5. Hard delete with 0 payment occurrences succeeds
+    const delRes = await financeService.deleteObligation(userAId, ob.id);
+    assert.equal(delRes.success, true);
+    const deletedOb = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(deletedOb, null);
+
+    // 6. Hard delete with >= 1 payment occurrences is blocked
+    const paidOb = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Mobile Postpaid',
+        kind: 'RECHARGE',
+        amount: new Decimal(499),
+        dueAt: obDate,
+        nextDueAt: obDate,
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    await financeService.markObligationPaid(userAId, {
+      obligationId: paidOb.id,
+      occurrenceKey: '2026-12-01',
+    });
+
+    await assert.rejects(
+      async () => financeService.deleteObligation(userAId, paidOb.id),
+      /Cannot delete obligation with payment history/
+    );
+
+    // Archiving instead succeeds
+    const archRes = await financeService.archiveObligation(userAId, paidOb.id);
+    assert.equal(archRes.success, true);
+    const archOb = await db.obligation.findUnique({ where: { id: paidOb.id } });
+    assert.equal(archOb!.isArchived, true);
+    assert.equal(archOb!.isActive, false);
+  });
+
+  await t.test('V2-653a: Month-end clamping helper handles Feb 28/29, Apr 30 without month rollover', () => {
+    // Feb 2026 (non-leap year, 28 days)
+    assert.equal(creditCardService.clampDayToMonth(2026, 1, 31), 28);
+    assert.equal(creditCardService.clampDayToMonth(2026, 1, 29), 28);
+    assert.equal(creditCardService.clampDayToMonth(2026, 1, 15), 15);
+
+    // Feb 2024 (leap year, 29 days)
+    assert.equal(creditCardService.clampDayToMonth(2024, 1, 31), 29);
+    assert.equal(creditCardService.clampDayToMonth(2024, 1, 29), 29);
+
+    // April (30 days)
+    assert.equal(creditCardService.clampDayToMonth(2026, 3, 31), 30);
+    assert.equal(creditCardService.clampDayToMonth(2026, 3, 30), 30);
+
+    // January (31 days)
+    assert.equal(creditCardService.clampDayToMonth(2026, 0, 31), 31);
+
+    // Calculate dates helper
+    const dates = creditCardService.calculateStatementDates(31, 15, 2026, 1); // Feb 2026
+    assert.equal(dates.statementDate.getUTCDate(), 28);
+    assert.equal(dates.statementDate.getUTCMonth(), 1); // Feb
+    assert.equal(dates.dueDate.getUTCDate(), 15);
+    assert.equal(dates.dueDate.getUTCMonth(), 2); // March
+    assert.equal(dates.periodKey, '2026-02');
+  });
+
+  await t.test('V2-653b: Credit Card statement creation, partial payments, and full completion', async () => {
+    // 1. Create monthly statement: ₹30,000 due on 2026-11-10
+    const stmtRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardA.id,
+      periodKey: '2026-10',
+      statementDate: '2026-10-20T12:00:00.000Z',
+      dueDate: '2026-11-10T12:00:00.000Z',
+      statementAmount: 30000,
+      minimumDue: 1500,
+    });
+
+    assert.equal(stmtRes.success, true);
+    assert.equal(stmtRes.statement.status, 'OPEN');
+    assert.equal(new Decimal(stmtRes.statement.statementAmount).toString(), '30000');
+    assert.equal(new Decimal(stmtRes.statement.minimumDue!).toString(), '1500');
+
+    const stmtId = stmtRes.statement.id;
+
+    // Verify linked obligation was created/synced with ₹30,000
+    const linkedOb = await db.obligation.findFirst({
+      where: { userId: userAId, accountId: cardA.id, kind: 'CREDIT_CARD' }
+    });
+    assert.ok(linkedOb);
+    assert.equal(new Decimal(linkedOb.amount!).toString(), '30000');
+
+    // 2. Partial Payment 1: ₹10,000
+    const pay1 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtId,
+      fromAccountId: bankA.id,
+      amount: 10000,
+      note: 'Part 1 Payment',
+    });
+
+    assert.equal(pay1.success, true);
+    assert.equal(pay1.statementStatus, 'PARTIAL');
+    assert.equal(new Decimal(pay1.pendingBalance).toString(), '20000');
+    assert.equal(pay1.fullyPaid, false);
+
+    // Verify TRANSFER transaction created (NOT Expense, NOT Income)
+    const tx1 = await db.financialTransaction.findUnique({
+      where: { id: pay1.transactionId }
+    });
+    assert.ok(tx1);
+    assert.equal(tx1.type, 'TRANSFER');
+    assert.equal(tx1.accountId, bankA.id);
+    assert.equal(tx1.transferAccountId, cardA.id);
+    assert.equal(new Decimal(tx1.amount).toString(), '10000');
+
+    // Verify generic transaction delete is blocked
+    await assert.rejects(
+      async () => financeService.deleteTransaction(userAId, pay1.transactionId),
+      /Linked transaction cannot be deleted directly/
+    );
+
+    // Verify linked Obligation amount synced to ₹20,000
+    const obAfterPay1 = await db.obligation.findUnique({ where: { id: linkedOb.id } });
+    assert.equal(new Decimal(obAfterPay1!.amount!).toString(), '20000');
+
+    // 3. Partial Payment 2: ₹12,000 (Remaining pending ₹8,000)
+    const pay2 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtId,
+      fromAccountId: bankA.id,
+      amount: 12000,
+    });
+    assert.equal(pay2.statementStatus, 'PARTIAL');
+    assert.equal(new Decimal(pay2.pendingBalance).toString(), '8000');
+
+    const obAfterPay2 = await db.obligation.findUnique({ where: { id: linkedOb.id } });
+    assert.equal(new Decimal(obAfterPay2!.amount!).toString(), '8000');
+
+    // Overpayment rejection: trying to pay ₹10,000 when only ₹8,000 pending
+    await assert.rejects(
+      async () => creditCardService.recordCreditCardPayment(userAId, {
+        statementId: stmtId,
+        fromAccountId: bankA.id,
+        amount: 10000,
+      }),
+      /cannot exceed pending balance/
+    );
+
+    // 4. Final Payment: ₹8,000 -> statement status becomes PAID
+    const pay3 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtId,
+      fromAccountId: bankA.id,
+      amount: 8000,
+    });
+    assert.equal(pay3.statementStatus, 'PAID');
+    assert.equal(new Decimal(pay3.pendingBalance).toString(), '0');
+    assert.equal(pay3.fullyPaid, true);
+
+    // Obligation occurrence created with transactionId = null (Finding 3)
+    const occ = await db.obligationOccurrence.findFirst({
+      where: { obligationId: linkedOb.id }
+    });
+    assert.ok(occ);
+    assert.equal(occ.status, 'COMPLETED');
+    assert.equal(occ.transactionId, null);
+
+    // Obligation schedule advanced to next month
+    const obAfterFull = await db.obligation.findUnique({ where: { id: linkedOb.id } });
+    assert.ok(new Date(obAfterFull!.nextDueAt).getTime() > new Date(linkedOb.nextDueAt).getTime());
+
+    // 5. Revert Payment: undo the latest ₹8,000 payment
+    const revertPay3 = await creditCardService.revertCreditCardPayment(userAId, {
+      paymentId: pay3.paymentId,
+    });
+    assert.equal(revertPay3.success, true);
+    assert.equal(revertPay3.restoredStatus, 'PARTIAL');
+    assert.equal(new Decimal(revertPay3.pendingBalance).toString(), '8000');
+
+    // Transfer transaction for pay3 deleted
+    const tx3Deleted = await db.financialTransaction.findUnique({
+      where: { id: pay3.transactionId }
+    });
+    assert.equal(tx3Deleted, null);
+
+    // Completed occurrence removed and obligation restored to ₹8,000 pending
+    const occAfterRevert = await db.obligationOccurrence.findFirst({
+      where: { obligationId: linkedOb.id }
+    });
+    assert.equal(occAfterRevert, null);
+
+    const obAfterRevert = await db.obligation.findUnique({ where: { id: linkedOb.id } });
+    assert.equal(new Decimal(obAfterRevert!.amount!).toString(), '8000');
+    assert.equal(obAfterRevert!.nextDueAt.toISOString(), linkedOb.nextDueAt.toISOString());
+  });
+
+  await t.test('V2-653c: Cross-user and safety invariants for credit cards', async () => {
+    // User B cannot create statement on User A card
+    await assert.rejects(
+      async () => creditCardService.createCreditCardStatement(userBId, {
+        accountId: cardA.id,
+        periodKey: '2026-11',
+        statementDate: '2026-11-20',
+        dueDate: '2026-12-10',
+        statementAmount: 5000,
+      }),
+      /Credit card account not found or unauthorized/
+    );
+
+    // User A cannot pay using User B account
+    const stmt = await db.creditCardStatement.findFirst({ where: { accountId: cardA.id } });
+    await assert.rejects(
+      async () => creditCardService.recordCreditCardPayment(userAId, {
+        statementId: stmt!.id,
+        fromAccountId: bankB.id,
+        amount: 1000,
+      }),
+      /Source payment account not found or unauthorized/
+    );
+
+    // Cannot pay using the card itself as source
+    await assert.rejects(
+      async () => creditCardService.recordCreditCardPayment(userAId, {
+        statementId: stmt!.id,
+        fromAccountId: cardA.id,
+        amount: 1000,
+      }),
+      /Source account cannot be the credit card being paid/
+    );
+  });
+});

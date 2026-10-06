@@ -14,7 +14,7 @@ import {
   Decimal
 } from '@/lib/finance/finance';
 import { getNextOccurrence, getOccurrenceKey, RecurrenceRule } from '@/lib/recurrence/recurrence';
-import { recordEmiPayment } from './loan-service';
+import { recordEmiPayment, revertEmiPayment } from './loan-service';
 
 export const createAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -22,6 +22,9 @@ export const createAccountSchema = z.object({
   institution: z.string().max(100).optional().nullable(),
   openingBalance: z.union([z.number(), z.string(), z.instanceof(Decimal)]).default('0'),
   creditLimit: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
+  statementDay: z.number().int().min(1).max(31).optional().nullable(),
+  paymentDueDay: z.number().int().min(1).max(31).optional().nullable(),
+  defaultPaymentAccountId: z.string().optional().nullable(),
 });
 
 export const updateAccountSchema = z.object({
@@ -30,6 +33,9 @@ export const updateAccountSchema = z.object({
   institution: z.string().max(100).optional().nullable(),
   openingBalance: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional(),
   creditLimit: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
+  statementDay: z.number().int().min(1).max(31).optional().nullable(),
+  paymentDueDay: z.number().int().min(1).max(31).optional().nullable(),
+  defaultPaymentAccountId: z.string().optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
@@ -124,6 +130,9 @@ export async function getAccounts(userId: string, db: PrismaClientLike = default
       openingBalance: acc.openingBalance.toString(),
       currentBalance: currentBalance.toString(),
       creditLimit: acc.creditLimit ? acc.creditLimit.toString() : null,
+      statementDay: acc.statementDay,
+      paymentDueDay: acc.paymentDueDay,
+      defaultPaymentAccountId: acc.defaultPaymentAccountId,
       isActive: acc.isActive,
       createdAt: acc.createdAt ? (acc.createdAt instanceof Date ? acc.createdAt.toISOString() : String(acc.createdAt)) : new Date().toISOString(),
       updatedAt: acc.updatedAt ? (acc.updatedAt instanceof Date ? acc.updatedAt.toISOString() : String(acc.updatedAt)) : new Date().toISOString(),
@@ -154,6 +163,9 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
       institution: parsed.institution,
       openingBalance: openingBalanceDecimal,
       creditLimit: creditLimitDecimal,
+      statementDay: parsed.statementDay ?? null,
+      paymentDueDay: parsed.paymentDueDay ?? null,
+      defaultPaymentAccountId: parsed.defaultPaymentAccountId ?? null,
       isActive: true,
     }
   });
@@ -165,6 +177,8 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
       name: account.name,
       type: account.type,
       openingBalance: account.openingBalance.toString(),
+      statementDay: account.statementDay,
+      paymentDueDay: account.paymentDueDay,
     }
   };
 }
@@ -198,6 +212,9 @@ export async function updateAccount(
   if (parsed.creditLimit !== undefined) {
     updateData.creditLimit = parsed.creditLimit !== null ? parseAndValidateAmount(parsed.creditLimit.toString()) : null;
   }
+  if (parsed.statementDay !== undefined) updateData.statementDay = parsed.statementDay;
+  if (parsed.paymentDueDay !== undefined) updateData.paymentDueDay = parsed.paymentDueDay;
+  if (parsed.defaultPaymentAccountId !== undefined) updateData.defaultPaymentAccountId = parsed.defaultPaymentAccountId;
   if (parsed.isActive !== undefined) updateData.isActive = parsed.isActive;
 
   // V2-1002 / V2-Q002: openingBalance editable ONLY when account has zero posted transactions
@@ -236,6 +253,9 @@ export async function updateAccount(
       institution: updated.institution,
       openingBalance: updated.openingBalance.toString(),
       creditLimit: updated.creditLimit ? updated.creditLimit.toString() : null,
+      statementDay: updated.statementDay,
+      paymentDueDay: updated.paymentDueDay,
+      defaultPaymentAccountId: updated.defaultPaymentAccountId,
       isActive: updated.isActive,
     }
   };
@@ -424,6 +444,7 @@ export async function updateTransaction(
       obligationOccurrence: true,
       loanPayment: true,
       wishlistItem: true,
+      creditCardPayment: true,
     }
   });
 
@@ -436,6 +457,7 @@ export async function updateTransaction(
     tx.obligationOccurrence ||
     tx.loanPayment ||
     tx.wishlistItem ||
+    tx.creditCardPayment ||
     tx.personalDebtId
   ) {
     throw new Error('Linked transaction cannot be modified directly through generic transaction editor');
@@ -516,6 +538,7 @@ export async function deleteTransaction(userId: string, transactionId: string, d
       obligationOccurrence: true,
       loanPayment: true,
       wishlistItem: true,
+      creditCardPayment: true,
     }
   });
 
@@ -528,6 +551,7 @@ export async function deleteTransaction(userId: string, transactionId: string, d
     tx.obligationOccurrence ||
     tx.loanPayment ||
     tx.wishlistItem ||
+    tx.creditCardPayment ||
     tx.personalDebtId
   ) {
     throw new Error('Linked transaction cannot be deleted directly through generic transaction editor');
@@ -1047,6 +1071,16 @@ export async function updateObligation(
     updateData.nextDueAt = nextDueAt;
   }
 
+  // Cancel future unsent delivery claims on schedule edit or when deactivated (V2-652)
+  if (scheduleChanged || parsed.isActive === false) {
+    await db.reminderDelivery.deleteMany({
+      where: {
+        obligationId,
+        status: 'PENDING',
+      }
+    });
+  }
+
   const updated = await db.obligation.update({
     where: { id: obligationId },
     data: updateData,
@@ -1067,6 +1101,121 @@ export async function updateObligation(
 }
 
 /**
+ * Toggles an obligation between Active and Paused (V2-652).
+ * Cancels pending deliveries when paused; recalculates nextDueAt if overdue on resume.
+ */
+export async function toggleObligationActive(
+  userId: string,
+  obligationId: string,
+  isActive: boolean,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  const obligation = await db.obligation.findUnique({
+    where: { id: obligationId },
+    select: {
+      userId: true,
+      isArchived: true,
+      nextDueAt: true,
+      dueAt: true,
+      recurrenceType: true,
+      recurrenceInterval: true,
+    }
+  });
+
+  if (!obligation || obligation.userId !== userId) {
+    throw new Error('Obligation not found or unauthorized');
+  }
+
+  if (obligation.isArchived) {
+    throw new Error('Cannot toggle status of an archived obligation');
+  }
+
+  if (!isActive) {
+    // Pausing: cancel unsent deliveries
+    await db.reminderDelivery.deleteMany({
+      where: { obligationId, status: 'PENDING' }
+    });
+    await db.obligation.update({
+      where: { id: obligationId },
+      data: { isActive: false }
+    });
+  } else {
+    // Resuming: if past due, calculate next valid due date from now
+    const now = new Date();
+    let nextDueAt = obligation.nextDueAt;
+    if (obligation.nextDueAt.getTime() < now.getTime()) {
+      const user = await db.user.findUnique({
+        where: { id: userId },
+        select: { timezone: true }
+      });
+      const tz = user?.timezone || 'UTC';
+      const rule: RecurrenceRule = {
+        type: obligation.recurrenceType as any,
+        interval: obligation.recurrenceInterval,
+        timezone: tz,
+      };
+      nextDueAt = getNextOccurrence(rule, obligation.dueAt, now) || obligation.nextDueAt;
+    }
+
+    await db.obligation.update({
+      where: { id: obligationId },
+      data: { isActive: true, nextDueAt }
+    });
+  }
+
+  return { success: true, isActive };
+}
+
+/**
+ * Deletes an obligation only if it has zero completed occurrences (V2-652).
+ * If historical payments exist, blocks deletion and advises archiving.
+ */
+export async function deleteObligation(
+  userId: string,
+  obligationId: string,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  const obligation = await db.obligation.findUnique({
+    where: { id: obligationId },
+    include: {
+      occurrences: true,
+      loan: true,
+    }
+  });
+
+  if (!obligation || obligation.userId !== userId) {
+    throw new Error('Obligation not found or unauthorized');
+  }
+
+  if (obligation.occurrences && obligation.occurrences.length > 0) {
+    throw new Error(
+      'Cannot delete obligation with payment history. Archive the obligation to preserve records.'
+    );
+  }
+
+  if (obligation.loan) {
+    throw new Error(
+      'Cannot delete obligation linked to an active loan. Manage the loan directly.'
+    );
+  }
+
+  // Delete deliveries first
+  await db.reminderDelivery.deleteMany({
+    where: { obligationId }
+  });
+
+  await db.obligation.delete({
+    where: { id: obligationId }
+  });
+
+  return { success: true };
+}
+
+/**
  * Archives an obligation (soft delete) preserving all historical occurrences.
  */
 export async function archiveObligation(
@@ -1084,6 +1233,11 @@ export async function archiveObligation(
   if (!obligation || obligation.userId !== userId) {
     throw new Error('Obligation not found or unauthorized');
   }
+
+  // Cancel unsent pending deliveries
+  await db.reminderDelivery.deleteMany({
+    where: { obligationId, status: 'PENDING' }
+  });
 
   await db.obligation.update({
     where: { id: obligationId },
@@ -1292,5 +1446,184 @@ export async function markObligationPaid(
     success: true,
     alreadyCompleted: false,
     ...result,
+  };
+}
+
+export interface RevertObligationPaymentInput {
+  obligationId: string;
+  occurrenceKey?: string;
+  occurrenceId?: string;
+}
+
+/**
+ * Reverts an obligation payment occurrence atomically (V2-651 / Architecture Gate C):
+ * - Enforces latest-only completion revert rule (cannot revert earlier while later remains completed)
+ * - If linked to Loan, delegates to LoanService.revertEmiPayment
+ * - Deletes linked FinancialTransaction (if created)
+ * - Deletes ObligationOccurrence record (making it payable again)
+ * - Restores Obligation.nextDueAt to the occurrence's dueDate
+ * - Restores Obligation.lastCompletedAt to the previous completion or null
+ * - Reactivates obligation (isActive = true)
+ * - Cancels future unsent ReminderDelivery claims while preserving historical SENT/ACKNOWLEDGED logs
+ * - Idempotent on repeated calls
+ */
+export async function revertObligationPayment(
+  userId: string,
+  params: RevertObligationPaymentInput,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+  const { obligationId, occurrenceKey, occurrenceId } = params;
+
+  const obligation = await db.obligation.findUnique({
+    where: { id: obligationId },
+    include: {
+      loan: true,
+      occurrences: {
+        orderBy: { dueDate: 'desc' },
+      }
+    }
+  });
+
+  if (!obligation || obligation.userId !== userId) {
+    throw new Error('Obligation not found or unauthorized');
+  }
+
+  // Find target occurrence
+  let targetOccurrence: any = null;
+  if (occurrenceId) {
+    targetOccurrence = obligation.occurrences.find((o: any) => o.id === occurrenceId);
+  } else if (occurrenceKey) {
+    targetOccurrence = obligation.occurrences.find((o: any) => o.occurrenceKey === occurrenceKey);
+  } else {
+    // Latest completed occurrence
+    targetOccurrence = obligation.occurrences[0] || null;
+  }
+
+  if (!targetOccurrence) {
+    return {
+      success: true,
+      alreadyReversed: true,
+      message: 'Obligation occurrence not found or already reversed',
+    };
+  }
+
+  // Enforce latest-only revert rule
+  const targetDueDate = new Date(targetOccurrence.dueDate).getTime();
+  const laterOccurrence = obligation.occurrences.find(
+    (o: any) => new Date(o.dueDate).getTime() > targetDueDate && o.status === 'COMPLETED'
+  );
+  if (laterOccurrence) {
+    throw new Error(
+      'Cannot revert an earlier occurrence while a later occurrence remains completed. Please revert occurrences in reverse chronological order.'
+    );
+  }
+
+  // If linked to Loan, delegate to LoanService.revertEmiPayment
+  if (obligation.loan) {
+    const loanRes = await revertEmiPayment(
+      userId,
+      {
+        obligationOccurrenceId: targetOccurrence.id,
+        loanId: obligation.loan.id,
+        revertToDate: targetOccurrence.dueDate,
+      },
+      db
+    );
+
+    // Delete occurrence record
+    await db.obligationOccurrence.deleteMany({
+      where: { id: targetOccurrence.id }
+    });
+
+    // Find previous completed occurrence
+    const prevOccurrences = obligation.occurrences.filter(
+      (o: any) => o.id !== targetOccurrence.id && o.status === 'COMPLETED'
+    );
+    const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
+
+    // Restore obligation schedule
+    await db.obligation.update({
+      where: { id: obligation.id },
+      data: {
+        nextDueAt: targetOccurrence.dueDate,
+        lastCompletedAt,
+        isActive: true,
+      }
+    });
+
+    // Cancel future unsent delivery claims
+    await db.reminderDelivery.deleteMany({
+      where: {
+        obligationId: obligation.id,
+        status: 'PENDING',
+        scheduledFor: { gte: targetOccurrence.dueDate },
+      }
+    });
+
+    return {
+      success: true,
+      alreadyReversed: false,
+      revertedOccurrenceId: targetOccurrence.id,
+      restoredNextDueAt: new Date(targetOccurrence.dueDate).toISOString(),
+      loanReversed: true,
+      loanDetails: loanRes,
+    };
+  }
+
+  // Standard obligation reversal
+  const executeInTransaction = async (tx: any) => {
+    // 1. Delete linked FinancialTransaction if created
+    if (targetOccurrence.transactionId) {
+      await tx.financialTransaction.delete({
+        where: { id: targetOccurrence.transactionId }
+      });
+    }
+
+    // 2. Delete the occurrence record
+    await tx.obligationOccurrence.delete({
+      where: { id: targetOccurrence.id }
+    });
+
+    // 3. Find previous completion (if any)
+    const prevOccurrences = obligation.occurrences.filter(
+      (o: any) => o.id !== targetOccurrence.id && o.status === 'COMPLETED'
+    );
+    const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
+
+    // 4. Restore nextDueAt and reactivate obligation
+    await tx.obligation.update({
+      where: { id: obligation.id },
+      data: {
+        nextDueAt: targetOccurrence.dueDate,
+        lastCompletedAt,
+        isActive: true,
+      }
+    });
+
+    // 5. Cancel future unsent reminder deliveries (status == 'PENDING')
+    await tx.reminderDelivery.deleteMany({
+      where: {
+        obligationId: obligation.id,
+        status: 'PENDING',
+        scheduledFor: { gte: targetOccurrence.dueDate },
+      }
+    });
+
+    return {
+      revertedOccurrenceId: targetOccurrence.id,
+      restoredNextDueAt: targetOccurrence.dueDate,
+    };
+  };
+
+  const result = typeof db.$transaction === 'function'
+    ? await db.$transaction(executeInTransaction)
+    : await executeInTransaction(db);
+
+  return {
+    success: true,
+    alreadyReversed: false,
+    revertedOccurrenceId: result.revertedOccurrenceId,
+    restoredNextDueAt: new Date(result.restoredNextDueAt).toISOString(),
   };
 }

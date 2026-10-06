@@ -1,6 +1,6 @@
 # NutriSnap v0.2 Status
 
-State: READY FOR IMPLEMENTATION
+State: READY FOR FINAL ARCHITECTURE REVIEW
 
 Implementation branch:
 `feature/v0.2-money-life`
@@ -118,24 +118,42 @@ Architecture Gate B:
   - Durable delivery claims with retry backoff and deduplication across repeated ticks
 - Deterministic test suite: `src/lib/reminders/scheduler-tick.test.ts` (V2-6001..V2-6005, 55 tests in suite passing 100%)
 
+### V2-650 — Payment Lifecycle, Reminder Management and Credit Cards
+- Status: **COMPLETED & VERIFIED**
+- Implementation:
+  - Domain-aware Undo Paid (`revertObligationPayment`): reverts occurrence, deletes linked transaction, restores `nextDueAt`, purges pending reminders, idempotent
+  - Loan EMI reversal (`revertEmiPayment`): restores exact `principalPaid` to `outstandingPrincipal`, restores `nextEmiDate`, resets `CLOSED` loan to `ACTIVE`, deletes linked `EXPENSE` transaction, idempotent
+  - Obligation management: Pause/Resume toggle (`toggleObligationActive`), safe delete (`deleteObligation`), schedule edits purging obsolete future unsent deliveries while retaining history
+  - Health reminder management: Edit reminder dialog, pause/resume, and delete in UI
+  - Credit Card statement lifecycle: `CreditCardStatement` and `CreditCardPayment` models with month-end clamping helper (`clampDayToMonth`) handling 28/29/30/31 days safely
+  - Credit Card partial & full payments: records TRANSFER transaction (zero income/expense impact), updates statement status (`PARTIAL` -> `PAID`), synchronizes obligation
+  - Credit Card payment reversal (`revertCreditCardPayment`): removes latest payment, deletes linked TRANSFER transaction, restores balances, resets status, restores obligation
+  - Generic transaction mutation protection (409 Conflict) on CreditCardPayment linked transactions
+  - UI components: `CreditCardDialog` (statements, payments, reversals), `ObligationRow` (pause/resume, undo paid, delete), `Reminders` page (edit, pause, delete)
+- Deterministic test suite: `src/lib/finance/payment-lifecycle.test.ts` (V2-T090..V2-T099, 7 tests passing 100%)
+
 ### V2-700 — Final Integration & Verification Gate
-- Status: **SOFTWARE GATES PASS — READY FOR OWNER UAT**
+- Status: **SOFTWARE GATES PASS — READY FOR FINAL ARCHITECTURE REVIEW & OWNER UAT**
 - Verified Test Suites:
   - `npm run typecheck`: PASS (0 errors)
   - `npm run test:analysis-contract`: PASS (5/5)
-  - `npm run test:finance`: PASS (37/37 across 2 suites)
-  - `npm run test:reminders`: PASS (55/55)
+  - `npm run test:finance`: PASS (45/45 across 9 suites)
+  - `npm run test:reminders`: PASS (55/55 across 5 suites)
   - `npm run test:today`: PASS (6/6)
-  - `npm run test:security`: PASS (22/22)
+  - `npm run test:security`: PASS (22/22 across 2 suites)
   - `npm run test:ui`: PASS (7/7)
   - `npm run test:food`: PASS (16/16)
-  - `npm run test:life-hub`: PASS (97/97)
+  - `npm run test:life-hub`: PASS (105/105 across 13 suites)
 - Local Software Gate: **PASS**
-- Pending: Owner Browser UAT on Omarchy workstation
+
+### Architecture Gate C Review
+- Status: **PASS**
+- Independent review covering Credit Card revert lifecycle, strict month-end clamping, partial payments transaction linking, and reminder synchronization.
+- Documented in `versions/v0.2/ARCHITECTURE_REVIEW_C.md`.
 
 ## Current milestone
 
-READY FOR OWNER UAT — DO NOT MERGE
+V2-650: Completed — Ready for Final Architecture Review
 
 ## Agent model
 

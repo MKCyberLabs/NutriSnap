@@ -17,6 +17,9 @@ import {
   getObligations,
   createObligation,
   markObligationPaid,
+  revertObligationPayment,
+  toggleObligationActive,
+  deleteObligation,
   archiveObligation,
 } from '@/app/finance/actions';
 import { ReceiptText } from 'lucide-react';
@@ -66,6 +69,24 @@ export default function BillsPage() {
     const session = getAuthSession();
     if (!session) return;
     return await markObligationPaid(session.id, params);
+  };
+
+  const handleUndoPaid = async (params: any) => {
+    const session = getAuthSession();
+    if (!session) return;
+    return await revertObligationPayment(session.id, params);
+  };
+
+  const handleToggleActive = async (obligationId: string, isActive: boolean) => {
+    const session = getAuthSession();
+    if (!session) return;
+    return await toggleObligationActive(session.id, obligationId, isActive);
+  };
+
+  const handleDelete = async (obligationId: string) => {
+    const session = getAuthSession();
+    if (!session) return;
+    return await deleteObligation(session.id, obligationId);
   };
 
   const handleArchive = async (obligationId: string) => {
@@ -175,6 +196,9 @@ export default function BillsPage() {
                   obligation={ob}
                   accounts={accounts}
                   onMarkPaid={handleMarkPaid}
+                  onUndoPaid={handleUndoPaid}
+                  onToggleActive={handleToggleActive}
+                  onDelete={handleDelete}
                   onPaidSuccess={() => {
                     const session = getAuthSession();
                     if (session) loadData(session.id);

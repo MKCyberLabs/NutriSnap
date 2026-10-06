@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import * as financeService from '@/lib/finance/finance-service';
 import * as debtService from '@/lib/finance/debt-service';
 import * as loanService from '@/lib/finance/loan-service';
+import * as creditCardService from '@/lib/finance/credit-card-service';
 import { wishlistService } from '@/lib/finance/wishlist-service';
 
 async function verifyAuth(userId?: string) {
@@ -473,4 +474,128 @@ export async function deleteWishlistItem(userId: string, itemId: string) {
   revalidatePath('/finance/wishlist');
   revalidatePath('/today');
   return result;
+}
+
+/**
+ * Reverts an obligation payment occurrence atomically (V2-651).
+ */
+export async function revertObligationPayment(
+  userId: string,
+  params: {
+    obligationId: string;
+    occurrenceKey?: string;
+    occurrenceId?: string;
+  }
+) {
+  const authUser = await verifyAuth(userId);
+  const result = await financeService.revertObligationPayment(authUser.id, params);
+  revalidatePath('/finance');
+  revalidatePath('/finance/bills');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Toggles an obligation between Active and Paused (V2-652).
+ */
+export async function toggleObligationActive(
+  userId: string,
+  obligationId: string,
+  isActive: boolean
+) {
+  const authUser = await verifyAuth(userId);
+  const result = await financeService.toggleObligationActive(authUser.id, obligationId, isActive);
+  revalidatePath('/finance');
+  revalidatePath('/finance/bills');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Deletes an obligation only if it has zero completed occurrences (V2-652).
+ */
+export async function deleteObligation(userId: string, obligationId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await financeService.deleteObligation(authUser.id, obligationId);
+  revalidatePath('/finance');
+  revalidatePath('/finance/bills');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Reverts an EMI payment atomically (V2-651).
+ */
+export async function revertEmiPayment(
+  userId: string,
+  params: {
+    loanPaymentId?: string;
+    obligationOccurrenceId?: string;
+    loanId?: string;
+    revertToDate?: Date | string;
+  }
+) {
+  const authUser = await verifyAuth(userId);
+  const result = await loanService.revertEmiPayment(authUser.id, params);
+  revalidatePath('/finance');
+  revalidatePath('/finance/loans');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Creates a monthly credit card statement (V2-653).
+ */
+export async function createCreditCardStatement(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await creditCardService.createCreditCardStatement(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/finance/bills');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Records a payment against a credit card statement (V2-653).
+ */
+export async function recordCreditCardPayment(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await creditCardService.recordCreditCardPayment(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/finance/bills');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Reverts a credit card payment atomically (V2-653).
+ */
+export async function revertCreditCardPayment(
+  userId: string,
+  params: { paymentId?: string; statementId?: string }
+) {
+  const authUser = await verifyAuth(userId);
+  const result = await creditCardService.revertCreditCardPayment(authUser.id, params);
+  revalidatePath('/finance');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/finance/bills');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Returns comprehensive credit card details including statement and payments.
+ */
+export async function getCreditCardDetails(userId: string, accountId: string) {
+  const authUser = await verifyAuth(userId);
+  return await creditCardService.getCreditCardDetails(authUser.id, accountId);
 }

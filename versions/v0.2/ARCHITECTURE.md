@@ -254,3 +254,39 @@ To ensure database consistency and prevent Prisma synchronization anomalies:
   - `LoanPayment` holds scalar `obligationOccurrenceId String? @unique` pointing to `ObligationOccurrence.id`.
 - **1-to-many Relations (`PersonalDebt` ↔ `FinancialTransaction`)**:
   - `FinancialTransaction` holds scalar `personalDebtId String?` pointing to `PersonalDebt.id`, tracking each movement (`LEND`, `DEBT_COLLECT`, `BORROW`, `DEBT_REPAY`).
+- **1-to-1 Relations (`CreditCardPayment` ↔ `FinancialTransaction`)**:
+  - `CreditCardPayment` holds authoritative scalar foreign key `transactionId String @unique` pointing to `FinancialTransaction.id`.
+  - `FinancialTransaction` defines only the relation navigation field `creditCardPayment CreditCardPayment?` without duplicate scalar foreign keys.
+
+## 11. Payment Lifecycle, Undo Paid, and Credit Card Tracking (V2-650)
+
+### Domain-aware Undo Paid (`revertObligationPayment`)
+Generic transaction deletion MUST continue rejecting domain-linked transactions (`409 Conflict`).
+Reverting an obligation occurrence must use `revertObligationPayment(userId, { obligationId, occurrenceKey })`:
+- Only the latest dependent completed occurrence may be reverted;
+- Deletes/reverses the linked `FinancialTransaction` created by `markObligationPaid`;
+- Marks occurrence `REVERSED` (or clears completed state), making it payable again;
+- Restores `Obligation.nextDueAt` to the reverted occurrence date;
+- Restores `Obligation.lastCompletedAt` to the prior completed date or null;
+- Reactivates `ONCE` obligations where appropriate (`isActive = true`);
+- Cancels/removes only unsent future `ReminderDelivery` claims generated from the advancement;
+- Retains historical `SENT`/`ACKNOWLEDGED` audit logs;
+- Repeated calls are idempotent.
+
+### Loan EMI Reversal (`LoanService.revertEmiPayment`)
+When an obligation is linked to a `Loan`, `revertObligationPayment` delegates to `LoanService.revertEmiPayment`:
+- Removes the specific `LoanPayment`;
+- Removes the linked `EXPENSE` transaction only if one was generated (`emiGeneratesExpense == true`);
+- Adds back exactly `principalPaid` to `Loan.outstandingPrincipal` (never guess or infer principal);
+- Restores `Loan.nextEmiDate` and `Obligation.nextDueAt` using the exact scheduled date of the reverted occurrence;
+- Cancels obsolete unsent future reminder deliveries;
+- Repeated reversal is idempotent.
+
+### Credit Card Statements & Partial Payments (`CreditCardService`)
+- For `FinancialAccount` where `type == 'CREDIT_CARD'`: supports `creditLimit`, `statementDay` (1..31), `paymentDueDay` (1..31), optional `defaultPaymentAccountId`, and `reminderOffsetsMin`.
+- **Month-end clamping**: For statement and due days (e.g. day 31), months with fewer days (Feb 28/29, Apr 30, etc.) clamp to the last valid day of that calendar month. Never roll over into next month or crash.
+- `CreditCardStatement`: Tracks monthly statement period (`creditCardAccountId + periodKey` unique), `statementDate`, `dueDate`, `statementAmount`, `minimumDue`, and `status` (`OPEN | PARTIAL | PAID | OVERDUE`).
+- `CreditCardPayment`: Records payments against a statement. Each payment creates exactly one `TRANSFER` transaction from the payer account to the credit card account. Does NOT create Income or Expense.
+- **Partial Payments**: Each payment reduces pending amount (`statementAmount - sum(payments)`). When pending > 0, status is `PARTIAL` and reminder remains active showing remaining pending amount.
+- **Full Payment**: When pending reaches 0, statement status becomes `PAID`, monthly obligation occurrence completes (`transactionId = null` because payments hold their own transactions), and `Obligation.nextDueAt` advances to the next month.
+- **Credit Card Reversal (`revertPayment`)**: Deletes the latest `CreditCardPayment`, removes its linked `TRANSFER` transaction, restores payer and card balances, sets status back to `PARTIAL` or `OPEN`, and restores the obligation occurrence and reminder state.

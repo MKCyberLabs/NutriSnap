@@ -150,7 +150,12 @@ export default function AccountsPage() {
                 <AccountCard
                   key={acc.id}
                   account={acc}
+                  accounts={accounts}
                   onArchive={handleArchive}
+                  onRefresh={() => {
+                    const session = getAuthSession();
+                    if (session) loadData(session.id);
+                  }}
                 />
               ))}
             </div>
