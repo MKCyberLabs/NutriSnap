@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import * as financeService from '@/lib/finance/finance-service';
 import * as debtService from '@/lib/finance/debt-service';
 import * as loanService from '@/lib/finance/loan-service';
+import { wishlistService } from '@/lib/finance/wishlist-service';
 
 async function verifyAuth(userId?: string) {
   return await requireUser(userId);
@@ -360,6 +361,105 @@ export async function archiveLoan(userId: string, loanId: string) {
   const result = await loanService.archiveLoan(authUser.id, loanId);
   revalidatePath('/finance');
   revalidatePath('/finance/loans');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Creates a new wishlist item.
+ */
+export async function createWishlistItem(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await wishlistService.createWishlistItem(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/wishlist');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Lists wishlist items for user.
+ */
+export async function getWishlistItems(
+  userId: string,
+  options: { status?: string; priority?: string } = {}
+) {
+  const authUser = await verifyAuth(userId);
+  return await wishlistService.getWishlistItems(authUser.id, options);
+}
+
+/**
+ * Retrieves a single wishlist item.
+ */
+export async function getWishlistItemById(userId: string, itemId: string) {
+  const authUser = await verifyAuth(userId);
+  return await wishlistService.getWishlistItemById(authUser.id, itemId);
+}
+
+/**
+ * Updates wishlist item metadata before purchase.
+ */
+export async function updateWishlistItem(userId: string, itemId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await wishlistService.updateWishlistItem(authUser.id, itemId, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/wishlist');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Marks a wishlist item as purchased, optionally posting an expense transaction.
+ */
+export async function markWishlistPurchased(userId: string, itemId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await wishlistService.markPurchased(authUser.id, itemId, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/wishlist');
+  revalidatePath('/finance/transactions');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Reverts a wishlist purchase ("Unmark as Purchased" atomic flow).
+ */
+export async function unmarkWishlistPurchased(
+  userId: string,
+  itemId: string,
+  targetStatus: 'READY' | 'PLANNED' | 'WISHLIST' = 'READY'
+) {
+  const authUser = await verifyAuth(userId);
+  const result = await wishlistService.unmarkPurchased(authUser.id, itemId, targetStatus);
+  revalidatePath('/finance');
+  revalidatePath('/finance/wishlist');
+  revalidatePath('/finance/transactions');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Archives a wishlist item.
+ */
+export async function archiveWishlistItem(userId: string, itemId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await wishlistService.archiveWishlistItem(authUser.id, itemId);
+  revalidatePath('/finance');
+  revalidatePath('/finance/wishlist');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Deletes a wishlist item.
+ */
+export async function deleteWishlistItem(userId: string, itemId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await wishlistService.deleteWishlistItem(authUser.id, itemId);
+  revalidatePath('/finance');
+  revalidatePath('/finance/wishlist');
   revalidatePath('/today');
   return result;
 }

@@ -47,16 +47,16 @@
 - [x] V2-3013 UI + responsive.
 
 ## V2-400 Wishlist
-- [ ] V2-4001 schema (transactionId unique scalar FK on WishlistItem).
-- [ ] V2-4002 create/edit.
-- [ ] V2-4003 priority/status.
-- [ ] V2-4004 target price/max budget.
-- [ ] V2-4005 planned account.
-- [ ] V2-4006 Mark Purchased.
-- [ ] V2-4007 optional exactly-once Expense & generic edit/delete protection.
-- [ ] V2-4008 Wishlist purchase reversal ("Unmark as Purchased" atomic flow).
-- [ ] V2-4009 archive.
-- [ ] V2-4010 UI + responsive.
+- [x] V2-4001 schema (transactionId unique scalar FK on WishlistItem).
+- [x] V2-4002 create/edit.
+- [x] V2-4003 priority/status.
+- [x] V2-4004 target price/max budget.
+- [x] V2-4005 planned account.
+- [x] V2-4006 Mark Purchased.
+- [x] V2-4007 optional exactly-once Expense & generic edit/delete protection.
+- [x] V2-4008 Wishlist purchase reversal ("Unmark as Purchased" atomic flow).
+- [x] V2-4009 archive.
+- [x] V2-4010 UI + responsive.
 
 ## V2-500 Dashboard
 - [ ] V2-5001 Money overview read model.

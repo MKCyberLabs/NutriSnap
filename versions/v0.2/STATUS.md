@@ -84,9 +84,21 @@ Architecture Gate B:
 - UI routes & components: `/finance/loans`, `LoanCard`, `LoanForm`, `RecordEmiModal`, `ReconcileLoanModal` (verified)
 - Deterministic test suite: `src/lib/finance/loan.test.ts` (V2-T040..V2-T052)
 
+### V2-400 — Wishlist: PASS (Verified)
+- WishlistItem schema with unidirectional 1:1 transactionId (verified)
+- Create and edit wishlist item metadata (verified)
+- Target price and max budget without premature account balance or expense mutation (verified)
+- Mark purchased with optional exactly-once expense transaction creation (verified)
+- Mark purchased idempotency without duplicate expenses (verified)
+- Wishlist purchase reversal ("Unmark as Purchased" atomic flow restoring account balance) (verified)
+- Generic transaction editor and deleter 409 Conflict protection (verified)
+- Archive and delete flows (verified)
+- UI routes & components: `/finance/wishlist`, `WishlistCard`, `WishlistForm`, `MarkPurchasedModal` (verified)
+- Deterministic test suite: `src/lib/finance/wishlist.test.ts` (V2-T060..V2-T071)
+
 ## Current milestone
 
-Gate B Review / V2-400 — Wishlist
+V2-500 — Dashboard (Money Overview Read Models) & Today Integration
 
 ## Agent model
 
