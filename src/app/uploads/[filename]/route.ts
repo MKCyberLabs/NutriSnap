@@ -9,19 +9,13 @@ export async function GET(
   try {
     const resolvedParams = await params;
     // Sanitize the filename to prevent directory traversal attacks
-    const filename = path.basename(resolvedParams.filename);
+    const filename = resolvedParams.filename;
 
     // Ensure filename is not empty after basename extraction
-    if (!filename) {
+    if (!/^[A-Za-z0-9_-]+\.(jpg|jpeg|png|webp|gif)$/.test(filename)) {
       return new NextResponse('Invalid filename', { status: 400 });
     }
     const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
-
-    // Verify the resolved path is actually within the uploads directory
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!filePath.startsWith(uploadsDir)) {
-      return new NextResponse('Invalid path', { status: 400 });
-    }
 
     const fileBuffer = await readFile(filePath);
     
@@ -31,12 +25,12 @@ export async function GET(
     if (ext === '.png') contentType = 'image/png';
     else if (ext === '.gif') contentType = 'image/gif';
     else if (ext === '.webp') contentType = 'image/webp';
-    else if (ext === '.svg') contentType = 'image/svg+xml';
 
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=86400',
       },
     });

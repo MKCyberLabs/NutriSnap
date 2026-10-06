@@ -1,4 +1,4 @@
-'use server';
+import 'server-only';
 /**
  * @fileOverview A mock GenAI flow for analyzing meals with an itemized breakdown.
  * Strictly adheres to the NutriSnap Health Matrix API Specification.
@@ -15,6 +15,7 @@ const MealNutritionalAnalysisInputSchema = z.object({
     .describe('A text description of the meal.'),
   imagePath: z
     .string()
+    .regex(/^\/uploads\/[A-Za-z0-9_-]+\.(jpg|jpeg|png|webp|gif)$/)
     .optional()
     .describe('The path to the meal photo stored in the public/uploads volume.'),
   mealTime: z
@@ -59,6 +60,7 @@ export type MealNutritionalAnalysisOutput = z.infer<
 export async function mealNutritionalAnalysis(
   input: MealNutritionalAnalysisInput
 ): Promise<MealNutritionalAnalysisOutput> {
+  const validatedInput = MealNutritionalAnalysisInputSchema.parse(input);
   const pythonApiUrl = process.env.PYTHON_API_URL || 'http://localhost:5000/health-matrix';
   
   const response = await fetch(pythonApiUrl, {
@@ -67,9 +69,9 @@ export async function mealNutritionalAnalysis(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      mealDescription: input.mealDescription,
-      imagePath: input.imagePath,
-      mealTime: input.mealTime,
+      mealDescription: validatedInput.mealDescription,
+      imagePath: validatedInput.imagePath,
+      mealTime: validatedInput.mealTime,
     }),
   });
 

@@ -6,7 +6,7 @@ import { askNutritionFlow } from '@/ai/flows/ask-nutrition';
 import { NotFoodError } from '@/lib/errors';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 import { TZDate } from '@date-fns/tz';
 import { startOfDay, endOfDay, formatISO } from 'date-fns';
@@ -35,9 +35,11 @@ function calculateNutrientTargets(user: any) {
   };
 }
 
-if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN !== 'mock') {
-  // Register commands with Telegram so they appear in the autocomplete menu
-  bot.api.setMyCommands([
+let commandsRegistered = false;
+
+async function registerCommands() {
+  if (commandsRegistered) return;
+  await bot.api.setMyCommands([
     { command: 'help', description: 'Show all available commands' },
     { command: 'goals', description: 'View your daily nutrition goals and remaining limits' },
     { command: 'summary', description: 'View your daily nutrition progress and biometric targets' },
@@ -45,7 +47,8 @@ if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN !== 'mock')
     { command: 'settimezone', description: 'Set your local timezone (e.g., /settimezone America/New_York)' },
     { command: 'ask', description: 'Ask the AI about your nutritional habits' },
     { command: 'reminder', description: 'Set meal reminders' }
-  ]).catch(console.error);
+  ]);
+  commandsRegistered = true;
 }
 
 bot.command('help', async (ctx) => {
@@ -263,6 +266,215 @@ bot.callbackQuery(/^hyd_(.+)$/, async (ctx) => {
   }
 });
 
+// --- Health + Wealth Unified Callbacks & Commands ---
+
+bot.callbackQuery(/^paid_([^_]+)_(.+)$/, async (ctx) => {
+  const obligationId = ctx.match[1];
+  const occurrenceKey = ctx.match[2];
+
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) {
+    await ctx.answerCallbackQuery({ text: 'Access Denied', show_alert: true });
+    return;
+  }
+
+  // Verify ownership
+  const obligation = await prisma.obligation.findUnique({
+    where: { id: obligationId },
+    select: { id: true, userId: true, title: true, amount: true }
+  });
+
+  if (!obligation || obligation.userId !== user.id) {
+    await ctx.answerCallbackQuery({ text: 'Unauthorized or not found', show_alert: true });
+    return;
+  }
+
+  try {
+    const { markObligationPaid } = await import('@/lib/finance/finance-service');
+    const result = await markObligationPaid(user.id, {
+      obligationId,
+      occurrenceKey,
+      createExpense: true,
+    });
+
+    await ctx.answerCallbackQuery({
+      text: result.alreadyCompleted ? 'Already marked paid!' : 'Marked as paid!',
+    });
+
+    if (ctx.callbackQuery.message) {
+      const amtStr = obligation.amount ? ` ₹${obligation.amount}` : '';
+      await ctx.api.editMessageText(
+        ctx.callbackQuery.message.chat.id,
+        ctx.callbackQuery.message.message_id,
+        `✅ **Paid:** ${obligation.title}${amtStr}\nOccurrence: ${occurrenceKey}`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => {
+        // NSV01-0626: Message edit failure is non-fatal after business mutation succeeds
+      });
+    }
+  } catch (err: any) {
+    await ctx.answerCallbackQuery({
+      text: err?.message || 'Failed to mark paid',
+      show_alert: true,
+    });
+  }
+});
+
+bot.callbackQuery(/^snz_([^_]+)_(.+)$/, async (ctx) => {
+  const obligationId = ctx.match[1];
+  const occurrenceKey = ctx.match[2];
+
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) {
+    await ctx.answerCallbackQuery({ text: 'Access Denied', show_alert: true });
+    return;
+  }
+
+  const obligation = await prisma.obligation.findUnique({
+    where: { id: obligationId },
+    select: { userId: true, title: true }
+  });
+
+  if (!obligation || obligation.userId !== user.id) {
+    await ctx.answerCallbackQuery({ text: 'Unauthorized', show_alert: true });
+    return;
+  }
+
+  const snoozeDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // Snooze 24h
+
+  await prisma.reminderDelivery.updateMany({
+    where: {
+      obligationId,
+      occurrenceKey,
+      channel: 'TELEGRAM',
+    },
+    data: {
+      status: 'SNOOZED',
+      snoozedUntil: snoozeDate,
+      attemptCount: 0,
+      nextRetryAt: null,
+    }
+  });
+
+  await ctx.answerCallbackQuery({ text: 'Snoozed for 24 hours' });
+
+  if (ctx.callbackQuery.message) {
+    await ctx.api.editMessageText(
+      ctx.callbackQuery.message.chat.id,
+      ctx.callbackQuery.message.message_id,
+      `⏰ **Snoozed:** ${obligation.title}\nReminder postponed for 24 hours.`,
+      { parse_mode: 'Markdown' }
+    ).catch(() => {});
+  }
+});
+
+bot.command('water', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply('Access Denied.');
+
+  const match = ctx.match?.trim();
+  if (match) {
+    const amountMl = parseInt(match, 10);
+    if (!isNaN(amountMl) && amountMl > 0) {
+      await prisma.hydrationLog.create({
+        data: { userId: user.id, amountMl }
+      });
+      return ctx.reply(`💧 Logged **${amountMl} ml** of water. Keep staying hydrated!`, { parse_mode: 'Markdown' });
+    }
+  }
+
+  const keyboard = new InlineKeyboard()
+    .text('💧 250 ml', 'hyd_250')
+    .text('💧 500 ml', 'hyd_500')
+    .row()
+    .text('Custom ml', 'hyd_custom');
+
+  return ctx.reply('How much water would you like to log?', { reply_markup: keyboard });
+});
+
+bot.command('expense', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply('Access Denied.');
+
+  const match = ctx.match?.trim();
+  if (!match) {
+    return ctx.reply('Usage: `/expense [amount] [category] [optional note]`\nExample: `/expense 450 Food Lunch at cafe`', {
+      parse_mode: 'Markdown',
+    });
+  }
+
+  const parts = match.split(/\s+/);
+  const amountStr = parts[0];
+  const category = parts[1] || 'Other';
+  const note = parts.slice(2).join(' ') || null;
+
+  try {
+    const { recordTransaction, getAccounts } = await import('@/lib/finance/finance-service');
+    const { normalizeTransactionCategory } = await import('@/lib/finance/finance');
+    const accounts = await getAccounts(user.id);
+    if (accounts.length === 0) {
+      return ctx.reply('⚠️ Please create a financial account first on the web dashboard before logging expenses.');
+    }
+
+    const normalizedCategory = normalizeTransactionCategory(category);
+
+    await recordTransaction(user.id, {
+      type: 'EXPENSE',
+      amount: amountStr,
+      category: normalizedCategory,
+      accountId: accounts[0].id,
+      occurredAt: new Date(),
+      note,
+    });
+
+    return ctx.reply(`💸 Logged expense of **₹${amountStr}** under **${normalizedCategory}** from ${accounts[0].name}.`, {
+      parse_mode: 'Markdown',
+    });
+  } catch (err: any) {
+    return ctx.reply(`❌ Failed to record expense: ${err?.message || 'Invalid input'}`);
+  }
+});
+
+bot.command('reminders', async (ctx) => {
+  const telegramId = String(ctx.from!.id);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user) return ctx.reply('Access Denied.');
+
+  const [mealReminders, obligations] = await Promise.all([
+    prisma.reminder.findMany({ where: { userId: user.id, isActive: true } }),
+    prisma.obligation.findMany({ where: { userId: user.id, isActive: true, isArchived: false } })
+  ]);
+
+  let msg = '🔔 **Your Active Reminders & Schedules**\n\n';
+
+  if (mealReminders.length > 0) {
+    msg += '**Health & Meals:**\n';
+    for (const r of mealReminders) {
+      msg += `• ${r.title || r.category}: daily at ${r.time || r.timeOfDay}\n`;
+    }
+    msg += '\n';
+  }
+
+  if (obligations.length > 0) {
+    msg += '**Wealth & Obligations:**\n';
+    for (const ob of obligations) {
+      const amt = ob.amount ? ` (₹${ob.amount})` : '';
+      const due = ob.nextDueAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      msg += `• ${ob.title}${amt} - Due ${due} [${ob.recurrenceType}]\n`;
+    }
+  }
+
+  if (mealReminders.length === 0 && obligations.length === 0) {
+    msg += 'No active reminders configured.';
+  }
+
+  return ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
 bot.command('summary', async (ctx) => {
   const telegramId = String(ctx.from!.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
@@ -354,24 +566,41 @@ bot.on('message', async (ctx, next) => {
       return ctx.reply("❌ Invalid format. Please use HH:MM format (e.g. 08:00 or 14:30).");
     }
 
-    await prisma.reminder.upsert({
+    const existingReminder = await prisma.reminder.findFirst({
       where: {
-        userId_category: {
-          userId: user.id,
-          category
-        }
-      },
-      update: {
-        time: text,
-        isActive: true
-      },
-      create: {
         userId: user.id,
         category,
-        time: text,
-        isActive: true
+        domain: 'HEALTH'
       }
     });
+
+    if (existingReminder) {
+      await prisma.reminder.update({
+        where: { id: existingReminder.id },
+        data: {
+          time: text,
+          timeOfDay: text,
+          isActive: true
+        }
+      });
+    } else {
+      await prisma.reminder.create({
+        data: {
+          userId: user.id,
+          domain: 'HEALTH',
+          type: 'MEAL',
+          title: category,
+          category,
+          mealCategory: category,
+          time: text,
+          timeOfDay: text,
+          recurrenceType: 'DAILY',
+          recurrenceInterval: 1,
+          reminderOffsetsMin: [0],
+          isActive: true
+        }
+      });
+    }
     
     return ctx.reply(`✅ Your ${category} reminder is set to ${text}!`);
   } else if (ctx.message?.reply_to_message && ctx.message.reply_to_message.text?.includes("amount of water you drank (in ml)")) {
@@ -459,6 +688,9 @@ bot.on('message', async (ctx) => {
     if (hasPhoto) {
       const photo = ctx.message!.photo![ctx.message!.photo!.length - 1];
       const file = await ctx.api.getFile(photo.file_id);
+      if (!file.file_path || (file.file_size ?? 0) > 10 * 1024 * 1024) {
+        throw new Error('Telegram image is unavailable or too large');
+      }
       const fileLink = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
 
       const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
@@ -466,13 +698,15 @@ bot.on('message', async (ctx) => {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
       
-      const extMatch = file.file_path?.match(/\.([^.]+)$/);
-      const ext = extMatch ? `.${extMatch[1]}` : '.jpg';
-      const filename = `${Date.now()}_${telegramId}_${crypto.randomUUID()}${ext}`;
+      const extMatch = file.file_path?.match(/\.(jpg|jpeg|png|webp|gif)$/i);
+      const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.jpg';
+      const filename = `${randomUUID()}${ext}`;
       const filePath = path.join(uploadsDir, filename);
 
       const response = await fetch(fileLink);
+      if (!response.ok) throw new Error('Failed to download Telegram image');
       const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > 10 * 1024 * 1024) throw new Error('Telegram image is too large');
       fs.writeFileSync(filePath, Buffer.from(buffer));
       
       localImagePath = `/uploads/${filename}`;
@@ -624,12 +858,16 @@ _${analysisResult.healthInsight}_${goalsMsg}`;
 export async function POST(req: NextRequest) {
   try {
     const secret = req.headers.get('x-telegram-bot-api-secret-token');
-    if (process.env.TELEGRAM_WEBHOOK_SECRET && secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    if (!process.env.TELEGRAM_WEBHOOK_SECRET || !process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN === 'mock') {
+      return NextResponse.json({ error: 'Webhook is not configured' }, { status: 503 });
+    }
+    if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
     const update = await req.json();
     await bot.init();
+    await registerCommands();
     
     // Process the update in the background so we can respond with 200 OK immediately
     // This prevents Telegram from retrying the webhook and sending duplicate responses

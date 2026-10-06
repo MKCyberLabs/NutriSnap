@@ -2,9 +2,11 @@
 # Comprehensive End-to-End Test Suite for NutriSnap (Port 3001)
 
 set -e
+: "${ADMIN_INITIAL_PASSWORD:?Set ADMIN_INITIAL_PASSWORD before running this script}"
 
 BASE_URL="http://localhost:3001"
-COOKIES_FILE="/tmp/nutrisnap_cookies.txt"
+COOKIES_FILE=$(mktemp)
+trap 'rm -f "$COOKIES_FILE"' EXIT
 
 echo "=========================================="
 echo "  NutriSnap - Automated Test Suite"
@@ -24,10 +26,10 @@ echo ""
 
 # Test Case 2: Admin Authentication (Successful Login & Session Cookie)
 echo "[Test 2/4] Testing Admin User Authentication (POST ${BASE_URL}/api/auth/login)..."
-LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -c "${COOKIES_FILE}" \
+LOGIN_RESPONSE=$(python3 -c 'import json,os; print(json.dumps({"email":"admin@mkcyberlabs.in","password":os.environ["ADMIN_INITIAL_PASSWORD"]}))' | curl -s -w "\n%{http_code}" -c "${COOKIES_FILE}" \
     -X POST "${BASE_URL}/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"email": "admin@mkcyberlabs.in", "password": "ProductionPassword123!"}')
+    --data-binary @-)
 
 LOGIN_HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -n1)
 LOGIN_BODY=$(echo "$LOGIN_RESPONSE" | sed '$d')

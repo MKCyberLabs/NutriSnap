@@ -1,57 +1,97 @@
-# NutriSnap Life Hub v0.1
+# NutriSnap v0.1 — Health + Wealth
 
-Planning baseline for GitHub Issue #129.
+Status: **Herdr execution package**
 
-## Goal
+Target branch: `feature/v0.1-health-wealth`
 
-Deliver the first Life Hub milestone without breaking existing Food and Water features:
+GitHub execution issue: **#131 — NutriSnap v0.1 Health + Wealth — Herdr execution**
+
+## Product goal
+
+NutriSnap v0.1 becomes a small personal Health + Wealth hub without breaking the current Food and Water experience.
 
 ```text
-Today + Food + Water + Finance + Generic Reminders
+NutriSnap
+├── Today
+├── Health
+│   ├── Food
+│   ├── Water
+│   └── Health Reminders
+├── Wealth
+│   ├── Accounts
+│   ├── Transactions
+│   └── Bills / Subscriptions / Recharge / EMI
+└── Shared Reminders + Telegram
 ```
 
-## Files
+The visible v0.1 navigation may remain `Today / Food / Water / Money / Reminders`; Health + Wealth is the product/domain architecture, not a forced navigation redesign.
 
-- `MASTER_PLAN.md` — product scope, phases, non-goals and release gates.
-- `ARCHITECTURE.md` — domain boundaries, proposed schema, migration safety, recurrence and idempotency design.
-- `CHECKPOINT_RECOVERY.md` — mandatory provider-quota interruption, checkpoint and same-task retry contract.
-- `IMPLEMENTATION_CHECKLIST.md` — execution checklist for implementation and review.
-- `TEST_MATRIX.md` — deterministic product verification cases and integrated acceptance scenario.
-- `PROVIDER_RECOVERY_TESTS.md` — deterministic orchestration/recovery cases for quota interruption.
-- `PAPERCLIP_TASK.md` — Paperclip decomposition, review gates, Git policy and final evidence requirements.
+## Shared-memory rule
 
-## Implementation branch
+Every agent switch, new session, context reset, or long resume starts with the repo-based shared memory. Private agent memory is never authoritative.
 
-`paperclip/gh-129-life-hub-v0.1`
+Read in this order:
 
-## Assignment gate
+1. repo root `AGENTS.md` — common memory, role rules, safety and invariants.
+2. `AGENT_HANDOFF.md` — current live cross-agent resume baton.
+3. `STATUS.md` — milestone/checkpoint state.
+4. `AGENT_SKILLS.md` — common Git, delegation, migration, testing and review workflows.
+5. `HERDR_PANEL_WORKFLOW.md` — same-panel/split-tab multi-agent workflow and concurrency rules.
+6. `HEALTH_WEALTH_ROADMAP.md` — milestone roadmap and product boundary.
+7. `MASTER_PLAN.md` — detailed v0.1 product behavior.
+8. `ARCHITECTURE.md` — schema, migration, recurrence, idempotency and ownership design.
+9. `HERDR_EXECUTION_PLAN.md` — AGY-Manickam execution workflow and checkpoint rules.
+10. `IMPLEMENTATION_CHECKLIST.md` — implementation completeness checklist.
+11. `TEST_MATRIX.md` — deterministic functional/security matrix.
+12. `COMPLETE_VERIFICATION_PLAN.md` — authoritative mark-as-you-go verification gate.
+13. `OPEN_QUESTIONS.md` — blocker/doubt protocol.
+14. `HERDR_MASTER_PROMPT.md` — reusable OpenClaw/Herdr AGY-Manickam instruction.
+15. `docs/DEVELOPMENT_BASELINE.md` — isolated dev environment baseline.
 
-Do not assign the Life Hub parent until the live Paperclip VM has the provider-quota hardening from `MKCyberLabs/paperclip-infra` Issue #7 deployed and:
+`PAPERCLIP_TASK.md`, `PAPERCLIP_EXECUTION.json`, `CHECKPOINT_RECOVERY.md`, and `PROVIDER_RECOVERY_TESTS.md` are retained as historical planning/control artifacts. They are **not** the active execution path for this branch.
 
-```bash
-bash scripts/verify-provider-quota-recovery.sh
-```
+## Execution model
 
-passes from a clean `paperclip-infra` checkout at or after commit:
+Primary implementation/orchestration agent: **AGY-Manickam in OpenClaw/Herdr**.
 
-`48bfd0a6bc6a6bc8be208d574fe2fc38ea008c46`
+Default token-efficient roles:
 
-## Review model
+- **AGY-Manickam** — lead, orchestrator, integrator, long-running implementation.
+- **AGY-Rohit** — bounded implementation/testing slices.
+- **Codex** — architecture, security, difficult debugging, and independent Review A/B/C; not the default orchestrator.
 
-Three explicit gates:
+Herdr may use split panes/tabs. Only one agent may write the main worktree at a time. True parallel writers require separate Git worktrees/helper branches. See `HERDR_PANEL_WORKFLOW.md`.
 
-1. Review A — schema/migration/security architecture.
-2. Review B — Finance + Reminder domain integration.
-3. Review C — final v0.1 integration/release candidate.
+AGY-Manickam remains responsible for integrating work, running/collecting tests, updating evidence, committing meaningful checkpoints, updating `STATUS.md` + `AGENT_HANDOFF.md`, and pushing this branch.
 
-Each explicit negative review uses the bounded Paperclip repair/re-review path; default max is two negative rounds.
+Independent review gates:
 
-Provider interruption is not a negative review. Quota exhaustion, adapter timeout or provider failure without an explicit reviewer verdict is `UNKNOWN` and must resume/retry on the same child according to `CHECKPOINT_RECOVERY.md`.
+1. Review A — schema / migration / recurrence / authorization foundation.
+2. Review B — Wealth + Reminder integration.
+3. Review C — final v0.1 local release candidate.
 
-## Production boundary
+A review failure blocks only the affected phase until repaired and re-reviewed. Do not discard already verified work.
 
-The task may implement and test schema/migration artifacts in a safe non-production environment, but production migration/deployment is not implicit. It requires owner approval after the PR is reviewed.
+## Development boundary
 
-## Owner merge
+Use the isolated Omarchy development environment documented in `docs/DEVELOPMENT_BASELINE.md`.
 
-Agents may push the task branch and open a PR. They must not merge to `main`.
+- Local PostgreSQL only.
+- Mock health analysis is acceptable for development.
+- Telegram remains mocked for the local gate.
+- No OpenClaw production DB mutation.
+- No production deployment.
+- No production Prisma destructive operation.
+- No merge to `main` until owner approval.
+
+## Owner stash boundary
+
+The useful September WIP has been recovered, validated, and integrated into this feature branch. The original pre-v0.1 `main` stash remains preserved as an owner-controlled safety copy. Do not apply/pop/drop it without explicit owner instruction.
+
+## Resume rule
+
+The owner may start **any** of the three agents with only:
+
+> Read root `AGENTS.md`, then `versions/v0.1/AGENT_HANDOFF.md`, `versions/v0.1/STATUS.md`, `versions/v0.1/AGENT_SKILLS.md`, and `versions/v0.1/HERDR_PANEL_WORKFLOW.md`. Work only on `feature/v0.1-health-wealth`. Continue the exact next action recorded in the handoff within your role. Do not touch owner stashes, merge main, deploy production, or invent missing product semantics.
+
+For AGY-Manickam long-run execution also read `versions/v0.1/HERDR_MASTER_PROMPT.md` completely before continuing.

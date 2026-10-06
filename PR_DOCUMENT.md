@@ -33,22 +33,16 @@ docker-compose -f docker-compose.dev.yml up
 ### Initializing the Database Schema
 Before running test cases, you **must** apply the Prisma schema to your local PostgreSQL container:
 ```bash
-docker run --rm -v $(pwd)/prisma:/prisma -w /prisma \
+docker run --rm --env-file .env -v $(pwd)/prisma:/prisma -w /prisma \
   --network proxy \
-  -e DATABASE_URL="postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap" \
   node:18-alpine sh -c "npm install prisma && npx prisma db push --schema=/prisma/schema.prisma"
 ```
 
 ### Seeding the Admin User
-To test the admin dashboard, inject the Super Admin account:
+To test the admin dashboard, set a unique `ADMIN_INITIAL_PASSWORD` in `.env`, then seed the account:
 ```bash
-docker exec nutrisnap_db psql -U nutrisnap -d nutrisnap -c "
-  INSERT INTO \"User\" (id, email, name, password, role, onboarded, \"updatedAt\") 
-  VALUES ('admin_123', 'admin@mkcyberlabs.in', 'Admin', '\$2b\$12\$CuBxTsNNvuZnfwaUY7cj.uwCviLeneXIpqVTLUKNeIT/eESDFRhvq', 'ADMIN', true, NOW()) 
-  ON CONFLICT DO NOTHING;
-"
+npx tsx prisma/seed.ts
 ```
-*(Password is `ProductionPassword123!`)*
 
 ---
 
@@ -75,7 +69,7 @@ docker exec nutrisnap_db psql -U nutrisnap -d nutrisnap -c "
 **Context**: Hardcoded buttons for "Internal Directory" were removed to ensure strict dynamic auth.
 * **Step 1**: Navigate to the root login page (`/`).
 * **Expected Result**: The "Internal Directory" section and the "User" / "Global Admin" quick-select buttons should be completely gone. 
-* **Step 2**: Manually type in the Admin credentials (`admin@mkcyberlabs.in` / `ProductionPassword123!`) and click login. Verify successful entry into `/admin`.
+* **Step 2**: Enter the seeded admin email and your configured password, then verify successful entry into `/admin`.
 
 ### 4. Admin Role Redirection Guard
 **Context**: Admins should not view the user dashboard.

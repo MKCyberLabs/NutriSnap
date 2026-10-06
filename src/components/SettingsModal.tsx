@@ -135,7 +135,9 @@ export function SettingsModal({ children }: { children: React.ReactNode }) {
       setReminders(data);
       const newTimes = { ...times };
       data.forEach(r => {
-        newTimes[r.category] = r.time;
+        if (r.category && r.time) {
+          newTimes[r.category] = r.time;
+        }
       });
       setTimes(newTimes);
       

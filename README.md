@@ -37,14 +37,18 @@ npm run typecheck
 
 ## Managing the Database
 
+Before deploying the session security update, set unique `POSTGRES_PASSWORD`, `DATABASE_URL`, and `ADMIN_INITIAL_PASSWORD` values in the ignored `.env` file. The database URL must use the same password as PostgreSQL. If Telegram is enabled, set `TELEGRAM_WEBHOOK_SECRET` and register that value with Telegram. Rotate any credentials previously set to repository defaults.
+
+From a checkout with the Prisma CLI and database access, apply `npx prisma db push` before starting the updated app. This creates the `Session` table used by login and server actions. Existing ID-based cookies will no longer authenticate; users must sign in again. Avoid `--accept-data-loss` when applying schema changes.
+
 When setting up NutriSnap on a fresh system (where the database is empty), you must sync the database schema.
-If the database schema drifts or you get Prisma errors on startup, run the following command to forcefully push the schema:
+If the database schema drifts or you get Prisma errors on startup, review the pending schema changes and push them from a checkout with database access:
 
 ```bash
-docker compose exec nutrisnap npx prisma db push --accept-data-loss
+npx prisma db push
 ```
 
-*(Note: The `Dockerfile` has been updated to run this automatically on startup, but you can run it manually if you bypass the startup script).*
+The production Docker image starts the app directly; apply schema changes before starting the new image.
 
 ## Development Notes & Troubleshooting
 

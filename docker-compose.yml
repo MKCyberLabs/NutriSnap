@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: nutrisnap
-      POSTGRES_PASSWORD: nutrisnap_pass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: nutrisnap
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -28,11 +28,10 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://nutrisnap:nutrisnap_pass@db:5432/nutrisnap}
+      - DATABASE_URL=${DATABASE_URL:?Set DATABASE_URL in .env}
       - PYTHON_API_URL=${PYTHON_API_URL:-http://host.docker.internal:5000/health-matrix}
       - NODE_ENV=${NODE_ENV:-production}
-      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-ProductionPassword123!}
-      - ADMIN_RECOVERY_KEY=${ADMIN_RECOVERY_KEY:-RecoveryKey@2024Secure!}
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:?Set ADMIN_INITIAL_PASSWORD in .env}
       - USE_MOCK_HEALTH_API=${USE_MOCK_HEALTH_API:-false}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     extra_hosts:

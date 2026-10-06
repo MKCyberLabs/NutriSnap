@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label';
 import { ShieldCheck, UserCheck, ArrowRight, Lock, Loader2 } from 'lucide-react';
 import { saveAuthSession } from '@/lib/auth-mock';
-import { authenticateDbUser } from '@/ai/actions/db-users';
 import { useToast } from '@/hooks/use-toast';
 import { loginSchema } from '@/lib/validation';
 
@@ -37,21 +36,7 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Production Auth: Check PostgreSQL DB via Server Action
-      const dbUser = await authenticateDbUser(email, password);
-      
-      if (dbUser) {
-        saveAuthSession(dbUser as any);
-        toast({
-          title: "Authenticated Successfully",
-          description: `Access granted as ${dbUser.role}`,
-        });
-        
-        if (dbUser.role === 'ADMIN') { router.push('/admin'); } else { router.push(dbUser.onboarded ? '/dashboard' : '/onboarding'); }
-        return;
-      }
-
-      // 2. Fallback: Call API (for hardcoded accounts or recovery keys)
+      // Authenticate through the rate-limited API and establish a server session.
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
