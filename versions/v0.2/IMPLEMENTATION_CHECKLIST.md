@@ -32,19 +32,19 @@
 - [x] V2-2012 UI + responsive.
 
 ## V2-300 Loans & EMI
-- [ ] V2-3001 Loan schema (including emiGeneratesExpense, principalAlreadyRecognized).
-- [ ] V2-3002 LoanPayment schema (transactionId and obligationOccurrenceId unique scalar FKs).
-- [ ] V2-3003 add existing running loan snapshot.
-- [ ] V2-3004 Personal/Home/Vehicle/Education/Gold.
-- [ ] V2-3005 Product EMI.
-- [ ] V2-3006 Credit Card EMI rule (snapshot vs purchase conversion).
-- [ ] V2-3007 create/link EMI obligation & delegation from Obligation fulfillment to LoanService.
-- [ ] V2-3008 record EMI payment exactly once (occurrence-idempotent).
-- [ ] V2-3009 known-principal outstanding update.
-- [ ] V2-3010 unknown-principal no guessing (UI guidance provided).
-- [ ] V2-3011 reconcile outstanding.
-- [ ] V2-3012 close/archive.
-- [ ] V2-3013 UI + responsive.
+- [x] V2-3001 Loan schema (including emiGeneratesExpense, principalAlreadyRecognized).
+- [x] V2-3002 LoanPayment schema (transactionId and obligationOccurrenceId unique scalar FKs).
+- [x] V2-3003 add existing running loan snapshot.
+- [x] V2-3004 Personal/Home/Vehicle/Education/Gold.
+- [x] V2-3005 Product EMI.
+- [x] V2-3006 Credit Card EMI rule (snapshot vs purchase conversion).
+- [x] V2-3007 create/link EMI obligation & delegation from Obligation fulfillment to LoanService.
+- [x] V2-3008 record EMI payment exactly once (occurrence-idempotent).
+- [x] V2-3009 known-principal outstanding update.
+- [x] V2-3010 unknown-principal no guessing (UI guidance provided).
+- [x] V2-3011 reconcile outstanding.
+- [x] V2-3012 close/archive.
+- [x] V2-3013 UI + responsive.
 
 ## V2-400 Wishlist
 - [ ] V2-4001 schema (transactionId unique scalar FK on WishlistItem).

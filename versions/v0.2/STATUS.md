@@ -70,15 +70,20 @@ Architecture Gate A:
 - UI routes & components: `/finance/debts`, `DebtCard`, `DebtForm`, `DebtPaymentModal` (verified)
 - Deterministic test suite: `src/lib/finance/debt.test.ts` (V2-T020..V2-T030)
 
+### V2-300 — Loans & EMI: PASS (Verified)
+- Add existing running loan snapshot (Personal/Home/Vehicle/Education/Gold) (verified)
+- Product EMI & Credit Card EMI rules (`emiGeneratesExpense`, `principalAlreadyRecognized`) (verified)
+- Obligation linking & delegation from Obligation fulfillment to LoanService (verified)
+- Known principal outstanding reduction / unknown principal guidance (verified)
+- LoanPayment model & idempotency (verified)
+- Reconcile outstanding principal (verified)
+- Close and archive loan flows (verified)
+- UI routes & components: `/finance/loans`, `LoanCard`, `LoanForm`, `RecordEmiModal`, `ReconcileLoanModal` (verified)
+- Deterministic test suite: `src/lib/finance/loan.test.ts` (V2-T040..V2-T052)
+
 ## Current milestone
 
-V2-300 — Loans & EMI
-- Add existing running loan snapshot (Personal/Home/Vehicle/Education/Gold)
-- Product EMI & Credit Card EMI rules (`emiGeneratesExpense`, `principalAlreadyRecognized`)
-- Obligation linking & delegation from Obligation fulfillment to LoanService
-- Known principal outstanding reduction / unknown principal guidance
-- LoanPayment model & idempotency
-- UI routes & components (/finance/loans)
+Gate B Review / V2-400 — Wishlist
 
 ## Agent model
 

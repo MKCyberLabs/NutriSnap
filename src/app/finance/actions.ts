@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import * as financeService from '@/lib/finance/finance-service';
 import * as debtService from '@/lib/finance/debt-service';
+import * as loanService from '@/lib/finance/loan-service';
 
 async function verifyAuth(userId?: string) {
   return await requireUser(userId);
@@ -277,6 +278,88 @@ export async function archiveDebt(userId: string, debtId: string) {
   const result = await debtService.archiveDebt(authUser.id, debtId);
   revalidatePath('/finance');
   revalidatePath('/finance/debts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Creates a loan liability snapshot.
+ */
+export async function createLoan(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await loanService.createLoan(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/loans');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Lists user loans with payment history.
+ */
+export async function getLoans(userId: string, options: { status?: string } = {}) {
+  const authUser = await verifyAuth(userId);
+  return await loanService.getLoans(authUser.id, options);
+}
+
+/**
+ * Retrieves a single loan by ID.
+ */
+export async function getLoanById(userId: string, loanId: string) {
+  const authUser = await verifyAuth(userId);
+  return await loanService.getLoanById(authUser.id, loanId);
+}
+
+/**
+ * Records an EMI payment on a loan.
+ */
+export async function recordEmiPayment(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await loanService.recordEmiPayment(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/loans');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Reconciles loan outstanding balance manually.
+ */
+export async function reconcileOutstanding(
+  userId: string,
+  loanId: string,
+  newOutstanding: string | number,
+  note?: string
+) {
+  const authUser = await verifyAuth(userId);
+  const result = await loanService.reconcileOutstanding(authUser.id, loanId, newOutstanding, note);
+  revalidatePath('/finance');
+  revalidatePath('/finance/loans');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Closes a loan.
+ */
+export async function closeLoan(userId: string, loanId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await loanService.closeLoan(authUser.id, loanId);
+  revalidatePath('/finance');
+  revalidatePath('/finance/loans');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Archives a loan (soft delete).
+ */
+export async function archiveLoan(userId: string, loanId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await loanService.archiveLoan(authUser.id, loanId);
+  revalidatePath('/finance');
+  revalidatePath('/finance/loans');
   revalidatePath('/today');
   return result;
 }

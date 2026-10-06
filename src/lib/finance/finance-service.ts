@@ -13,6 +13,7 @@ import {
   Decimal
 } from '@/lib/finance/finance';
 import { getNextOccurrence, getOccurrenceKey, RecurrenceRule } from '@/lib/recurrence/recurrence';
+import { recordEmiPayment } from './loan-service';
 
 export const createAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -881,7 +882,7 @@ export async function markObligationPaid(
   // 2. Load obligation & check ownership
   const obligation = await db.obligation.findUnique({
     where: { id: obligationId },
-    include: { account: true }
+    include: { account: true, loan: true }
   });
 
   if (!obligation || obligation.userId !== userId) {
@@ -933,32 +934,6 @@ export async function markObligationPaid(
   const executeInTransaction = async (tx: any) => {
     let createdTxId: string | null = null;
 
-    // Optional expense creation
-    if (createExpense && obligation.amount) {
-      const targetAccountId = accountId || obligation.accountId;
-      if (targetAccountId) {
-        const acc = await tx.financialAccount.findUnique({
-          where: { id: targetAccountId },
-          select: { userId: true }
-        });
-        if (acc && acc.userId === userId) {
-          const expenseTx = await tx.financialTransaction.create({
-            data: {
-              userId,
-              type: 'EXPENSE',
-              amount: obligation.amount,
-              category: obligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
-              occurredAt: new Date(),
-              accountId: targetAccountId,
-              obligationId: obligation.id,
-              note: `Paid: ${obligation.title}`,
-            }
-          });
-          createdTxId = expenseTx.id;
-        }
-      }
-    }
-
     // Record occurrence completion
     const occurrence = await tx.obligationOccurrence.create({
       data: {
@@ -968,9 +943,64 @@ export async function markObligationPaid(
         dueDate: obligation.nextDueAt,
         status: 'COMPLETED',
         paidAt: new Date(),
-        transactionId: createdTxId,
+        transactionId: null,
       }
     });
+
+    // Linked EMI Obligation delegation (V2-T045b, V2-T046b)
+    if (obligation.loan) {
+      const targetAccountId = accountId || obligation.loan.paymentAccountId || obligation.accountId;
+      if (!targetAccountId) {
+        throw new Error('Payment account required for linked loan EMI');
+      }
+
+      const emiRes = await recordEmiPayment(userId, {
+        loanId: obligation.loan.id,
+        amount: obligation.amount || obligation.loan.emiAmount || '0',
+        accountId: targetAccountId,
+        obligationOccurrenceId: occurrence.id,
+        occurredAt: new Date(),
+        note: `EMI: ${obligation.title}`,
+      }, tx);
+
+      if (emiRes.transactionId) {
+        createdTxId = emiRes.transactionId;
+        await tx.obligationOccurrence.update({
+          where: { id: occurrence.id },
+          data: { transactionId: createdTxId }
+        });
+      }
+    } else {
+      // Optional expense creation for non-loan obligations
+      if (createExpense && obligation.amount) {
+        const targetAccountId = accountId || obligation.accountId;
+        if (targetAccountId) {
+          const acc = await tx.financialAccount.findUnique({
+            where: { id: targetAccountId },
+            select: { userId: true }
+          });
+          if (acc && acc.userId === userId) {
+            const expenseTx = await tx.financialTransaction.create({
+              data: {
+                userId,
+                type: 'EXPENSE',
+                amount: obligation.amount,
+                category: obligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
+                occurredAt: new Date(),
+                accountId: targetAccountId,
+                obligationId: obligation.id,
+                note: `Paid: ${obligation.title}`,
+              }
+            });
+            createdTxId = expenseTx.id;
+            await tx.obligationOccurrence.update({
+              where: { id: occurrence.id },
+              data: { transactionId: createdTxId }
+            });
+          }
+        }
+      }
+    }
 
     // Advance obligation nextDueAt ONLY if this occurrence matches the current active due date
     if (isCurrentOccurrence) {
