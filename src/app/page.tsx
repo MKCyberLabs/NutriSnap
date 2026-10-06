@@ -1,13 +1,12 @@
-
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { ShieldCheck, UserCheck, ArrowRight, Lock, Loader2 } from 'lucide-react';
+import { Loader2, Leaf } from 'lucide-react';
 import { saveAuthSession } from '@/lib/auth-mock';
 import { useToast } from '@/hooks/use-toast';
 import { loginSchema } from '@/lib/validation';
@@ -27,8 +26,8 @@ export default function LoginPage() {
     const validation = loginSchema.safeParse({ email, password });
     if (!validation.success) {
       toast({
-        variant: "destructive",
-        title: "Validation Error",
+        variant: 'destructive',
+        title: 'Validation Error',
         description: validation.error.errors[0].message,
       });
       setLoading(false);
@@ -36,7 +35,6 @@ export default function LoginPage() {
     }
 
     try {
-      // Authenticate through the rate-limited API and establish a server session.
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,21 +48,24 @@ export default function LoginPage() {
       }
 
       saveAuthSession(data);
-      
+
       toast({
-        title: "Authenticated via Secure Route",
-        description: `Access granted as ${data.role}`,
+        title: 'Signed in successfully',
+        description: `Welcome back, ${data.name || 'User'}`,
       });
 
+      // UI-3001 & UI-3002: Both onboarded ADMIN and USER land on /today
       if (data.requiresPasswordReset) {
         router.push('/reset-password');
-      } else if (data.role === 'ADMIN') {
-        router.push('/admin');
-      } else { router.push(data.onboarded ? '/dashboard' : '/onboarding'); }
+      } else if (!data.onboarded) {
+        router.push('/onboarding');
+      } else {
+        router.push('/today');
+      }
     } catch (err: any) {
       toast({
-        variant: "destructive",
-        title: "Access Denied",
+        variant: 'destructive',
+        title: 'Access Denied',
         description: err.message,
       });
     } finally {
@@ -72,74 +73,89 @@ export default function LoginPage() {
     }
   };
 
-
   return (
-    <main className="min-h-svh flex items-center justify-center bg-slate-50/50 p-4 font-sans">
-      <div className="w-full max-w-md space-y-8">
+    <main className="min-h-screen flex items-center justify-center bg-[#F7FAF8] p-4 font-body">
+      <div className="w-full max-w-[420px] space-y-6">
+        {/* Brand header */}
         <div className="text-center space-y-2">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-3xl shadow-xl shadow-primary/20 rotate-3">
-            N
+          <div
+            className="mx-auto h-14 w-14 rounded-2xl bg-[#16A34A] flex items-center justify-center text-white shadow-md shadow-[#16A34A]/20"
+            aria-hidden="true"
+          >
+            <Leaf className="h-7 w-7 fill-white/20" />
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-primary mt-6">NutriSnap</h1>
-          <p className="text-muted-foreground">Sophisticated nutrition tracking with Hardened Security.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#111827] mt-4">
+            NutriSnap
+          </h1>
+          <p className="text-xs sm:text-sm text-[#667085] font-normal max-w-xs mx-auto">
+            Eat Well · Drink More · Manage Smart · Live Better
+          </p>
         </div>
 
-        <Card className="border-none shadow-2xl shadow-primary/5 bg-white/80 backdrop-blur-sm rounded-[2.5rem]">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold flex items-center gap-2">
-              <Lock className="h-5 w-5 text-primary" /> Secure Access
+        {/* Auth card */}
+        <Card className="border border-[#E5ECE8] shadow-[0_1px_3px_rgba(16,24,40,0.04)] bg-white rounded-[18px]">
+          <CardHeader className="space-y-1 pb-4">
+            <CardTitle className="text-lg font-semibold text-[#111827]">
+              Sign in to your account
             </CardTitle>
-            <CardDescription>Enter your credentials to manage the ecosystem.</CardDescription>
+            <CardDescription className="text-xs text-[#667085]">
+              Enter your email and password to access your dashboard.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <form onSubmit={handleLogin} className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email Identity</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  aria-label="Email Identity"
-                  placeholder="admin@mkcyberlabs.in" 
+              <div className="grid gap-1.5">
+                <Label htmlFor="email" className="text-xs font-semibold text-[#344054]">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  aria-label="Email"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="bg-muted/30 rounded-xl"
-                  required 
+                  className="h-11 rounded-[10px] border-[#E5ECE8] bg-white text-sm focus-visible:ring-[#16A34A]"
+                  required
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="password">Secret Key</Label>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  aria-label="Secret Key"
-                  placeholder="••••••••••••" 
+              <div className="grid gap-1.5">
+                <Label htmlFor="password" className="text-xs font-semibold text-[#344054]">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  aria-label="Password"
+                  placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-muted/30 rounded-xl"
-                  required 
+                  className="h-11 rounded-[10px] border-[#E5ECE8] bg-white text-sm focus-visible:ring-[#16A34A]"
+                  required
                 />
               </div>
-              <Button type="submit" className="w-full h-12 text-lg font-bold group rounded-xl" disabled={loading}>
+              <Button
+                type="submit"
+                className="w-full h-11 text-sm font-semibold rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] shadow-xs transition-colors mt-1"
+                disabled={loading}
+              >
                 {loading ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
-                    Authenticating...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    Signing in...
                   </>
                 ) : (
-                  <>
-                    Establish Session <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                  </>
+                  'Sign in'
                 )}
               </Button>
             </form>
-
           </CardContent>
-          <CardFooter>
-            <p className="text-center text-[10px] text-muted-foreground w-full uppercase tracking-tighter">
-              Hardened Production Environment • Rate Limiting Active • MK CyberLabs Inc.
-            </p>
-          </CardFooter>
         </Card>
+
+        {/* Footer */}
+        <div className="text-center text-xs text-[#667085]">
+          NutriSnap v0.1 · Health &amp; Wealth Hub
+        </div>
       </div>
     </main>
   );

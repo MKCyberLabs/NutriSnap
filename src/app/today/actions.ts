@@ -285,3 +285,38 @@ export async function getTodaySummary(userId: string): Promise<TodaySummaryData>
     reminders,
   };
 }
+
+export interface TodayRecentTransaction {
+  id: string;
+  type: string;
+  amount: string;
+  category: string;
+  occurredAt: string;
+  accountName: string;
+  note?: string | null;
+}
+
+export async function getTodayRecentTransactions(userId: string): Promise<TodayRecentTransaction[]> {
+  const authUser = await requireUser(userId);
+
+  const txs = await prisma.financialTransaction.findMany({
+    where: { userId: authUser.id },
+    orderBy: { occurredAt: 'desc' },
+    take: 5,
+    include: {
+      account: {
+        select: { name: true },
+      },
+    },
+  });
+
+  return txs.map((tx) => ({
+    id: tx.id,
+    type: tx.type,
+    amount: tx.amount.toString(),
+    category: tx.category,
+    occurredAt: tx.occurredAt.toISOString(),
+    accountName: tx.account.name,
+    note: tx.note,
+  }));
+}

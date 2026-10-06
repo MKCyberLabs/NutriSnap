@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Navbar } from '@/components/layout/Navbar';
+import { AppShell } from '@/components/app-shell/AppShell';
 import { getAuthSession } from '@/lib/auth-mock';
 import { getHydrationLogs, getWeeklyHydrationData, logHydration, deleteHydrationLog, updateHydrationLog, getUserDailyWaterGoal } from './actions';
 import { User, HydrationEntry, DrinkType } from '@/lib/types';
@@ -337,19 +337,16 @@ export default function HydrationPage() {
   if (!user) return null;
 
   return (
-    <div className="hydration-theme min-h-svh bg-gradient-to-br from-sky-50 via-blue-50 to-cyan-50 font-sans">
-      <Navbar />
-      
-      <main className="container mx-auto px-4 py-8 max-w-7xl relative z-10">
-        
+    <AppShell>
+      <div className="space-y-6">
         {/* Header & Navigation */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-sky-950 flex items-center gap-2">
-              <Droplets className="h-8 w-8 text-sky-500" />
-              Hydration Hub
+            <h1 className="text-2xl sm:text-[30px] font-bold text-[#111827] flex items-center gap-2">
+              <Droplets className="h-7 w-7 text-[#2F80ED]" />
+              Water
             </h1>
-            <p className="text-sky-700 mt-1">Track your daily water intake and stay hydrated.</p>
+            <p className="text-xs sm:text-sm text-[#667085] mt-1 font-normal">Track your daily water intake and stay hydrated.</p>
           </div>
           
           <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/50 p-2 rounded-2xl backdrop-blur-sm border border-white/60">
@@ -737,31 +734,30 @@ export default function HydrationPage() {
           </motion.div>
         </AnimatePresence>
 
-      </main>
+        {/* Custom Log Dialog */}
+        <CustomDrinkDialog
+          open={customDialogOpen}
+          onOpenChange={setCustomDialogOpen}
+          editingLog={editingLog}
+          onSave={handleSaveCustom}
+        />
 
-      {/* Custom Log Dialog */}
-      <CustomDrinkDialog
-        open={customDialogOpen}
-        onOpenChange={setCustomDialogOpen}
-        editingLog={editingLog}
-        onSave={handleSaveCustom}
-      />
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="rounded-[2rem]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Hydration Entry?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This entry will be permanently removed from your history.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600 text-white rounded-xl">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        {/* Delete Confirmation */}
+        <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+          <AlertDialogContent className="rounded-[2rem]">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Hydration Entry?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This entry will be permanently removed from your history.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600 text-white rounded-xl">Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </AppShell>
   );
 }

@@ -38,6 +38,10 @@ services:
       - "host.docker.internal:host-gateway"
     labels:
       - "traefik.enable=true"
+      # UAT SITE
+      - "traefik.http.routers.nutrisnap-uat.rule=Host(`wealth.mkcyberlabs.in`)"
+      - "traefik.http.routers.nutrisnap-uat.entrypoints=websecure"
+      - "traefik.http.routers.nutrisnap-uat.tls.certresolver=letsencrypt"
       # MAIN SITE
       - "traefik.http.routers.nutrisnap.rule=Host(`nutrisnap.mkcyberlabs.in`) || Host(`nutrisnap.laxmimanickam.in`)"
       - "traefik.http.routers.nutrisnap.entrypoints=websecure"

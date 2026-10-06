@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
           title: "Identity Secured",
           description: "Your new password has been established. Session restored.",
         });
-        router.push(session.role === 'ADMIN' ? '/admin' : '/dashboard');
+        router.push(session.onboarded ? '/today' : '/onboarding');
       } else {
         toast({
           variant: "destructive",

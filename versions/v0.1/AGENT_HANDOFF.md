@@ -6,52 +6,54 @@ This file is operational memory. Keep it concise and current. Long-term product 
 
 ## Current state
 
-- Branch: `feature/v0.1-health-wealth`
-- GitHub execution issue: #131
+- Branch: `feature/v0.1-ui-redesign`
+- GitHub execution issue: #135 — NutriSnap v0.1 — Green UI redesign and owner-ready UAT
 - Execution path: OpenClaw / Herdr
-- Current milestone: `Milestones 0-5 COMPLETE — Scheduler Domain Isolation & Durable Retry Fully Re-Verified`
-- Current review gate: `Review C PASS (3875e31) + Release Blocker Fixes (c4d5995) + Retry Policy (18cfe9b) + Scheduler Domain Isolation PASS (a2202d3)`
-- Last verified implementation checkpoint: `a2202d39f0a13180312a97279907bdd2006d34b2` — all 92/92 tests PASS, build PASS, typecheck PASS
-- Planning package baseline: `a299be747d93b65b8d7e7a41f681269ac9b48d92`
+- Current milestone: `NutriSnap v0.1 UI Redesign Implementation & Local Gate PASS`
+- Current review gate: `UI Gate PASS — Ready for Owner UAT`
+- Base planning checkpoint: `98d013d457a9ab35566b650ebcaf07181ba3a98c`
+- Agent: AGY-Manickam (sole implementation agent, no orchestration)
 
 ## OpenClaw workspace note
 
-The OpenClaw clone was switched cleanly from `main` to `feature/v0.1-health-wealth`.
+The OpenClaw repository is on `feature/v0.1-ui-redesign`.
+Worktree verified with full test gate:
+- 93/93 life-hub tests PASS
+- 5/5 analysis contract tests PASS
+- 23/23 finance tests PASS
+- 51/51 reminders tests PASS
+- 6/6 today tests PASS
+- 22/22 security tests PASS (including AUTH-UI-001..011)
+- 7/7 UI tests PASS
+- Production build PASS (22/22 routes)
+- `git diff --check` PASS (clean)
+- `./scripts/verify-v01-local.sh` PASS (clean exit 0)
 
-Older uncommitted `main` work from September was originally preserved in `stash@{0}`. Per owner instructions, this WIP was recovered and evaluated on branch `recovery/september-wip`, validated via test suite and build checks, and cherry-picked into `feature/v0.1-health-wealth` (commits `2cfcc11`, `2bb984a`, `ac6c1aa`, `c12fc28`, `60821a3`).
+## Verified redesign scope
 
-The original stash `stash@{0}` remains preserved and intact as a safety copy. No agent may apply/pop/drop it without explicit owner approval.
-
-## Known baseline evidence (Scheduler Domain Isolation — re-verified 2026-10-05)
-
-- `npm run test:analysis-contract`: 5/5 PASS;
-- `npm run typecheck`: PASS (0 errors);
-- `npm run build`: PASS (18/18 static pages, exit 0);
-- `npm run test:today`: 5/5 PASS;
-- `npm run test:finance`: 23/23 PASS;
-- `npm run test:reminders`: 51/51 PASS;
-- `npm run test:security`: 11/11 PASS;
-- `npm run test:life-hub`: 92/92 PASS;
-- `./scripts/verify-v01-local.sh`: PASS (clean exit 0);
-- `git diff --check`: PASS (clean).
+1. Brand & design tokens: NutriSnap green `#16A34A`, Inter typography, neutral surfaces, clean metric cards and section cards.
+2. Universal AppShell: 232px DesktopSidebar with nested Money routes, compact MobileTopBar, exactly 5 mobile bottom navigation destinations (`Today`, `Food`, `Water`, `Money`, `More`), and MobileMoreSheet.
+3. Auth & routing fix: Both onboarded ADMIN and USER land on `/today` on normal login. Food (`/dashboard`) allows ADMIN access without redirecting to `/admin`. Non-admin users attempting to open `/admin` redirect to `/today`.
+4. Today dashboard: 4 KPI metric cards with real data, Today's Focus checklist, Recent Transactions, and Health & Wellness progress.
+5. Money: Overview, Accounts, Transactions, Bills & Subscriptions routes with comprehensive modal forms, transfer semantics, and 84-day recharge recurrence.
+6. Food & Water: Fully integrated into AppShell with existing meal logging and hydration tracking preserved.
+7. Reminders, Settings & Admin: Upgraded in AppShell with segmented filters, user CRUD tables, and clean forms.
 
 ## Immediate next action
 
-**READY FOR OWNER MERGE — SCHEDULER DOMAIN ISOLATION VERIFIED — DO NOT MERGE.**
-
-PR #132 is mergeable, all release blockers and owner-review bugs are resolved, durable retry policy is in place, scheduler cross-domain isolation is verified PASS by Codex, and all 92 deterministic tests pass. Awaiting owner final merge approval.
+**NUTRISNAP V0.1 UI REDESIGN: READY FOR OWNER UAT — DO NOT MERGE**
 
 ## Active blockers
 
-None. All release blockers resolved and verified. PR #132 awaiting final owner approval only.
+None.
 
 ## Active Herdr panes / delegation
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Lead/orchestrator/integrator | Scheduler isolation implementation & verification | `WRITE-SAME-TREE-SEQUENTIAL` | `a2202d3` | COMPLETE |
-| 2 | Codex | Architecture/security/reviewer | Scheduler domain isolation read-only delta review | `READ-ONLY` | `a2202d3` | COMPLETE (PASS) |
-| 3 | AGY-Rohit | Bounded implementation/test helper | All slices integrated and verified | n/a | n/a | IDLE |
+| 1 | AGY-Manickam | Sole implementer | UI Redesign complete implementation & local gate | `WRITE-SAME-TREE-SEQUENTIAL` | `98d013d` | COMPLETE (PASS) |
+| 2 | Codex | None | n/a (sole agent policy) | `READ-ONLY` | n/a | IDLE |
+| 3 | AGY-Rohit | None | n/a (sole agent policy) | n/a | n/a | IDLE |
 
 When opening a secondary pane, replace the relevant row with:
 
