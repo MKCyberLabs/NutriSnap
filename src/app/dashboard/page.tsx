@@ -825,6 +825,55 @@ export default function DashboardPage() {
     return Math.round(weeklyTotals.calories / totalDaysInRange);
   }, [dynamicWeeklyData, totalDaysInRange, weeklyTotals.calories]);
 
+  // ⚡ Bolt Optimization: Hoist invariant array allocations outside the render loop
+  const biometricTargets = useMemo(() => [
+    {
+      label: "Protein",
+      val: totalP,
+      max: userTargets.protein,
+    },
+    { label: "Carbs", val: totalC, max: userTargets.carbs },
+    { label: "Fats", val: totalF, max: userTargets.fat },
+    {
+      label: "Sugar",
+      val: totalS,
+      max: userTargets.sugar,
+      isLimit: true,
+    },
+  ], [totalP, totalC, totalF, totalS, userTargets.protein, userTargets.carbs, userTargets.fat, userTargets.sugar]);
+
+  const weeklyInsightStats = useMemo(() => [
+    { icon: Flame, val: weeklyAvgCalories, label: "Avg Kcal" },
+    {
+      icon: BarChart3,
+      val: weeklyTotals.peakCalories,
+      label: "Peak Day",
+    },
+    {
+      icon: History,
+      val: weeklyTotals.trackedDays,
+      label: "Tracked Days",
+    },
+  ], [weeklyAvgCalories, weeklyTotals.peakCalories, weeklyTotals.trackedDays]);
+
+  const rangeProgressTargets = useMemo(() => [
+    {
+      label: "Protein",
+      val: weeklyTotals.protein,
+      max: userTargets.protein * totalDaysInRange,
+    },
+    {
+      label: "Carbs",
+      val: weeklyTotals.carbs,
+      max: userTargets.carbs * totalDaysInRange,
+    },
+    {
+      label: "Fats",
+      val: weeklyTotals.fat,
+      max: userTargets.fat * totalDaysInRange,
+    },
+  ], [weeklyTotals.protein, weeklyTotals.carbs, weeklyTotals.fat, userTargets.protein, userTargets.carbs, userTargets.fat, totalDaysInRange]);
+
   if (!isMounted) return null;
 
   return (
@@ -1353,21 +1402,7 @@ export default function DashboardPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {[
-                      {
-                        label: "Protein",
-                        val: totalP,
-                        max: userTargets.protein,
-                      },
-                      { label: "Carbs", val: totalC, max: userTargets.carbs },
-                      { label: "Fats", val: totalF, max: userTargets.fat },
-                      {
-                        label: "Sugar",
-                        val: totalS,
-                        max: userTargets.sugar,
-                        isLimit: true,
-                      },
-                    ].map((m) => {
+                    {biometricTargets.map((m) => {
                       const isOver = m.val > m.max;
                       const percentage = Math.min((m.val / m.max) * 100, 100);
                       return (
@@ -1510,19 +1545,7 @@ export default function DashboardPage() {
                 </Card>
               </motion.div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[
-                  { icon: Flame, val: weeklyAvgCalories, label: "Avg Kcal" },
-                  {
-                    icon: BarChart3,
-                    val: weeklyTotals.peakCalories,
-                    label: "Peak Day",
-                  },
-                  {
-                    icon: History,
-                    val: weeklyTotals.trackedDays,
-                    label: "Tracked Days",
-                  },
-                ].map((s, i) => (
+                {weeklyInsightStats.map((s, i) => (
                   <motion.div
                     key={i}
                     variants={itemVariants}
@@ -1560,23 +1583,7 @@ export default function DashboardPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {[
-                      {
-                        label: "Protein",
-                        val: weeklyTotals.protein,
-                        max: userTargets.protein * totalDaysInRange,
-                      },
-                      {
-                        label: "Carbs",
-                        val: weeklyTotals.carbs,
-                        max: userTargets.carbs * totalDaysInRange,
-                      },
-                      {
-                        label: "Fats",
-                        val: weeklyTotals.fat,
-                        max: userTargets.fat * totalDaysInRange,
-                      },
-                    ].map((m) => {
+                    {rangeProgressTargets.map((m) => {
                       const percentage = Math.min(
                         (m.val / (m.max || 1)) * 100,
                         100,

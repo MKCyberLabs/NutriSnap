@@ -158,6 +158,14 @@ export default function AdminPage() {
       .map(u => u.original);
   }, [mappedUsers, managedUsers, searchTerm]);
 
+  // ⚡ Bolt Optimization: Hoist invariant array allocation outside the render loop
+  const adminStats = useMemo(() => [
+    { label: 'Total Managed', val: managedUsers.length, icon: Users, color: 'text-primary' },
+    { label: 'Daily Active', val: Math.ceil(managedUsers.length * 0.4), icon: Activity, color: 'text-emerald-500' },
+    { label: 'GenAI Tokens', val: '14.2k', icon: BarChart3, color: 'text-amber-500' },
+    { label: 'Alerts', val: '0', icon: ShieldAlert, color: 'text-slate-300' }
+  ], [managedUsers.length]);
+
   return (
     <div className="min-h-svh bg-slate-50 dark:bg-slate-950 font-sans">
       <Navbar />
@@ -217,12 +225,7 @@ export default function AdminPage() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
-          {[
-            { label: 'Total Managed', val: managedUsers.length, icon: Users, color: 'text-primary' },
-            { label: 'Daily Active', val: Math.ceil(managedUsers.length * 0.4), icon: Activity, color: 'text-emerald-500' },
-            { label: 'GenAI Tokens', val: '14.2k', icon: BarChart3, color: 'text-amber-500' },
-            { label: 'Alerts', val: '0', icon: ShieldAlert, color: 'text-slate-300' }
-          ].map((stat, i) => (
+          {adminStats.map((stat, i) => (
             <Card key={i} className="glass-card border-none rounded-3xl overflow-hidden shadow-sm">
               <CardHeader className="pb-2">
                 <CardDescription className="font-bold uppercase tracking-widest text-[10px]">{stat.label}</CardDescription>
