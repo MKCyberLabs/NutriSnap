@@ -124,10 +124,9 @@ export class WishlistService {
       where.priority = options.priority;
     }
 
-    return await db.wishlistItem.findMany({
+    const items = await db.wishlistItem.findMany({
       where,
       orderBy: [
-        { priority: 'desc' },
         { targetDate: 'asc' },
         { createdAt: 'desc' },
       ],
@@ -136,6 +135,10 @@ export class WishlistService {
         transaction: true,
       },
     });
+
+    const priorityWeight: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+    items.sort((a, b) => (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0));
+    return items;
   }
 
   /**

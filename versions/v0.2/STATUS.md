@@ -96,9 +96,22 @@ Architecture Gate B:
 - UI routes & components: `/finance/wishlist`, `WishlistCard`, `WishlistForm`, `MarkPurchasedModal` (verified)
 - Deterministic test suite: `src/lib/finance/wishlist.test.ts` (V2-T060..V2-T071)
 
+### V2-500 — Dashboard & Read Models: PASS (Verified)
+- Money overview read model (`getMoneyOverview` in `finance-service.ts`) (verified)
+- Liquid balance across all user accounts (verified)
+- Authoritative monthly income & expense from FinancialTransaction (verified)
+- Money friends owe me (`receivablesOutstanding`) (verified)
+- Money I owe friends (`payablesOutstanding`) (verified)
+- Total loan outstanding & monthly EMI commitment (verified)
+- Nearest EMI detection and debt due soon spotlight (verified)
+- Wishlist planned total & priority targets spotlight (verified)
+- Today near-term integration for debts and loan EMIs (`today/actions.ts`) (verified)
+- UI routes & components: `/finance` Overview Page (verified)
+- Deterministic test suite: `src/lib/finance/overview.test.ts` (V2-5001..V2-5007)
+
 ## Current milestone
 
-V2-500 — Dashboard (Money Overview Read Models) & Today Integration
+V2-600 — Reminders (Debt Due & Loan EMI Reminders in Scheduler)
 
 ## Agent model
 

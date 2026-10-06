@@ -59,13 +59,13 @@
 - [x] V2-4010 UI + responsive.
 
 ## V2-500 Dashboard
-- [ ] V2-5001 Money overview read model.
-- [ ] V2-5002 friends owe me.
-- [ ] V2-5003 I owe friends.
-- [ ] V2-5004 loan outstanding.
-- [ ] V2-5005 next EMI.
-- [ ] V2-5006 wishlist planned total.
-- [ ] V2-5007 Today near-term integration.
+- [x] V2-5001 Money overview read model.
+- [x] V2-5002 friends owe me.
+- [x] V2-5003 I owe friends.
+- [x] V2-5004 loan outstanding.
+- [x] V2-5005 next EMI.
+- [x] V2-5006 wishlist planned total.
+- [x] V2-5007 Today near-term integration.
 
 ## V2-600 Reminders
 - [ ] V2-6001 debt due reminder.

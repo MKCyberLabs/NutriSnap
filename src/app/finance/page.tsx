@@ -21,8 +21,8 @@ import { getAuthSession } from '@/lib/auth-mock';
 import {
   getAccounts,
   getTransactions,
-  getMonthlyFinanceSummary,
   getObligations,
+  getMoneyOverview,
   createAccount,
   recordTransaction,
   deleteTransaction,
@@ -36,8 +36,16 @@ import {
   Landmark,
   ChevronRight,
   ArrowLeftRight,
+  Users,
+  Building2,
+  Calendar,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Plus,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 
 export default function FinanceOverviewPage() {
   const router = useRouter();
@@ -48,26 +56,38 @@ export default function FinanceOverviewPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [obligations, setObligations] = useState<any[]>([]);
-  const [summary, setSummary] = useState({
-    income: '0',
-    expense: '0',
-    totalBalance: '0',
+  const [overview, setOverview] = useState<any>({
+    liquidBalance: '0',
+    monthlyIncome: '0',
+    monthlyExpense: '0',
+    receivablesOutstanding: '0',
+    payablesOutstanding: '0',
+    totalLoanOutstanding: '0',
+    monthlyEmiCommitment: '0',
+    nextEmi: null,
+    nextObligation: null,
+    wishlistPlannedTotal: '0',
+    wishlistReadyTotal: '0',
+    activeWishlistCount: 0,
+    highPriorityWishlist: [],
+    debtsDueSoon: [],
+    loansDueSoon: [],
   });
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
     setError(null);
     try {
-      const [accs, txs, obs, sum] = await Promise.all([
+      const [accs, txs, obs, ov] = await Promise.all([
         getAccounts(userId),
         getTransactions(userId, { limit: 6 }),
         getObligations(userId),
-        getMonthlyFinanceSummary(userId, new Date()),
+        getMoneyOverview(userId, new Date()),
       ]);
       setAccounts(accs);
       setTransactions(txs);
       setObligations(obs);
-      setSummary(sum);
+      setOverview(ov);
     } catch (err: any) {
       setError(err?.message || 'Failed to load financial records.');
     } finally {
@@ -92,8 +112,6 @@ export default function FinanceOverviewPage() {
     .filter((o) => o.isActive && !o.isArchived)
     .sort((a, b) => new Date(a.nextDueAt).getTime() - new Date(b.nextDueAt).getTime());
 
-  const nearestObligation = activeUpcoming[0];
-
   const handleDeleteTransaction = async (txId: string) => {
     const session = getAuthSession();
     if (!session) return;
@@ -103,24 +121,44 @@ export default function FinanceOverviewPage() {
       loadData(session.id);
     } catch (err: any) {
       toast({
-        title: 'Error deleting transaction',
-        description: err?.message,
+        title: 'Cannot delete transaction',
+        description: err?.message || 'Could not delete transaction.',
         variant: 'destructive',
       });
     }
   };
 
-  const handleMarkPaid = async (params: any) => {
+  const handleMarkPaid = async (params: {
+    obligationId: string;
+    occurrenceKey: string;
+    createExpense?: boolean;
+    accountId?: string;
+  }) => {
     const session = getAuthSession();
     if (!session) return;
-    return await markObligationPaid(session.id, params);
+    try {
+      await markObligationPaid(session.id, {
+        obligationId: params.obligationId,
+        occurrenceKey: params.occurrenceKey,
+        createExpense: params.createExpense !== undefined ? params.createExpense : true,
+        accountId: params.accountId,
+      });
+      toast({ title: 'Marked paid', description: 'Schedule updated.' });
+      loadData(session.id);
+    } catch (err: any) {
+      toast({
+        title: 'Error marking paid',
+        description: err?.message || 'Could not record payment.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
     <AppShell>
       <PageHeader
-        title="Money"
-        description="Accounts, spending and upcoming obligations"
+        title="Money Hub"
+        description="Accounts, cash flow, debts, loans, and planned budgeting"
         action={
           <div className="flex items-center gap-2">
             <AccountForm
@@ -162,85 +200,106 @@ export default function FinanceOverviewPage() {
         />
       ) : loading ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
               <LoadingCard key={i} height="120px" lines={2} />
             ))}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <LoadingCard height="300px" lines={4} />
-            <LoadingCard height="300px" lines={4} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <LoadingCard key={i} height="200px" lines={3} />
+            ))}
           </div>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* 4 KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="space-y-8">
+          {/* Top Cash Flow KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <MetricCard
-              label="Total Balance"
-              value={`₹${formatIndianRupees(summary.totalBalance)}`}
-              icon={<WalletCards className="h-4 w-4" />}
-              tone="blue"
-              helperText={`${accounts.length} active account${accounts.length === 1 ? '' : 's'}`}
-              href="/finance/accounts"
-            />
-            <MetricCard
-              label="Monthly Income"
-              value={`+₹${formatIndianRupees(summary.income)}`}
-              icon={<ArrowUpRight className="h-4 w-4" />}
+              label="Total Liquid Balance"
+              value={`₹${formatIndianRupees(overview.liquidBalance)}`}
+              icon={<Landmark className="h-4 w-4" />}
               tone="green"
-              helperText="Earnings this month"
-              href="/finance/transactions"
+              helperText={`${accounts.length} active accounts tracked`}
             />
             <MetricCard
-              label="Monthly Expenses"
-              value={`-₹${formatIndianRupees(summary.expense)}`}
+              label="This Month's Income"
+              value={`₹${formatIndianRupees(overview.monthlyIncome)}`}
               icon={<ArrowDownRight className="h-4 w-4" />}
-              tone="red"
-              helperText="Spending this month"
-              href="/finance/transactions"
+              tone="green"
+              helperText="Current calendar month cash-in"
             />
             <MetricCard
-              label="Upcoming Obligations"
-              value={nearestObligation ? (nearestObligation.amount ? `₹${formatIndianRupees(nearestObligation.amount)}` : nearestObligation.title) : 'None due'}
-              icon={<ReceiptText className="h-4 w-4" />}
+              label="This Month's Expense"
+              value={`₹${formatIndianRupees(overview.monthlyExpense)}`}
+              icon={<ArrowUpRight className="h-4 w-4" />}
               tone="amber"
-              helperText={nearestObligation ? `${nearestObligation.title}` : 'All obligations up to date'}
-              href="/finance/bills"
+              helperText="Authoritative monthly expense sum"
             />
           </div>
 
-          {/* Accounts Preview */}
+          {/* Life & Liabilities KPIs (v0.2 additions) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Link href="/finance/debts" className="block hover:opacity-95 transition-opacity">
+              <MetricCard
+                label="Friends Owe Me"
+                value={`₹${formatIndianRupees(overview.receivablesOutstanding)}`}
+                icon={<Users className="h-4 w-4 text-[#16A34A]" />}
+                tone="green"
+                helperText="Money lent to friends"
+              />
+            </Link>
+            <Link href="/finance/debts" className="block hover:opacity-95 transition-opacity">
+              <MetricCard
+                label="I Owe Friends"
+                value={`₹${formatIndianRupees(overview.payablesOutstanding)}`}
+                icon={<Users className="h-4 w-4 text-[#D97706]" />}
+                tone="amber"
+                helperText="Money borrowed from friends"
+              />
+            </Link>
+            <Link href="/finance/loans" className="block hover:opacity-95 transition-opacity">
+              <MetricCard
+                label="Loan Outstanding"
+                value={`₹${formatIndianRupees(overview.totalLoanOutstanding)}`}
+                icon={<Building2 className="h-4 w-4 text-[#D97706]" />}
+                tone="amber"
+                helperText={
+                  overview.nextEmi
+                    ? `Next EMI: ₹${formatIndianRupees(overview.nextEmi.amount || 0)}`
+                    : 'Active loan liabilities'
+                }
+              />
+            </Link>
+            <Link href="/finance/wishlist" className="block hover:opacity-95 transition-opacity">
+              <MetricCard
+                label="Wishlist Goals"
+                value={`₹${formatIndianRupees(overview.wishlistPlannedTotal)}`}
+                icon={<Sparkles className="h-4 w-4 text-[#2563EB]" />}
+                tone="blue"
+                helperText={`Ready: ₹${formatIndianRupees(overview.wishlistReadyTotal)}`}
+              />
+            </Link>
+          </div>
+
+          {/* Accounts Grid */}
           <SectionCard
-            title="Accounts"
-            description="Your linked bank accounts, cash, and credit cards"
+            title="My Accounts"
             action={
               <Link
                 href="/finance/accounts"
-                className="text-xs font-semibold text-[#16A34A] hover:text-[#0F7A38] inline-flex items-center gap-1 transition-colors"
+                className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
               >
                 <span>View all ({accounts.length})</span>
-                <ChevronRight className="h-3 w-3" />
+                <ChevronRight className="h-3.5 w-3.5" />
               </Link>
             }
           >
             {accounts.length === 0 ? (
               <EmptyState
-                icon={<Landmark className="h-5 w-5" />}
-                title="No accounts yet"
-                description="Create a bank, cash, wallet or credit card account to start tracking money."
-                action={
-                  <AccountForm
-                    onSubmitAction={async (data) => {
-                      const session = getAuthSession();
-                      if (session) return await createAccount(session.id, data);
-                    }}
-                    onAccountCreated={() => {
-                      const session = getAuthSession();
-                      if (session) loadData(session.id);
-                    }}
-                  />
-                }
+                title="No accounts linked"
+                description="Add a bank account, cash wallet, or credit card to get started."
+                icon={<WalletCards className="h-8 w-8 text-[#98A2B3]" />}
               />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -251,85 +310,198 @@ export default function FinanceOverviewPage() {
             )}
           </SectionCard>
 
-          {/* Bottom Split: Recent Transactions & Upcoming Bills */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-            {/* Recent Transactions */}
-            <div className="lg:col-span-7 flex flex-col">
-              <SectionCard
-                title="Recent Transactions"
-                description="Latest expenses, income, and transfers"
-                action={
-                  <Link
-                    href="/finance/transactions"
-                    className="text-xs font-semibold text-[#16A34A] hover:text-[#0F7A38] inline-flex items-center gap-1 transition-colors"
-                  >
-                    <span>View all</span>
-                    <ChevronRight className="h-3 w-3" />
+          {/* Two-Column Middle Section: Debts & Loans Spotlight vs Upcoming Bills */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left: Debts & Liabilities Spotlight */}
+            <SectionCard
+              title="Debts & Liabilities Spotlight"
+              action={
+                <div className="flex items-center gap-3 text-xs font-semibold text-[#16A34A]">
+                  <Link href="/finance/debts" className="hover:underline">
+                    Debts
                   </Link>
-                }
-                className="h-full flex flex-col justify-between"
-              >
-                {transactions.length === 0 ? (
-                  <EmptyState
-                    icon={<ArrowLeftRight className="h-5 w-5" />}
-                    title="No transactions yet"
-                    description="Record your daily expenses, salary or transfers to build your financial history."
-                  />
-                ) : (
-                  <div className="divide-y divide-[#E5ECE8]/80">
-                    {transactions.map((tx) => (
-                      <TransactionRow
-                        key={tx.id}
-                        transaction={tx}
-                        onDelete={handleDeleteTransaction}
-                      />
-                    ))}
-                  </div>
-                )}
-              </SectionCard>
-            </div>
+                  <span>•</span>
+                  <Link href="/finance/loans" className="hover:underline">
+                    Loans & EMI
+                  </Link>
+                </div>
+              }
+            >
+              {overview.debtsDueSoon.length === 0 && overview.loansDueSoon.length === 0 ? (
+                <div className="p-6 text-center text-xs text-[#667085]">
+                  No debts or loan payments due in the immediate schedule.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {overview.debtsDueSoon.slice(0, 3).map((d: any) => (
+                    <div
+                      key={d.id}
+                      className="p-3 rounded-xl border border-[#E5ECE8] bg-white flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                            d.direction === 'RECEIVABLE'
+                              ? 'bg-[#EAF8EF] text-[#16A34A]'
+                              : 'bg-[#FFF4DF] text-[#D97706]'
+                          }`}
+                        >
+                          <Users className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-[#111827]">
+                            {d.counterpartyName}
+                          </div>
+                          <div className="text-[11px] text-[#667085]">
+                            {d.direction === 'RECEIVABLE' ? 'Owes you' : 'You owe'}
+                            {d.isOverdue && (
+                              <span className="text-[#EF4444] font-medium ml-1.5">• Overdue</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-bold text-[#111827]">
+                          ₹{formatIndianRupees(d.outstandingAmount)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
 
-            {/* Upcoming Bills */}
-            <div className="lg:col-span-5 flex flex-col">
-              <SectionCard
-                title="Upcoming Bills"
-                description="Scheduled recurring obligations"
-                action={
-                  <Link
-                    href="/finance/bills"
-                    className="text-xs font-semibold text-[#16A34A] hover:text-[#0F7A38] inline-flex items-center gap-1 transition-colors"
-                  >
-                    <span>View all ({activeUpcoming.length})</span>
-                    <ChevronRight className="h-3 w-3" />
-                  </Link>
-                }
-                className="h-full flex flex-col justify-between"
-              >
-                {activeUpcoming.length === 0 ? (
-                  <EmptyState
-                    icon={<ReceiptText className="h-5 w-5" />}
-                    title="No upcoming obligations"
-                    description="Schedule recurring subscriptions, phone recharges, or bills to track due dates."
-                  />
-                ) : (
-                  <div className="space-y-3">
-                    {activeUpcoming.slice(0, 3).map((ob) => (
-                      <ObligationRow
-                        key={ob.id}
-                        obligation={ob}
-                        accounts={accounts}
-                        onMarkPaid={handleMarkPaid}
-                        onPaidSuccess={() => {
-                          const session = getAuthSession();
-                          if (session) loadData(session.id);
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </SectionCard>
-            </div>
+                  {overview.loansDueSoon.slice(0, 2).map((l: any) => (
+                    <div
+                      key={l.id}
+                      className="p-3 rounded-xl border border-[#E5ECE8] bg-white flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-lg bg-[#FFF4DF] text-[#D97706] flex items-center justify-center shrink-0">
+                          <Building2 className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-[#111827]">{l.name}</div>
+                          <div className="text-[11px] text-[#667085]">
+                            {l.lender} {l.dueDay ? `• Due on ${l.dueDay}th` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-bold text-[#111827]">
+                          {l.emiAmount ? `₹${formatIndianRupees(l.emiAmount)} / mo` : `₹${formatIndianRupees(l.outstandingPrincipal)}`}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            {/* Right: Upcoming Bills & Obligations */}
+            <SectionCard
+              title="Upcoming Bills & Subscriptions"
+              action={
+                <Link
+                  href="/finance/bills"
+                  className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
+                >
+                  <span>Manage ({activeUpcoming.length})</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              }
+            >
+              {activeUpcoming.length === 0 ? (
+                <EmptyState
+                  title="No upcoming obligations"
+                  description="Add utility bills, recharges, rent, or EMIs to track schedules."
+                  icon={<ReceiptText className="h-8 w-8 text-[#98A2B3]" />}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {activeUpcoming.slice(0, 4).map((ob) => (
+                    <ObligationRow
+                      key={ob.id}
+                      obligation={ob}
+                      accounts={accounts}
+                      onMarkPaid={handleMarkPaid}
+                      onPaidSuccess={() => {
+                        const session = getAuthSession();
+                        if (session) loadData(session.id);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </SectionCard>
           </div>
+
+          {/* Wishlist Priority Items Spotlight */}
+          {overview.highPriorityWishlist.length > 0 && (
+            <SectionCard
+              title="Wishlist Priority Targets"
+              action={
+                <Link
+                  href="/finance/wishlist"
+                  className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
+                >
+                  <span>Open Wishlist ({overview.activeWishlistCount})</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              }
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {overview.highPriorityWishlist.map((w: any) => (
+                  <div
+                    key={w.id}
+                    className="p-3.5 rounded-xl border border-[#E5ECE8] bg-white flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-[#111827]">{w.name}</div>
+                      <div className="text-[11px] text-[#667085] mt-0.5">{w.category}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-[#16A34A]">
+                        ₹{formatIndianRupees(w.targetPrice)}
+                      </div>
+                      <div className="text-[10px] text-[#475467] font-medium capitalize">
+                        {w.status.toLowerCase()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Recent Transactions */}
+          <SectionCard
+            title="Recent Activity"
+            action={
+              <Link
+                href="/finance/transactions"
+                className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
+              >
+                <span>All transactions</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            }
+          >
+            {transactions.length === 0 ? (
+              <EmptyState
+                title="No transactions yet"
+                description="Record income, expenses, or transfers to start seeing activity."
+                icon={<ArrowLeftRight className="h-8 w-8 text-[#98A2B3]" />}
+              />
+            ) : (
+              <div className="space-y-1">
+                {transactions.map((tx) => (
+                  <TransactionRow
+                    key={tx.id}
+                    transaction={tx}
+                    onDelete={handleDeleteTransaction}
+                  />
+                ))}
+              </div>
+            )}
+          </SectionCard>
         </div>
       )}
     </AppShell>

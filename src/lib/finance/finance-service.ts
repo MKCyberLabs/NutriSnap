@@ -10,6 +10,7 @@ import {
   calculateAccountBalance,
   calculateMonthlyTotals,
   calculateCategoryBreakdown,
+  calculateDebtOutstanding,
   Decimal
 } from '@/lib/finance/finance';
 import { getNextOccurrence, getOccurrenceKey, RecurrenceRule } from '@/lib/recurrence/recurrence';
@@ -584,6 +585,247 @@ export async function getMonthlyFinanceSummary(
     categoryBreakdown: formattedBreakdown,
     accountCount: accounts.length,
     transactionCount: monthlyTransactions.length,
+  };
+}
+
+export interface MoneyOverviewData {
+  liquidBalance: string;
+  monthlyIncome: string;
+  monthlyExpense: string;
+  receivablesOutstanding: string;
+  payablesOutstanding: string;
+  totalLoanOutstanding: string;
+  monthlyEmiCommitment: string;
+  nextEmi: {
+    id: string;
+    name: string;
+    lender: string;
+    amount: string | null;
+    dueDay: number | null;
+    nextEmiDate: string | null;
+  } | null;
+  nextObligation: {
+    id: string;
+    title: string;
+    amount: string | null;
+    nextDueAt: string;
+    kind: string;
+  } | null;
+  wishlistPlannedTotal: string;
+  wishlistReadyTotal: string;
+  activeWishlistCount: number;
+  highPriorityWishlist: Array<{
+    id: string;
+    name: string;
+    category: string;
+    targetPrice: string;
+    priority: string;
+    status: string;
+  }>;
+  debtsDueSoon: Array<{
+    id: string;
+    direction: string;
+    counterpartyName: string;
+    title: string | null;
+    outstandingAmount: string;
+    dueAt: string | null;
+    isOverdue: boolean;
+  }>;
+  loansDueSoon: Array<{
+    id: string;
+    name: string;
+    lender: string;
+    outstandingPrincipal: string;
+    emiAmount: string | null;
+    nextEmiDate: string | null;
+    dueDay: number | null;
+  }>;
+}
+
+/**
+ * Returns comprehensive v0.2 Money Overview read model:
+ * liquid balance, monthly income/expense, debts owed to/by user,
+ * loan liabilities & next EMI, wishlist planned totals, upcoming bills.
+ */
+export async function getMoneyOverview(
+  userId: string,
+  targetDate: Date | string = new Date(),
+  db: PrismaClientLike = defaultPrisma
+): Promise<MoneyOverviewData> {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  const now = new Date(targetDate);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  // Parallel fetch of domain aggregates
+  const [accounts, monthlyTransactions, openDebts, activeLoans, wishlistItems, obligations] =
+    await Promise.all([
+      getAccounts(userId, db),
+      db.financialTransaction.findMany({
+        where: {
+          userId,
+          occurredAt: { gte: startOfMonth, lte: endOfMonth },
+        },
+      }),
+      db.personalDebt.findMany({
+        where: { userId, status: 'OPEN' },
+        include: {
+          transactions: {
+            select: { type: true, amount: true },
+          },
+        },
+        orderBy: { dueAt: 'asc' },
+      }),
+      db.loan.findMany({
+        where: { userId, status: 'ACTIVE' },
+        orderBy: [{ nextEmiDate: 'asc' }, { dueDay: 'asc' }],
+      }),
+      db.wishlistItem.findMany({
+        where: {
+          userId,
+          status: { in: ['WISHLIST', 'PLANNED', 'READY'] },
+        },
+        orderBy: [{ priority: 'desc' }, { targetDate: 'asc' }],
+      }),
+      db.obligation.findMany({
+        where: { userId, isActive: true, isArchived: false },
+        orderBy: { nextDueAt: 'asc' },
+      }),
+    ]);
+
+  // 1. Liquid balance
+  const liquidBalance = accounts.reduce(
+    (acc: any, a: any) => acc.plus(new Decimal(a.currentBalance)),
+    new Decimal(0)
+  );
+
+  // 2. Authoritative monthly income & expense
+  const monthlyTotals = calculateMonthlyTotals(monthlyTransactions);
+
+  // 3. Debts (Friends & Family)
+  let receivablesSum = new Decimal(0);
+  let payablesSum = new Decimal(0);
+  const debtsDueSoon: MoneyOverviewData['debtsDueSoon'] = [];
+
+  for (const d of openDebts) {
+    const outstanding = calculateDebtOutstanding(d.direction, d.originalAmount, d.transactions);
+    if (outstanding.gt(0)) {
+      if (d.direction === 'RECEIVABLE') {
+        receivablesSum = receivablesSum.plus(outstanding);
+      } else {
+        payablesSum = payablesSum.plus(outstanding);
+      }
+
+      const isOverdue = d.dueAt ? new Date(d.dueAt).getTime() < now.getTime() : false;
+      debtsDueSoon.push({
+        id: d.id,
+        direction: d.direction,
+        counterpartyName: d.counterpartyName,
+        title: d.title,
+        outstandingAmount: outstanding.toFixed(2),
+        dueAt: d.dueAt ? new Date(d.dueAt).toISOString() : null,
+        isOverdue,
+      });
+    }
+  }
+
+  debtsDueSoon.sort((a, b) => {
+    if (a.isOverdue && !b.isOverdue) return -1;
+    if (!a.isOverdue && b.isOverdue) return 1;
+    if (a.dueAt && b.dueAt) return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+    if (a.dueAt && !b.dueAt) return -1;
+    if (!a.dueAt && b.dueAt) return 1;
+    return 0;
+  });
+
+  // 4. Loans & EMI
+  let totalLoanOutstanding = new Decimal(0);
+  let monthlyEmiCommitment = new Decimal(0);
+  const loansDueSoon: MoneyOverviewData['loansDueSoon'] = [];
+
+  for (const l of activeLoans) {
+    totalLoanOutstanding = totalLoanOutstanding.plus(new Decimal(l.outstandingPrincipal.toString()));
+    if (l.emiAmount) {
+      monthlyEmiCommitment = monthlyEmiCommitment.plus(new Decimal(l.emiAmount.toString()));
+    }
+    loansDueSoon.push({
+      id: l.id,
+      name: l.name,
+      lender: l.lender,
+      outstandingPrincipal: new Decimal(l.outstandingPrincipal.toString()).toFixed(2),
+      emiAmount: l.emiAmount ? new Decimal(l.emiAmount.toString()).toFixed(2) : null,
+      nextEmiDate: l.nextEmiDate ? new Date(l.nextEmiDate).toISOString() : null,
+      dueDay: l.dueDay,
+    });
+  }
+
+  const nextEmiLoan = loansDueSoon.length > 0 ? loansDueSoon[0] : null;
+
+  // 5. Wishlist
+  let wishlistPlannedTotal = new Decimal(0);
+  let wishlistReadyTotal = new Decimal(0);
+
+  // Sort wishlistItems by priority weight (HIGH > MEDIUM > LOW)
+  const priorityWeight: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+  wishlistItems.sort((a: any, b: any) => {
+    const pDiff = (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+    if (pDiff !== 0) return pDiff;
+    if (a.targetDate && b.targetDate) return new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime();
+    if (a.targetDate && !b.targetDate) return -1;
+    if (!a.targetDate && b.targetDate) return 1;
+    return 0;
+  });
+
+  for (const item of wishlistItems) {
+    const itemPrice = new Decimal(item.targetPrice.toString());
+    wishlistPlannedTotal = wishlistPlannedTotal.plus(itemPrice);
+    if (item.status === 'READY') {
+      wishlistReadyTotal = wishlistReadyTotal.plus(itemPrice);
+    }
+  }
+
+  const highPriorityWishlist = wishlistItems.slice(0, 3).map((w: any) => ({
+    id: w.id,
+    name: w.name,
+    category: w.category,
+    targetPrice: new Decimal(w.targetPrice.toString()).toFixed(2),
+    priority: w.priority,
+    status: w.status,
+  }));
+
+  // 6. Nearest obligation
+  const nextObligation = obligations.length > 0 ? {
+    id: obligations[0].id,
+    title: obligations[0].title,
+    amount: obligations[0].amount ? new Decimal(obligations[0].amount.toString()).toFixed(2) : null,
+    nextDueAt: obligations[0].nextDueAt.toISOString(),
+    kind: obligations[0].kind,
+  } : null;
+
+  return {
+    liquidBalance: liquidBalance.toFixed(2),
+    monthlyIncome: monthlyTotals.income.toFixed(2),
+    monthlyExpense: monthlyTotals.expense.toFixed(2),
+    receivablesOutstanding: receivablesSum.toFixed(2),
+    payablesOutstanding: payablesSum.toFixed(2),
+    totalLoanOutstanding: totalLoanOutstanding.toFixed(2),
+    monthlyEmiCommitment: monthlyEmiCommitment.toFixed(2),
+    nextEmi: nextEmiLoan ? {
+      id: nextEmiLoan.id,
+      name: nextEmiLoan.name,
+      lender: nextEmiLoan.lender,
+      amount: nextEmiLoan.emiAmount,
+      dueDay: nextEmiLoan.dueDay,
+      nextEmiDate: nextEmiLoan.nextEmiDate,
+    } : null,
+    nextObligation,
+    wishlistPlannedTotal: wishlistPlannedTotal.toFixed(2),
+    wishlistReadyTotal: wishlistReadyTotal.toFixed(2),
+    activeWishlistCount: wishlistItems.length,
+    highPriorityWishlist,
+    debtsDueSoon: debtsDueSoon.slice(0, 4),
+    loansDueSoon: loansDueSoon.slice(0, 4),
   };
 }
 

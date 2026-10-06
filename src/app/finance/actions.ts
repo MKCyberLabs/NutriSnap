@@ -113,6 +113,17 @@ export async function getMonthlyFinanceSummary(
 }
 
 /**
+ * Returns comprehensive v0.2 Money Overview read model for the dashboard.
+ */
+export async function getMoneyOverview(
+  userId: string,
+  targetDate: Date | string = new Date()
+) {
+  const authUser = await verifyAuth(userId);
+  return await financeService.getMoneyOverview(authUser.id, targetDate);
+}
+
+/**
  * Lists user obligations ordered by nextDueAt.
  */
 export async function getObligations(userId: string) {
