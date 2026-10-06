@@ -1,0 +1,77 @@
+# NutriSnap v0.2 Status
+
+State: READY FOR IMPLEMENTATION
+
+Implementation branch:
+`feature/v0.2-money-life`
+
+v0.1 merged baseline:
+`26bb3b48232259607c6b7ba44a786d11ca863c82`
+
+Frozen v0.2 architecture source:
+`4c6921baf418f411e387cc65657810999fe81777`
+
+Architecture Gate A:
+`PASS`
+
+## Gate A resolved architecture
+
+1. Foreign-key ownership is unidirectional:
+   - `LoanPayment.transactionId` authoritative for LoanPayment ↔ FinancialTransaction.
+   - `WishlistItem.transactionId` authoritative for WishlistItem ↔ FinancialTransaction.
+   - `FinancialTransaction.personalDebtId` retained for the Debt 1:N relation.
+
+2. Credit Card EMI double-count prevention:
+   - `emiGeneratesExpense`
+   - `principalAlreadyRecognized`
+   - snapshot vs converted-purchase behavior frozen.
+
+3. Linked EMI obligation fulfillment:
+   - generic Paid delegates to `LoanService.recordEmiPayment()`;
+   - one LoanPayment;
+   - occurrence-idempotent;
+   - no duplicate expense/principal update.
+
+4. Wishlist transaction safety:
+   - generic transaction edit/delete blocked for wishlist-linked rows;
+   - correction uses Wishlist domain revert flow.
+
+5. Opening balance:
+   - editable only before posted transactions.
+
+6. Principal split:
+   - optional;
+   - principal reduction never guessed from EMI total.
+
+7. All V2-Q001..V2-Q006 are resolved.
+
+## Current milestone
+
+V2-100 — Safe Update Foundation
+
+Implement before Friends & Family, Loans or Wishlist:
+- account metadata edit;
+- opening-balance restriction;
+- standalone transaction edit;
+- atomic transfer edit;
+- obligation edit;
+- archive flows;
+- linked-transaction restrictions;
+- negative authorization tests.
+
+## Agent model
+
+Primary implementation:
+`AGY-Manickam / gemini-3.8-flash-high`
+
+Architecture review:
+`gemini-3.1-pro-high` only at defined later gates, read-only by default.
+
+## Production boundary
+
+No production DB migration.
+No production deployment.
+No real payment initiation.
+No Investments.
+No force push.
+No autonomous merge.
