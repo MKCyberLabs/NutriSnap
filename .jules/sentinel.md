@@ -127,3 +127,8 @@
 **Vulnerability:** Filenames for uploaded files and internal component IDs were generated using `Math.random()`, resulting in predictable and enumeratable values.
 **Learning:** `Math.random()` provides pseudorandom numbers that lack sufficient entropy for cryptographically secure operations like generating unique identifiers. This could allow attackers to predict file paths or intentionally cause file collisions.
 **Prevention:** Always use the `crypto` module (e.g., `crypto.randomUUID()`) to generate secure, unpredictable UUIDs for sensitive identifiers and filenames.
+
+## 2025-02-24 - [Information Leakage via Error Responses]
+**Vulnerability:** A medium-priority information leakage vulnerability existed in `src/app/api/analyze-meal/route.ts` where internal server errors from the Genkit analysis flow were passing the raw `error.message` detail directly to the client/caller in the JSON response payload.
+**Learning:** Exposing raw error strings from backend AI components to the caller can provide attackers with sensitive context about the internal environment, AI prompts, or third-party service dependencies.
+**Prevention:** Catch statements on API endpoints should log raw errors on the server side (`console.error`) but return non-descriptive, generic error strings (e.g., "Service unavailable") to the caller.

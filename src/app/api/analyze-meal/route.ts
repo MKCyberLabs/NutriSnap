@@ -56,7 +56,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: 'Meal analysis service is temporarily unavailable. Your meal has not been saved.',
-        details: error?.message || 'Service unavailable',
+        // 🛡️ Sentinel: Prevent Information Leakage - Do not expose raw internal error messages
+        // to the client in API responses. Log them on the server and return a generic message.
+        details: 'Service unavailable',
       },
       { status }
     );
