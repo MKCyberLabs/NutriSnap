@@ -29,16 +29,21 @@ export const MealCategoryCard = memo(function MealCategoryCard({ category, onAna
   const isMobile = useIsMobile();
   const Icon = CATEGORY_ICONS[category];
 
-  const handleComplete = (data: MealNutritionalAnalysisOutput, mealTime: string, imagePath?: string) => {
-    onAnalysisComplete(data, category, mealTime, imagePath);
+  const handleComplete = (
+    data: MealNutritionalAnalysisOutput,
+    finalCategory: MealCategory,
+    mealTime: string,
+    imagePath?: string
+  ) => {
+    onAnalysisComplete(data, finalCategory, mealTime, imagePath);
     setOpen(false);
   };
 
   const FormContent = (
-    <MealAnalysisTool 
-      category={category} 
-      onAnalysisComplete={handleComplete} 
-      onCancel={() => setOpen(false)} 
+    <MealAnalysisTool
+      initialCategory={category}
+      onAnalysisComplete={handleComplete}
+      onCancel={() => setOpen(false)}
     />
   );
 

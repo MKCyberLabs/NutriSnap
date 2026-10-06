@@ -18,7 +18,7 @@ npm run test:analysis-contract
 npm run typecheck
 npm run build
 
-for script in test:finance test:reminders test:today test:security test:ui test:life-hub; do
+for script in test:food test:finance test:reminders test:today test:security test:ui test:life-hub; do
   if ! node -e 'const p=require("./package.json"); process.exit(p.scripts && p.scripts[process.argv[1]] ? 0 : 1)' "$script"; then
     echo "ERROR: required v0.1 package script missing: $script" >&2
     exit 3

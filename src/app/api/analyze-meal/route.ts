@@ -50,7 +50,15 @@ export async function POST(req: NextRequest) {
     // Log the specific error to the server console for debugging
     console.error('Health Matrix API Logic Failure:', error);
 
-    // Prevent information leakage by removing details from error response
-    return NextResponse.json({ error: 'Health Matrix Analysis Failed' }, { status: 500 });
+    const isTimeout = typeof error?.message === 'string' && error.message.includes('504');
+    const status = isTimeout ? 504 : 503;
+
+    return NextResponse.json(
+      {
+        error: 'Meal analysis service is temporarily unavailable. Your meal has not been saved.',
+        details: error?.message || 'Service unavailable',
+      },
+      { status }
+    );
   }
 }

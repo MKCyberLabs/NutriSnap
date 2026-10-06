@@ -12,6 +12,7 @@ import {
   UserMetrics,
 } from "@/lib/types";
 import { MealCategoryCard } from "@/components/dashboard/MealCategoryCard";
+import { MealAnalysisTool } from "@/components/dashboard/MealAnalysisTool";
 import { analyzeMeal } from "@/ai/actions/analyze-meal";
 import type { MealNutritionalAnalysisOutput } from "@/ai/flows/meal-nutritional-analysis";
 import {
@@ -20,6 +21,12 @@ import {
   deleteMealLog,
   updateMealLogItems,
 } from "@/ai/actions/db-logs";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Card,
   CardContent,
@@ -329,6 +336,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("daily");
   const [isMounted, setIsMounted] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState<string | null>(null);
+  const [isLogMealOpen, setIsLogMealOpen] = useState(false);
 
   const [weeklyPivotDate, setWeeklyPivotDate] = useState<Date>(new Date());
   const [customRange, setCustomRange] = useState<DateRange | undefined>(
@@ -1016,21 +1024,73 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <Card className="glass-card bg-primary text-primary-foreground border-none px-6 py-4 flex items-center gap-4 rounded-2xl">
-            <div className="p-2 bg-white/20 rounded-xl">
-              <TrendingUp className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest">
-                {activeTab === "daily" ? "Intake" : "Range Avg"}
-              </p>
-              <p className="text-2xl font-bold">
-                {activeTab === "daily" ? totalCals : weeklyAvgCalories}{" "}
-                <span className="text-sm font-normal opacity-70"> kcal</span>
-              </p>
-            </div>
-          </Card>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => setIsLogMealOpen(true)}
+              className="h-12 px-5 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md shadow-primary/20 flex items-center gap-2"
+              aria-label="Log Meal"
+            >
+              <Plus className="h-5 w-5" />
+              <span>Log Meal</span>
+            </Button>
+
+            <Card className="glass-card bg-primary text-primary-foreground border-none px-6 py-4 flex items-center gap-4 rounded-2xl">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <TrendingUp className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest">
+                  {activeTab === "daily" ? "Intake" : "Range Avg"}
+                </p>
+                <p className="text-2xl font-bold">
+                  {activeTab === "daily" ? totalCals : weeklyAvgCalories}{" "}
+                  <span className="text-sm font-normal opacity-70"> kcal</span>
+                </p>
+              </div>
+            </Card>
+          </div>
         </header>
+
+        {isMobile ? (
+          <Sheet open={isLogMealOpen} onOpenChange={setIsLogMealOpen}>
+            <SheetContent side="bottom" className="h-[90svh] rounded-t-[3rem] border-none glass-card p-8 flex flex-col">
+              <div className="w-12 h-1.5 bg-foreground/10 rounded-full mx-auto mb-6" />
+              <SheetHeader className="mb-4">
+                <SheetTitle className="text-2xl font-bold text-primary text-left">
+                  Log Meal
+                </SheetTitle>
+              </SheetHeader>
+              <div className="flex-1 overflow-hidden">
+                <MealAnalysisTool
+                  initialCategory="auto"
+                  onAnalysisComplete={async (data, cat, mealTime, imagePath) => {
+                    await handleMealCardComplete(data, cat, mealTime, imagePath);
+                    setIsLogMealOpen(false);
+                  }}
+                  onCancel={() => setIsLogMealOpen(false)}
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+        ) : (
+          <Dialog open={isLogMealOpen} onOpenChange={setIsLogMealOpen}>
+            <DialogContent className="sm:max-w-[540px] glass-card border-none rounded-[2.5rem] p-8">
+              <DialogHeader className="mb-4">
+                <DialogTitle className="text-2xl font-bold text-primary">
+                  Log Meal
+                </DialogTitle>
+              </DialogHeader>
+              <MealAnalysisTool
+                initialCategory="auto"
+                onAnalysisComplete={async (data, cat, mealTime, imagePath) => {
+                  await handleMealCardComplete(data, cat, mealTime, imagePath);
+                  setIsLogMealOpen(false);
+                }}
+                onCancel={() => setIsLogMealOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
 
         {activeTab === "daily" ? (
           <motion.div
