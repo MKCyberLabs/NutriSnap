@@ -45,19 +45,27 @@ Architecture Gate A:
 
 7. All V2-Q001..V2-Q006 are resolved.
 
+## Milestone progress
+
+### V2-100 — Safe Update Foundation: PASS (Verified)
+- account metadata edit (verified)
+- opening-balance safety restriction (verified)
+- standalone transaction edit (verified)
+- atomic transfer edit (verified)
+- obligation edit & occurrence immutability (verified)
+- archive flows (verified)
+- linked-transaction restrictions on debt/loan/wishlist (verified)
+- authorization negatives (verified)
+- deterministic test suite: `src/lib/finance/safe-updates.test.ts` (V2-T080..V2-T089)
+
 ## Current milestone
 
-V2-100 — Safe Update Foundation
-
-Implement before Friends & Family, Loans or Wishlist:
-- account metadata edit;
-- opening-balance restriction;
-- standalone transaction edit;
-- atomic transfer edit;
-- obligation edit;
-- archive flows;
-- linked-transaction restrictions;
-- negative authorization tests.
+V2-200 — Personal Debt (Friends & Family)
+- Counterparty debts (LENT / BORROWED)
+- Partial repayments and collections
+- Settle and archive flows
+- Excluded from monthly income/expense totals
+- UI routes & components (/finance/debts)
 
 ## Agent model
 

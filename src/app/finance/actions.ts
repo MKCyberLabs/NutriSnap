@@ -28,6 +28,17 @@ export async function createAccount(userId: string, data: unknown) {
 }
 
 /**
+ * Updates financial account metadata.
+ */
+export async function updateAccount(userId: string, accountId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await financeService.updateAccount(authUser.id, accountId, data);
+  revalidatePath('/finance');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
  * Archives an account (soft delete) preserving all historical transactions.
  */
 export async function archiveAccount(userId: string, accountId: string) {
@@ -60,6 +71,17 @@ export async function getTransactions(
 export async function recordTransaction(userId: string, data: unknown) {
   const authUser = await verifyAuth(userId);
   const result = await financeService.recordTransaction(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Updates a standalone transaction.
+ */
+export async function updateTransaction(userId: string, transactionId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await financeService.updateTransaction(authUser.id, transactionId, data);
   revalidatePath('/finance');
   revalidatePath('/today');
   return result;
@@ -101,6 +123,30 @@ export async function getObligations(userId: string) {
 export async function createObligation(userId: string, data: unknown) {
   const authUser = await verifyAuth(userId);
   const result = await financeService.createObligation(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Updates an obligation with authorization verification.
+ */
+export async function updateObligation(userId: string, obligationId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await financeService.updateObligation(authUser.id, obligationId, data);
+  revalidatePath('/finance');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Archives an obligation (soft delete) preserving historical occurrences.
+ */
+export async function archiveObligation(userId: string, obligationId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await financeService.archiveObligation(authUser.id, obligationId);
   revalidatePath('/finance');
   revalidatePath('/today');
   revalidatePath('/reminders');

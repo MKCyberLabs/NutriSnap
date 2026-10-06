@@ -38,6 +38,10 @@ model User {
   obligations           Obligation[]
   obligationOccurrences ObligationOccurrence[]
   reminderDeliveries    ReminderDelivery[]
+  personalDebts         PersonalDebt[]
+  loans                 Loan[]
+  loanPayments          LoanPayment[]
+  wishlistItems         WishlistItem[]
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }
@@ -139,6 +143,9 @@ model FinancialAccount {
   transactions   FinancialTransaction[] @relation("AccountTransactions")
   transfersTo    FinancialTransaction[] @relation("TransferAccountTransactions")
   obligations    Obligation[]
+  loans          Loan[]
+  loanPayments   LoanPayment[]
+  wishlistItems  WishlistItem[]
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 
@@ -162,6 +169,10 @@ model FinancialTransaction {
   transferAccount      FinancialAccount?     @relation("TransferAccountTransactions", fields: [transferAccountId], references: [id], onDelete: SetNull)
   obligation           Obligation?           @relation(fields: [obligationId], references: [id], onDelete: SetNull)
   obligationOccurrence ObligationOccurrence?
+  personalDebtId       String?
+  personalDebt         PersonalDebt?         @relation(fields: [personalDebtId], references: [id], onDelete: SetNull)
+  loanPayment          LoanPayment?
+  wishlistItem         WishlistItem?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -169,6 +180,7 @@ model FinancialTransaction {
   @@index([accountId])
   @@index([transferAccountId])
   @@index([obligationId])
+  @@index([personalDebtId])
 }
 
 model Obligation {
@@ -193,6 +205,7 @@ model Obligation {
   occurrences        ObligationOccurrence[]
   reminders          Reminder[]
   deliveries         ReminderDelivery[]
+  loan               Loan?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
 
@@ -212,6 +225,7 @@ model ObligationOccurrence {
   user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   obligation    Obligation            @relation(fields: [obligationId], references: [id], onDelete: Cascade)
   transaction   FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  loanPayment   LoanPayment?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
@@ -272,4 +286,116 @@ model HydrationLog {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+model PersonalDebt {
+  id                 String                 @id @default(cuid())
+  userId             String
+  direction          String                 // RECEIVABLE | PAYABLE
+  counterpartyName   String
+  title              String?
+  originalAmount     Decimal                @db.Decimal(14, 2)
+  startedAt          DateTime               @default(now())
+  dueAt              DateTime?
+  reminderOffsetsMin Int[]                  @default([0])
+  status             String                 @default("OPEN") // OPEN | SETTLED | ARCHIVED
+  notes              String?
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions       FinancialTransaction[]
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, dueAt])
+}
+
+model Loan {
+  id                         String            @id @default(cuid())
+  userId                     String
+  name                       String
+  loanType                   String            // PERSONAL | HOME | VEHICLE | EDUCATION | GOLD | PRODUCT_EMI | CREDIT_CARD_EMI | OTHER
+  lender                     String
+  originalPrincipal          Decimal?          @db.Decimal(14, 2)
+  openingOutstanding         Decimal           @db.Decimal(14, 2)
+  outstandingPrincipal       Decimal           @db.Decimal(14, 2)
+  trackedFromAt              DateTime          @default(now())
+  emiAmount                  Decimal?          @db.Decimal(14, 2)
+  emiGeneratesExpense        Boolean           @default(true)
+  principalAlreadyRecognized Boolean           @default(false)
+  interestRatePercent        Decimal?          @db.Decimal(5, 2)
+  interestRateType           String            @default("UNKNOWN") // FIXED | FLOATING | UNKNOWN
+  tenureMonths               Int?
+  startDate                  DateTime?
+  expectedEndDate            DateTime?
+  nextEmiDate                DateTime?
+  dueDay                     Int?
+  paymentAccountId           String?
+  productName                String?
+  merchant                   String?
+  obligationId               String?           @unique
+  status                     String            @default("ACTIVE") // ACTIVE | CLOSED | ARCHIVED
+  notes                      String?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentAccount FinancialAccount? @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+  obligation     Obligation?       @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+  payments       LoanPayment[]
+
+  @@index([userId, status])
+  @@index([userId, nextEmiDate])
+}
+
+model LoanPayment {
+  id                     String                 @id @default(cuid())
+  userId                 String
+  loanId                 String
+  amount                 Decimal                @db.Decimal(14, 2)
+  principalPaid          Decimal?               @db.Decimal(14, 2)
+  interestPaid           Decimal?               @db.Decimal(14, 2)
+  feesPaid               Decimal?               @db.Decimal(14, 2)
+  occurredAt             DateTime
+  accountId              String
+  transactionId          String?                @unique
+  obligationOccurrenceId String?                @unique
+  note                   String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loan                 Loan                  @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  account              FinancialAccount      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  transaction          FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  obligationOccurrence ObligationOccurrence? @relation(fields: [obligationOccurrenceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([loanId, occurredAt(sort: Desc)])
+}
+
+model WishlistItem {
+  id               String                @id @default(cuid())
+  userId           String
+  name             String
+  category         String
+  targetPrice      Decimal               @db.Decimal(14, 2)
+  maxBudget        Decimal?              @db.Decimal(14, 2)
+  priority         String                @default("MEDIUM") // LOW | MEDIUM | HIGH
+  targetDate       DateTime?
+  plannedAccountId String?
+  status           String                @default("WISHLIST") // WISHLIST | PLANNED | READY | PURCHASED | ARCHIVED
+  notes            String?
+  actualPrice      Decimal?              @db.Decimal(14, 2)
+  purchasedAt      DateTime?
+  transactionId    String?               @unique
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plannedAccount FinancialAccount?     @relation(fields: [plannedAccountId], references: [id], onDelete: SetNull)
+  transaction    FinancialTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([userId, priority])
+  @@index([userId, targetDate])
 }

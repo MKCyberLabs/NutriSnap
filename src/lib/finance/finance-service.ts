@@ -22,6 +22,15 @@ export const createAccountSchema = z.object({
   creditLimit: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
 });
 
+export const updateAccountSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100).optional(),
+  type: z.string().refine(isValidAccountType, 'Invalid account type').optional(),
+  institution: z.string().max(100).optional().nullable(),
+  openingBalance: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional(),
+  creditLimit: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
 export const recordTransactionSchema = z.object({
   type: z.string().refine(isValidTransactionType, 'Invalid transaction type'),
   amount: z.union([z.number(), z.string(), z.instanceof(Decimal)]),
@@ -30,6 +39,15 @@ export const recordTransactionSchema = z.object({
   accountId: z.string().min(1, 'Account is required'),
   transferAccountId: z.string().optional().nullable(),
   obligationId: z.string().optional().nullable(),
+  note: z.string().max(255).optional().nullable(),
+});
+
+export const updateTransactionSchema = z.object({
+  amount: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional(),
+  category: z.string().refine(isValidTransactionCategory, 'Invalid transaction category').optional(),
+  occurredAt: z.string().or(z.date()).optional(),
+  accountId: z.string().min(1, 'Account is required').optional(),
+  transferAccountId: z.string().optional().nullable(),
   note: z.string().max(255).optional().nullable(),
 });
 
@@ -43,6 +61,20 @@ export const createObligationSchema = z.object({
   recurrenceInterval: z.number().int().min(1).optional().nullable(),
   reminderOffsetsMin: z.array(z.number().int().min(0)).default([0]),
   notes: z.string().max(255).optional().nullable(),
+});
+
+export const updateObligationSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(100).optional(),
+  kind: z.string().refine(isValidObligationKind, 'Invalid obligation kind').optional(),
+  amount: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
+  accountId: z.string().optional().nullable(),
+  dueAt: z.string().or(z.date()).optional(),
+  recurrenceType: z.enum(['ONCE', 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'EVERY_N_DAYS']).optional(),
+  recurrenceInterval: z.number().int().min(1).optional().nullable(),
+  reminderOffsetsMin: z.array(z.number().int().min(0)).optional(),
+  notes: z.string().max(255).optional().nullable(),
+  nextDueAt: z.string().or(z.date()).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const OCCURRENCE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
@@ -131,6 +163,78 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
       name: account.name,
       type: account.type,
       openingBalance: account.openingBalance.toString(),
+    }
+  };
+}
+
+/**
+ * Updates financial account metadata.
+ * V2-1002 / V2-Q002: openingBalance is editable ONLY when account has zero posted transactions.
+ */
+export async function updateAccount(
+  userId: string,
+  accountId: string,
+  data: unknown,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+  const parsed = updateAccountSchema.parse(data);
+
+  const account = await db.financialAccount.findUnique({
+    where: { id: accountId },
+    select: { userId: true, openingBalance: true, isActive: true }
+  });
+
+  if (!account || account.userId !== userId) {
+    throw new Error('Account not found or unauthorized');
+  }
+
+  const updateData: any = {};
+  if (parsed.name !== undefined) updateData.name = parsed.name;
+  if (parsed.type !== undefined) updateData.type = parsed.type;
+  if (parsed.institution !== undefined) updateData.institution = parsed.institution;
+  if (parsed.creditLimit !== undefined) {
+    updateData.creditLimit = parsed.creditLimit !== null ? parseAndValidateAmount(parsed.creditLimit.toString()) : null;
+  }
+  if (parsed.isActive !== undefined) updateData.isActive = parsed.isActive;
+
+  // V2-1002 / V2-Q002: openingBalance editable ONLY when account has zero posted transactions
+  if (parsed.openingBalance !== undefined) {
+    const txCount = await db.financialTransaction.count({
+      where: {
+        OR: [
+          { accountId },
+          { transferAccountId: accountId }
+        ]
+      }
+    });
+
+    if (txCount > 0) {
+      throw new Error('Opening balance cannot be modified after transactions have been posted to this account');
+    }
+
+    const ob = new Decimal(parsed.openingBalance.toString());
+    if (ob.lessThan(0)) {
+      throw new Error('Opening balance cannot be negative');
+    }
+    updateData.openingBalance = ob;
+  }
+
+  const updated = await db.financialAccount.update({
+    where: { id: accountId },
+    data: updateData
+  });
+
+  return {
+    success: true,
+    account: {
+      id: updated.id,
+      name: updated.name,
+      type: updated.type,
+      institution: updated.institution,
+      openingBalance: updated.openingBalance.toString(),
+      creditLimit: updated.creditLimit ? updated.creditLimit.toString() : null,
+      isActive: updated.isActive,
     }
   };
 }
@@ -300,18 +404,131 @@ export async function recordTransaction(userId: string, data: unknown, db: Prism
 }
 
 /**
- * Deletes a transaction with authorization verification.
+ * Updates a standalone transaction.
+ * V2-1007: Block generic edits on obligation/debt/loan/wishlist-linked records.
+ */
+export async function updateTransaction(
+  userId: string,
+  transactionId: string,
+  data: unknown,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+  const parsed = updateTransactionSchema.parse(data);
+
+  const tx = await db.financialTransaction.findUnique({
+    where: { id: transactionId },
+    include: {
+      obligationOccurrence: true,
+      loanPayment: true,
+      wishlistItem: true,
+    }
+  });
+
+  if (!tx || tx.userId !== userId) {
+    throw new Error('Transaction not found or unauthorized');
+  }
+
+  // V2-1007: Linked-transaction restrictions
+  if (
+    tx.obligationOccurrence ||
+    tx.loanPayment ||
+    tx.wishlistItem ||
+    tx.personalDebtId
+  ) {
+    throw new Error('Linked transaction cannot be modified directly through generic transaction editor');
+  }
+
+  const updateData: any = {};
+  if (parsed.category !== undefined) updateData.category = parsed.category;
+  if (parsed.occurredAt !== undefined) updateData.occurredAt = new Date(parsed.occurredAt);
+  if (parsed.note !== undefined) updateData.note = parsed.note;
+
+  if (parsed.amount !== undefined) {
+    updateData.amount = parseAndValidateAmount(parsed.amount.toString());
+  }
+
+  const newAccountId = parsed.accountId ?? tx.accountId;
+  if (parsed.accountId !== undefined && parsed.accountId !== tx.accountId) {
+    const acc = await db.financialAccount.findUnique({
+      where: { id: newAccountId },
+      select: { userId: true, isActive: true }
+    });
+    if (!acc || acc.userId !== userId) {
+      throw new Error('Primary account not found or unauthorized');
+    }
+    updateData.accountId = newAccountId;
+  }
+
+  if (tx.type === 'TRANSFER') {
+    const newTransferAccountId = parsed.transferAccountId !== undefined ? parsed.transferAccountId : tx.transferAccountId;
+    if (!newTransferAccountId) {
+      throw new Error('Transfer requires a destination account');
+    }
+
+    if (newAccountId === newTransferAccountId) {
+      throw new Error('Transfer source and destination accounts must be distinct');
+    }
+
+    const destAcc = await db.financialAccount.findUnique({
+      where: { id: newTransferAccountId },
+      select: { userId: true, isActive: true }
+    });
+    if (!destAcc || destAcc.userId !== userId) {
+      throw new Error('Destination transfer account not found or unauthorized');
+    }
+
+    updateData.transferAccountId = newTransferAccountId;
+  }
+
+  const updated = await db.financialTransaction.update({
+    where: { id: transactionId },
+    data: updateData
+  });
+
+  return {
+    success: true,
+    transaction: {
+      id: updated.id,
+      type: updated.type,
+      amount: updated.amount.toString(),
+      category: updated.category,
+      occurredAt: updated.occurredAt instanceof Date ? updated.occurredAt.toISOString() : String(updated.occurredAt),
+      accountId: updated.accountId,
+      transferAccountId: updated.transferAccountId,
+      note: updated.note,
+    }
+  };
+}
+
+/**
+ * Deletes a transaction with authorization verification and domain-linked protection.
+ * V2-1007: Block generic delete on obligation/debt/loan/wishlist-linked records.
  */
 export async function deleteTransaction(userId: string, transactionId: string, db: PrismaClientLike = defaultPrisma) {
   if (!userId) throw new Error('Unauthorized: missing userId');
 
   const tx = await db.financialTransaction.findUnique({
     where: { id: transactionId },
-    select: { userId: true }
+    include: {
+      obligationOccurrence: true,
+      loanPayment: true,
+      wishlistItem: true,
+    }
   });
 
   if (!tx || tx.userId !== userId) {
     throw new Error('Transaction not found or unauthorized');
+  }
+
+  // V2-1007: Linked-transaction restrictions
+  if (
+    tx.obligationOccurrence ||
+    tx.loanPayment ||
+    tx.wishlistItem ||
+    tx.personalDebtId
+  ) {
+    throw new Error('Linked transaction cannot be deleted directly through generic transaction editor');
   }
 
   await db.financialTransaction.delete({
@@ -486,6 +703,153 @@ export async function createObligation(userId: string, data: unknown, db: Prisma
     }
   };
 }
+
+/**
+ * Updates an obligation with authorization verification.
+ * Recurrence/dueAt recalculates nextDueAt if necessary.
+ * Existing completed occurrences remain immutable (V2-T086).
+ */
+export async function updateObligation(
+  userId: string,
+  obligationId: string,
+  data: unknown,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+  const parsed = updateObligationSchema.parse(data);
+
+  const obligation = await db.obligation.findUnique({
+    where: { id: obligationId },
+    select: {
+      id: true,
+      userId: true,
+      dueAt: true,
+      recurrenceType: true,
+      recurrenceInterval: true,
+      nextDueAt: true,
+    }
+  });
+
+  if (!obligation || obligation.userId !== userId) {
+    throw new Error('Obligation not found or unauthorized');
+  }
+
+  const updateData: any = {};
+  if (parsed.title !== undefined) updateData.title = parsed.title;
+  if (parsed.kind !== undefined) updateData.kind = parsed.kind;
+  if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+  if (parsed.isActive !== undefined) updateData.isActive = parsed.isActive;
+  if (parsed.reminderOffsetsMin !== undefined) updateData.reminderOffsetsMin = parsed.reminderOffsetsMin;
+
+  if (parsed.amount !== undefined) {
+    updateData.amount = parsed.amount !== null ? parseAndValidateAmount(parsed.amount.toString()) : null;
+  }
+
+  if (parsed.accountId !== undefined) {
+    if (parsed.accountId) {
+      const acc = await db.financialAccount.findUnique({
+        where: { id: parsed.accountId },
+        select: { userId: true }
+      });
+      if (!acc || acc.userId !== userId) {
+        throw new Error('Default account not found or unauthorized');
+      }
+      updateData.accountId = parsed.accountId;
+    } else {
+      updateData.accountId = null;
+    }
+  }
+
+  let scheduleChanged = false;
+  let targetDueAt = obligation.dueAt;
+  let targetRecurrenceType = obligation.recurrenceType;
+  let targetRecurrenceInterval = obligation.recurrenceInterval;
+
+  if (parsed.dueAt !== undefined) {
+    targetDueAt = new Date(parsed.dueAt);
+    updateData.dueAt = targetDueAt;
+    scheduleChanged = true;
+  }
+  if (parsed.recurrenceType !== undefined) {
+    targetRecurrenceType = parsed.recurrenceType;
+    updateData.recurrenceType = parsed.recurrenceType;
+    scheduleChanged = true;
+  }
+  if (parsed.recurrenceInterval !== undefined) {
+    targetRecurrenceInterval = parsed.recurrenceInterval;
+    updateData.recurrenceInterval = parsed.recurrenceInterval;
+    scheduleChanged = true;
+  }
+
+  if (parsed.nextDueAt !== undefined) {
+    updateData.nextDueAt = new Date(parsed.nextDueAt);
+  } else if (scheduleChanged) {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true }
+    });
+    const tz = user?.timezone || 'UTC';
+
+    const rule: RecurrenceRule = {
+      type: targetRecurrenceType as any,
+      interval: targetRecurrenceInterval,
+      timezone: tz,
+    };
+
+    const now = new Date();
+    const nextDueAt = targetDueAt.getTime() >= now.getTime()
+      ? targetDueAt
+      : (getNextOccurrence(rule, targetDueAt, now) || targetDueAt);
+
+    updateData.nextDueAt = nextDueAt;
+  }
+
+  const updated = await db.obligation.update({
+    where: { id: obligationId },
+    data: updateData,
+  });
+
+  return {
+    success: true,
+    obligation: {
+      id: updated.id,
+      title: updated.title,
+      kind: updated.kind,
+      amount: updated.amount ? updated.amount.toString() : null,
+      dueAt: updated.dueAt.toISOString(),
+      nextDueAt: updated.nextDueAt.toISOString(),
+      isActive: updated.isActive,
+    }
+  };
+}
+
+/**
+ * Archives an obligation (soft delete) preserving all historical occurrences.
+ */
+export async function archiveObligation(
+  userId: string,
+  obligationId: string,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  const obligation = await db.obligation.findUnique({
+    where: { id: obligationId },
+    select: { userId: true }
+  });
+
+  if (!obligation || obligation.userId !== userId) {
+    throw new Error('Obligation not found or unauthorized');
+  }
+
+  await db.obligation.update({
+    where: { id: obligationId },
+    data: { isArchived: true, isActive: false }
+  });
+
+  return { success: true };
+}
+
 
 /**
  * Marks an obligation occurrence as Paid with transactional idempotency.

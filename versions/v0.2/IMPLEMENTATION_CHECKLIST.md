@@ -8,14 +8,14 @@
 - [ ] V2-0005 migration rehearsal plan approved.
 
 ## V2-100 Update foundation
-- [ ] V2-1001 edit account metadata.
-- [ ] V2-1002 opening-balance safety rule (editable only when account has zero posted transactions).
-- [ ] V2-1003 edit standalone income/expense.
-- [ ] V2-1004 edit transfer atomically.
-- [ ] V2-1005 edit obligation.
-- [ ] V2-1006 archive flows.
-- [ ] V2-1007 linked-transaction restrictions (block generic edit/delete on Wishlist, Loan, Debt, Obligation links).
-- [ ] V2-1008 authorization negatives.
+- [x] V2-1001 edit account metadata.
+- [x] V2-1002 opening-balance safety rule (editable only when account has zero posted transactions).
+- [x] V2-1003 edit standalone income/expense.
+- [x] V2-1004 edit transfer atomically.
+- [x] V2-1005 edit obligation.
+- [x] V2-1006 archive flows.
+- [x] V2-1007 linked-transaction restrictions (block generic edit/delete on Wishlist, Loan, Debt, Obligation links).
+- [x] V2-1008 authorization negatives.
 
 ## V2-200 Personal Debt
 - [ ] V2-2001 schema/model.

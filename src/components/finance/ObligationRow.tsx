@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  Archive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -49,6 +50,7 @@ interface ObligationRowProps {
     accountId?: string;
   }) => Promise<any>;
   onPaidSuccess: () => void;
+  onArchive?: (id: string) => void;
 }
 
 export function ObligationRow({
@@ -56,6 +58,7 @@ export function ObligationRow({
   accounts,
   onMarkPaid,
   onPaidSuccess,
+  onArchive,
 }: ObligationRowProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [createExpense, setCreateExpense] = useState(true);
@@ -197,16 +200,29 @@ export function ObligationRow({
           </div>
         </div>
 
-        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-          <DialogTrigger asChild>
+        <div className="flex items-center gap-1.5">
+          {onArchive && (
             <Button
+              variant="ghost"
               size="sm"
-              className="h-9 px-3 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+              onClick={() => onArchive(obligation.id)}
+              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+              title="Archive obligation"
             >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Paid</span>
+              <Archive className="h-4 w-4" />
             </Button>
-          </DialogTrigger>
+          )}
+
+          <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+            <DialogTrigger asChild>
+              <Button
+                size="sm"
+                className="h-9 px-3 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>Paid</span>
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[400px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
             <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
               <DialogTitle className="text-base font-semibold text-[#111827]">
@@ -277,5 +293,6 @@ export function ObligationRow({
         </Dialog>
       </div>
     </div>
+  </div>
   );
 }

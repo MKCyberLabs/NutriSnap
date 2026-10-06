@@ -6,7 +6,15 @@ export type Decimal = Prisma.Decimal;
 export const ACCOUNT_TYPES = ['BANK', 'CASH', 'WALLET', 'CREDIT_CARD'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
-export const TRANSACTION_TYPES = ['INCOME', 'EXPENSE', 'TRANSFER'] as const;
+export const TRANSACTION_TYPES = [
+  'INCOME',
+  'EXPENSE',
+  'TRANSFER',
+  'LEND',
+  'BORROW',
+  'DEBT_COLLECT',
+  'DEBT_REPAY'
+] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
 export const OBLIGATION_KINDS = [
@@ -182,6 +190,18 @@ export function calculateAccountBalance(
         // Incoming transfer
         balance = balance.plus(amount);
       }
+    } else if (tx.type === 'LEND' && tx.accountId === targetAccountId) {
+      // Cash lent to friend/family: account decreases
+      balance = balance.minus(amount);
+    } else if (tx.type === 'DEBT_COLLECT' && tx.accountId === targetAccountId) {
+      // Cash collected back from friend/family: account increases
+      balance = balance.plus(amount);
+    } else if (tx.type === 'BORROW' && tx.accountId === targetAccountId) {
+      // Cash borrowed from friend/family: account increases
+      balance = balance.plus(amount);
+    } else if (tx.type === 'DEBT_REPAY' && tx.accountId === targetAccountId) {
+      // Cash repaid to friend/family: account decreases
+      balance = balance.minus(amount);
     }
   }
 
@@ -190,8 +210,9 @@ export function calculateAccountBalance(
 
 /**
  * Computes monthly income and expense totals from transactions.
- * Non-negotiable invariant: TRANSFER transactions move value between accounts
- * and must NEVER inflate income or expense totals.
+ * Non-negotiable invariant: TRANSFER and personal debt transactions (LEND, BORROW,
+ * DEBT_COLLECT, DEBT_REPAY) move value between accounts/persons and must NEVER
+ * inflate income or expense totals.
  */
 export function calculateMonthlyTotals(
   transactions: Array<{
@@ -209,7 +230,7 @@ export function calculateMonthlyTotals(
     } else if (tx.type === 'EXPENSE') {
       expense = expense.plus(amount);
     }
-    // Note: TRANSFER is strictly excluded from income and expense!
+    // Note: TRANSFER, LEND, BORROW, DEBT_COLLECT, DEBT_REPAY are strictly excluded from income and expense!
   }
 
   return { income, expense };

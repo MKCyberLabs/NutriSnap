@@ -17,11 +17,14 @@ import {
   getObligations,
   createObligation,
   markObligationPaid,
+  archiveObligation,
 } from '@/app/finance/actions';
 import { ReceiptText } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function BillsPage() {
   const router = useRouter();
+  const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +66,22 @@ export default function BillsPage() {
     const session = getAuthSession();
     if (!session) return;
     return await markObligationPaid(session.id, params);
+  };
+
+  const handleArchive = async (obligationId: string) => {
+    const session = getAuthSession();
+    if (!session) return;
+    try {
+      await archiveObligation(session.id, obligationId);
+      toast({ title: 'Obligation archived', description: 'Hidden from active obligations.' });
+      loadData(session.id);
+    } catch (err: any) {
+      toast({
+        title: 'Error archiving obligation',
+        description: err?.message,
+        variant: 'destructive',
+      });
+    }
   };
 
   const activeObligations = obligations.filter((o) => o.isActive && !o.isArchived);
@@ -160,6 +179,7 @@ export default function BillsPage() {
                     const session = getAuthSession();
                     if (session) loadData(session.id);
                   }}
+                  onArchive={handleArchive}
                 />
               ))}
             </div>
