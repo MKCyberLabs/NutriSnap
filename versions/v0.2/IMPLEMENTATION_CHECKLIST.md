@@ -1,11 +1,11 @@
 # v0.2 Implementation Checklist
 
 ## V2-000 Architecture
-- [ ] V2-0001 v0.1 final baseline identified.
-- [ ] V2-0002 schema proposal updated against final v0.1.
-- [ ] V2-0003 Gemini 3.1 Pro High architecture review Gate A repaired and ready for re-review.
+- [x] V2-0001 v0.1 final baseline identified.
+- [x] V2-0002 schema proposal updated against final v0.1.
+- [x] V2-0003 Gemini 3.1 Pro High architecture review Gate A repaired and ready for re-review.
 - [x] V2-0004 OPEN_QUESTIONS resolved (V2-Q001 through V2-Q006 all resolved).
-- [ ] V2-0005 migration rehearsal plan approved.
+- [x] V2-0005 migration rehearsal plan approved.
 
 ## V2-100 Update foundation
 - [x] V2-1001 edit account metadata.
@@ -75,13 +75,13 @@
 - [x] V2-6005 Telegram ownership/idempotency.
 
 ## V2-700 Final
-- [ ] V2-7001 full migration rehearsal.
-- [ ] V2-7002 finance tests.
-- [ ] V2-7003 debt tests.
-- [ ] V2-7004 loan tests.
-- [ ] V2-7005 wishlist tests.
-- [ ] V2-7006 security tests.
-- [ ] V2-7007 Today tests.
-- [ ] V2-7008 full v0.1 regression.
-- [ ] V2-7009 browser UAT.
-- [ ] V2-7010 owner review.
+- [x] V2-7001 full migration rehearsal.
+- [x] V2-7002 finance tests.
+- [x] V2-7003 debt tests.
+- [x] V2-7004 loan tests.
+- [x] V2-7005 wishlist tests.
+- [x] V2-7006 security tests.
+- [x] V2-7007 Today tests.
+- [x] V2-7008 full v0.1 regression.
+- [ ] V2-7009 browser UAT (Ready for Owner UAT on Omarchy workstation).
+- [ ] V2-7010 owner review (Pending Owner review).
