@@ -7,6 +7,17 @@ import {
   Trash2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface TransactionRowProps {
   transaction: {
@@ -96,13 +107,33 @@ export function TransactionRow({ transaction, onDelete }: TransactionRowProps) {
         </div>
 
         {onDelete && (
-          <button
-            onClick={() => onDelete(transaction.id)}
-            aria-label="Delete transaction"
-            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] transition-all focus-visible:opacity-100"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                aria-label="Delete transaction"
+                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] transition-all focus-visible:opacity-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this transaction? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-[10px]">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => onDelete(transaction.id)}
+                  className="bg-[#EF4444] hover:bg-[#B42318] text-white rounded-[10px]"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
     </div>
