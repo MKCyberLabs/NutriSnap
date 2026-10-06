@@ -8,6 +8,9 @@ import {
   Landmark,
   ArrowLeftRight,
   ReceiptText,
+  Users,
+  BadgePercent,
+  Sparkles,
 } from 'lucide-react';
 
 export function FinanceTabs() {
@@ -37,6 +40,24 @@ export function FinanceTabs() {
       href: '/finance/bills',
       active: pathname === '/finance/bills',
       icon: <ReceiptText className="h-4 w-4" />,
+    },
+    {
+      label: 'Friends & Family',
+      href: '/finance/debts',
+      active: pathname === '/finance/debts',
+      icon: <Users className="h-4 w-4" />,
+    },
+    {
+      label: 'Loans & EMI',
+      href: '/finance/loans',
+      active: pathname === '/finance/loans',
+      icon: <BadgePercent className="h-4 w-4" />,
+    },
+    {
+      label: 'Wishlist',
+      href: '/finance/wishlist',
+      active: pathname === '/finance/wishlist',
+      icon: <Sparkles className="h-4 w-4" />,
     },
   ];
 

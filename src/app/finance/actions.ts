@@ -3,6 +3,7 @@
 import { requireUser } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import * as financeService from '@/lib/finance/finance-service';
+import * as debtService from '@/lib/finance/debt-service';
 
 async function verifyAuth(userId?: string) {
   return await requireUser(userId);
@@ -170,5 +171,112 @@ export async function markObligationPaid(
   revalidatePath('/finance');
   revalidatePath('/today');
   revalidatePath('/reminders');
+  return result;
+}
+
+/**
+ * Creates a personal debt (RECEIVABLE or PAYABLE).
+ */
+export async function createDebt(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await debtService.createDebt(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Lists debts for a user with calculated outstanding balances.
+ */
+export async function getDebts(
+  userId: string,
+  options: { status?: string; direction?: string } = {}
+) {
+  const authUser = await verifyAuth(userId);
+  return await debtService.getDebts(authUser.id, options);
+}
+
+/**
+ * Retrieves a single debt by ID.
+ */
+export async function getDebtById(userId: string, debtId: string) {
+  const authUser = await verifyAuth(userId);
+  return await debtService.getDebtById(authUser.id, debtId);
+}
+
+/**
+ * Records collection on a RECEIVABLE debt.
+ */
+export async function recordDebtCollection(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await debtService.recordDebtCollection(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Records repayment on a PAYABLE debt.
+ */
+export async function recordDebtRepayment(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await debtService.recordDebtRepayment(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Records additional lending on a RECEIVABLE debt.
+ */
+export async function recordAdditionalLend(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await debtService.recordAdditionalLend(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Records additional borrowing on a PAYABLE debt.
+ */
+export async function recordAdditionalBorrow(userId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await debtService.recordAdditionalBorrow(authUser.id, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/finance/accounts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Marks a debt as settled.
+ */
+export async function settleDebt(userId: string, debtId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await debtService.settleDebt(authUser.id, debtId);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Archives a debt (soft delete).
+ */
+export async function archiveDebt(userId: string, debtId: string) {
+  const authUser = await verifyAuth(userId);
+  const result = await debtService.archiveDebt(authUser.id, debtId);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/today');
   return result;
 }

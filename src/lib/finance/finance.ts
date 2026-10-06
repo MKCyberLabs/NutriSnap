@@ -273,3 +273,48 @@ export function formatINR(amount: Prisma.Decimal | number | string): string {
     maximumFractionDigits: 2
   }).format(num);
 }
+
+/**
+ * Computes outstanding balance for a PersonalDebt.
+ * For RECEIVABLE: sum(LEND) - sum(DEBT_COLLECT)
+ * For PAYABLE:    sum(BORROW) - sum(DEBT_REPAY)
+ * If no ledger transaction exists (e.g. untracked initial cash), base is originalAmount.
+ * Invariant: Outstanding must never be negative.
+ */
+export function calculateDebtOutstanding(
+  direction: string,
+  originalAmount: Prisma.Decimal | number | string,
+  transactions: Array<{
+    type: string;
+    amount: Prisma.Decimal | number | string;
+  }>
+): Prisma.Decimal {
+  const orig = new Prisma.Decimal(originalAmount);
+  let lendsOrBorrows = new Prisma.Decimal(0);
+  let collectsOrRepays = new Prisma.Decimal(0);
+  let hasLedgerMovement = false;
+
+  for (const t of transactions) {
+    const amt = new Prisma.Decimal(t.amount);
+    if (direction === 'RECEIVABLE') {
+      if (t.type === 'LEND') {
+        lendsOrBorrows = lendsOrBorrows.plus(amt);
+        hasLedgerMovement = true;
+      } else if (t.type === 'DEBT_COLLECT') {
+        collectsOrRepays = collectsOrRepays.plus(amt);
+      }
+    } else if (direction === 'PAYABLE') {
+      if (t.type === 'BORROW') {
+        lendsOrBorrows = lendsOrBorrows.plus(amt);
+        hasLedgerMovement = true;
+      } else if (t.type === 'DEBT_REPAY') {
+        collectsOrRepays = collectsOrRepays.plus(amt);
+      }
+    }
+  }
+
+  const totalPrincipal = hasLedgerMovement ? lendsOrBorrows : orig;
+  const outstanding = totalPrincipal.minus(collectsOrRepays);
+
+  return outstanding.greaterThan(0) ? outstanding : new Prisma.Decimal(0);
+}

@@ -58,14 +58,27 @@ Architecture Gate A:
 - authorization negatives (verified)
 - deterministic test suite: `src/lib/finance/safe-updates.test.ts` (V2-T080..V2-T089)
 
+### V2-200 — Personal Debt (Friends & Family): PASS (Verified)
+- Counterparty debts: RECEIVABLE & PAYABLE (verified)
+- Partial repayments and collections (verified)
+- Additional lending and borrowing (verified)
+- Outstanding balance never negative (verified)
+- Automatic exact settlement -> SETTLED (verified)
+- Settle and archive flows (verified)
+- Idempotency with idempotencyKey (verified)
+- Excluded from monthly income/expense totals (verified)
+- UI routes & components: `/finance/debts`, `DebtCard`, `DebtForm`, `DebtPaymentModal` (verified)
+- Deterministic test suite: `src/lib/finance/debt.test.ts` (V2-T020..V2-T030)
+
 ## Current milestone
 
-V2-200 — Personal Debt (Friends & Family)
-- Counterparty debts (LENT / BORROWED)
-- Partial repayments and collections
-- Settle and archive flows
-- Excluded from monthly income/expense totals
-- UI routes & components (/finance/debts)
+V2-300 — Loans & EMI
+- Add existing running loan snapshot (Personal/Home/Vehicle/Education/Gold)
+- Product EMI & Credit Card EMI rules (`emiGeneratesExpense`, `principalAlreadyRecognized`)
+- Obligation linking & delegation from Obligation fulfillment to LoanService
+- Known principal outstanding reduction / unknown principal guidance
+- LoanPayment model & idempotency
+- UI routes & components (/finance/loans)
 
 ## Agent model
 

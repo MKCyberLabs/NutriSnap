@@ -18,18 +18,18 @@
 - [x] V2-1008 authorization negatives.
 
 ## V2-200 Personal Debt
-- [ ] V2-2001 schema/model.
-- [ ] V2-2002 create RECEIVABLE.
-- [ ] V2-2003 create PAYABLE.
-- [ ] V2-2004 additional lend/borrow.
-- [ ] V2-2005 partial collect.
-- [ ] V2-2006 partial repay.
-- [ ] V2-2007 settle.
-- [ ] V2-2008 overdue/due.
-- [ ] V2-2009 reminder.
-- [ ] V2-2010 account balance integration.
-- [ ] V2-2011 income/expense exclusion.
-- [ ] V2-2012 UI + responsive.
+- [x] V2-2001 schema/model.
+- [x] V2-2002 create RECEIVABLE.
+- [x] V2-2003 create PAYABLE.
+- [x] V2-2004 additional lend/borrow.
+- [x] V2-2005 partial collect.
+- [x] V2-2006 partial repay.
+- [x] V2-2007 settle.
+- [x] V2-2008 overdue/due.
+- [x] V2-2009 reminder.
+- [x] V2-2010 account balance integration.
+- [x] V2-2011 income/expense exclusion.
+- [x] V2-2012 UI + responsive.
 
 ## V2-300 Loans & EMI
 - [ ] V2-3001 Loan schema (including emiGeneratesExpense, principalAlreadyRecognized).
