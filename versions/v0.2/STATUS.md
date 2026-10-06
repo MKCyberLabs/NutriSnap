@@ -109,9 +109,18 @@ Architecture Gate B:
 - UI routes & components: `/finance` Overview Page (verified)
 - Deterministic test suite: `src/lib/finance/overview.test.ts` (V2-5001..V2-5007)
 
+### V2-600 — Reminders (Debt Due & Loan EMI Reminders in Unified Scheduler)
+- Status: **COMPLETED**
+- Implementation:
+  - Personal debt due reminder telegram notifications via `formatTelegramDebtReminder`
+  - Unlinked loan EMI reminder telegram notifications via `formatTelegramLoanEmiReminder`
+  - Single unified scheduler loop in `src/lib/scheduler.ts` (zero secondary scheduler engines)
+  - Durable delivery claims with retry backoff and deduplication across repeated ticks
+- Deterministic test suite: `src/lib/reminders/scheduler-tick.test.ts` (V2-6001..V2-6005, 55 tests in suite passing 100%)
+
 ## Current milestone
 
-V2-600 — Reminders (Debt Due & Loan EMI Reminders in Scheduler)
+V2-700 — Final Integration & Software Gate Verification
 
 ## Agent model
 

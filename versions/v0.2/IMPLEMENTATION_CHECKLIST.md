@@ -68,11 +68,11 @@
 - [x] V2-5007 Today near-term integration.
 
 ## V2-600 Reminders
-- [ ] V2-6001 debt due reminder.
-- [ ] V2-6002 EMI reminder.
-- [ ] V2-6003 no second scheduler.
-- [ ] V2-6004 durable delivery dedupe retained.
-- [ ] V2-6005 Telegram ownership/idempotency.
+- [x] V2-6001 debt due reminder.
+- [x] V2-6002 EMI reminder.
+- [x] V2-6003 no second scheduler.
+- [x] V2-6004 durable delivery dedupe retained.
+- [x] V2-6005 Telegram ownership/idempotency.
 
 ## V2-700 Final
 - [ ] V2-7001 full migration rehearsal.

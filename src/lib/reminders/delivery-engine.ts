@@ -293,3 +293,99 @@ export function formatTelegramBillReminder(params: {
     }
   };
 }
+
+/**
+ * Formats Telegram notification message for a personal debt reminder.
+ */
+export function formatTelegramDebtReminder(params: {
+  debtId: string;
+  direction: string;
+  counterpartyName: string;
+  amount: string;
+  dueDate: Date;
+  offsetMinutes: number;
+  appBaseUrl?: string;
+}) {
+  const { debtId, direction, counterpartyName, amount, dueDate, offsetMinutes, appBaseUrl = '' } = params;
+
+  let offsetLabel = 'due today';
+  if (offsetMinutes >= 10080) {
+    offsetLabel = 'due in 7 days';
+  } else if (offsetMinutes >= 4320) {
+    offsetLabel = 'due in 3 days';
+  } else if (offsetMinutes >= 1440) {
+    offsetLabel = 'due tomorrow';
+  }
+
+  const isReceivable = direction === 'RECEIVABLE';
+  const actionTitle = isReceivable ? 'Collect Money' : 'Repay Money';
+  const actionSummary = isReceivable
+    ? `Collect from **${counterpartyName}**`
+    : `Repay to **${counterpartyName}**`;
+
+  const text = `🤝 **${actionTitle} Reminder** (${offsetLabel})\n\n` +
+    `${actionSummary}\n` +
+    `Outstanding: **₹${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}**\n` +
+    `Due Date: ${dueDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}\n\n` +
+    `Track and record this in NutriSnap:`;
+
+  const inlineKeyboard = [
+    [
+      { text: '📱 View in App', url: `${appBaseUrl || 'https://nutrisnap.app'}/finance/debts` }
+    ]
+  ];
+
+  return {
+    text,
+    reply_markup: {
+      inline_keyboard: inlineKeyboard
+    }
+  };
+}
+
+/**
+ * Formats Telegram notification message for a loan EMI reminder.
+ */
+export function formatTelegramLoanEmiReminder(params: {
+  loanId: string;
+  name: string;
+  lender: string;
+  emiAmount?: string | null;
+  dueDate: Date;
+  offsetMinutes: number;
+  appBaseUrl?: string;
+}) {
+  const { loanId, name, lender, emiAmount, dueDate, offsetMinutes, appBaseUrl = '' } = params;
+
+  let offsetLabel = 'due today';
+  if (offsetMinutes >= 10080) {
+    offsetLabel = 'due in 7 days';
+  } else if (offsetMinutes >= 4320) {
+    offsetLabel = 'due in 3 days';
+  } else if (offsetMinutes >= 1440) {
+    offsetLabel = 'due tomorrow';
+  }
+
+  const formattedAmount = emiAmount
+    ? `₹${parseFloat(emiAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+    : null;
+
+  const text = `🏦 **Loan EMI Reminder** (${offsetLabel})\n\n` +
+    `**${name}** (${lender})\n` +
+    (formattedAmount ? `Monthly EMI: **${formattedAmount}**\n` : '') +
+    `Due Date: ${dueDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}\n\n` +
+    `Keep your instalments up to date:`;
+
+  const inlineKeyboard = [
+    [
+      { text: '📱 View Loan in App', url: `${appBaseUrl || 'https://nutrisnap.app'}/finance/loans` }
+    ]
+  ];
+
+  return {
+    text,
+    reply_markup: {
+      inline_keyboard: inlineKeyboard
+    }
+  };
+}
