@@ -32,12 +32,17 @@
 - V2-T040 add existing Personal Loan snapshot.
 - V2-T041 add Home Loan.
 - V2-T042 add Product EMI.
+- V2-T042b Credit Card EMI snapshot (`emiGeneratesExpense = true`): future EMI payment creates linked Expense, no historical purchase created.
+- V2-T042c Credit Card EMI from existing purchase (`emiGeneratesExpense = false`, `principalAlreadyRecognized = true`): LoanPayment records payment without creating duplicate Expense.
 - V2-T043 existing loan creation does not change cash balance.
 - V2-T044 existing loan creation does not create Income.
-- V2-T045 EMI paid creates one linked Expense when configured.
+- V2-T045 EMI paid creates one linked Expense when configured (`emiGeneratesExpense = true`).
+- V2-T045b Linked EMI Obligation mark-paid delegates to Loan service: creates exactly one LoanPayment, completes occurrence, and updates next EMI atomically.
 - V2-T046 duplicate same occurrence does not create second payment.
+- V2-T046b Repeated `markObligationPaid` on linked EMI is idempotent: returns existing payment, does not create duplicate transaction or duplicate principal reduction.
 - V2-T047 known principal component reduces outstanding.
 - V2-T048 unknown principal component does not guess reduction.
+- V2-T048b EMI payment without principal split leaves outstanding untouched; UI shows informational guidance.
 - V2-T049 explicit reconciliation updates outstanding.
 - V2-T050 next EMI recurrence deterministic.
 - V2-T051 cross-user loan rejected.
@@ -54,18 +59,23 @@
 - V2-T066 repeat purchase does not duplicate expense.
 - V2-T067 actualPrice persists.
 - V2-T068 cross-user wishlist rejected.
+- V2-T069 standalone transaction delete on wishlist-linked transaction rejected (409 Conflict).
+- V2-T070 standalone transaction edit on wishlist-linked transaction rejected (409 Conflict).
+- V2-T071 Wishlist "Unmark as Purchased" atomically deletes linked transaction, restores account balance, and resets status to READY.
 
 ## E. Update flows
 
 - V2-T080 account metadata update.
-- V2-T081 unsafe opening balance edit blocked according to final rule.
+- V2-T081a account openingBalance editable when zero posted transactions exist.
+- V2-T081b account openingBalance edit rejected (400 Bad Request) when >= 1 transaction exists.
 - V2-T082 standalone expense edit recalculates account.
 - V2-T083 income edit.
 - V2-T084 transfer edit moves balances atomically.
 - V2-T085 obligation future edit.
 - V2-T086 past occurrence remains immutable.
-- V2-T087 generic editor cannot corrupt debt-linked transaction.
-- V2-T088 generic editor cannot corrupt loan-linked transaction.
+- V2-T087 generic editor cannot corrupt or delete debt-linked transaction (rejected 409 Conflict).
+- V2-T088 generic editor cannot corrupt or delete loan-linked transaction (rejected 409 Conflict).
+- V2-T089 generic editor cannot corrupt or delete wishlist-linked transaction (rejected 409 Conflict).
 
 ## F. Migration
 

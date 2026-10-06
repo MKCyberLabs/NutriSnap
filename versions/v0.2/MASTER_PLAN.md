@@ -30,20 +30,21 @@ No Investments item in this module.
 ### M0 — Baseline / architecture review
 - Freeze v0.1 final schema and behavior.
 - Run migration rehearsal against representative v0.1 DB.
-- Gemini 3.1 Pro High architecture review.
-- Owner resolves any OPEN_QUESTIONS.
-- No coding before architecture PASS.
+- Architecture Gate A reviewed (Review A findings resolved and frozen).
+- All OPEN_QUESTIONS (V2-Q001 through V2-Q006) resolved.
+- Gemini 3.1 Pro High architecture review PASS required before coding.
 
 ### M1 — Safe update foundation
 Implement update/edit behavior before adding more money domains.
 
 Required:
 - account metadata edit;
-- standalone transaction edit;
+- account opening-balance safety rule (editable ONLY when account has zero posted transactions);
+- standalone transaction edit (unlinked only);
 - transfer edit atomically;
 - obligation edit;
 - archive instead of destructive delete where appropriate;
-- linked-record mutation restrictions;
+- linked-record mutation restrictions (block generic edit/delete on Wishlist, Loan, Debt, Obligation links);
 - validation and ownership tests.
 
 ### M2 — Friends & Family debt
@@ -87,7 +88,11 @@ Track:
 - reminders;
 - status.
 
-Do not invent principal/interest split when the user does not know it.
+Accounting & Delegation Rules:
+- Credit Card EMI policy frozen to prevent double-counting (`emiGeneratesExpense` flag; snapshot vs converted purchase);
+- Linked EMI Obligation mark-paid delegates atomically to `LoanService.recordEmiPayment()`;
+- Do not invent principal/interest split when the user does not know it;
+- Principal reduction occurs only when known principal component is entered.
 
 ### M4 — Wishlist / planned purchase budget
 Add product/item wishlist:
@@ -105,6 +110,8 @@ States:
 `WISHLIST | PLANNED | READY | PURCHASED | ARCHIVED`.
 
 Mark Purchased may optionally create a normal Expense with actual paid amount.
+Generic transaction editor/deleter blocks modifying or deleting wishlist-linked transactions.
+Purchase reversal ("Unmark as Purchased") atomically removes the transaction, restores balances, and resets status to READY.
 
 Wishlist does not reserve or remove money from account balances.
 

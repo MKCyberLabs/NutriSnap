@@ -3,18 +3,18 @@
 ## V2-000 Architecture
 - [ ] V2-0001 v0.1 final baseline identified.
 - [ ] V2-0002 schema proposal updated against final v0.1.
-- [ ] V2-0003 Gemini 3.1 Pro High architecture review PASS.
-- [ ] V2-0004 OPEN_QUESTIONS resolved.
+- [ ] V2-0003 Gemini 3.1 Pro High architecture review Gate A repaired and ready for re-review.
+- [x] V2-0004 OPEN_QUESTIONS resolved (V2-Q001 through V2-Q006 all resolved).
 - [ ] V2-0005 migration rehearsal plan approved.
 
 ## V2-100 Update foundation
 - [ ] V2-1001 edit account metadata.
-- [ ] V2-1002 opening-balance safety rule.
+- [ ] V2-1002 opening-balance safety rule (editable only when account has zero posted transactions).
 - [ ] V2-1003 edit standalone income/expense.
 - [ ] V2-1004 edit transfer atomically.
 - [ ] V2-1005 edit obligation.
 - [ ] V2-1006 archive flows.
-- [ ] V2-1007 linked-transaction restrictions.
+- [ ] V2-1007 linked-transaction restrictions (block generic edit/delete on Wishlist, Loan, Debt, Obligation links).
 - [ ] V2-1008 authorization negatives.
 
 ## V2-200 Personal Debt
@@ -32,30 +32,31 @@
 - [ ] V2-2012 UI + responsive.
 
 ## V2-300 Loans & EMI
-- [ ] V2-3001 Loan schema.
-- [ ] V2-3002 LoanPayment schema.
-- [ ] V2-3003 add existing running loan.
+- [ ] V2-3001 Loan schema (including emiGeneratesExpense, principalAlreadyRecognized).
+- [ ] V2-3002 LoanPayment schema (transactionId and obligationOccurrenceId unique scalar FKs).
+- [ ] V2-3003 add existing running loan snapshot.
 - [ ] V2-3004 Personal/Home/Vehicle/Education/Gold.
 - [ ] V2-3005 Product EMI.
-- [ ] V2-3006 Credit Card EMI rule.
-- [ ] V2-3007 create/link EMI obligation.
-- [ ] V2-3008 record EMI payment exactly once.
+- [ ] V2-3006 Credit Card EMI rule (snapshot vs purchase conversion).
+- [ ] V2-3007 create/link EMI obligation & delegation from Obligation fulfillment to LoanService.
+- [ ] V2-3008 record EMI payment exactly once (occurrence-idempotent).
 - [ ] V2-3009 known-principal outstanding update.
-- [ ] V2-3010 unknown-principal no guessing.
+- [ ] V2-3010 unknown-principal no guessing (UI guidance provided).
 - [ ] V2-3011 reconcile outstanding.
 - [ ] V2-3012 close/archive.
 - [ ] V2-3013 UI + responsive.
 
 ## V2-400 Wishlist
-- [ ] V2-4001 schema.
+- [ ] V2-4001 schema (transactionId unique scalar FK on WishlistItem).
 - [ ] V2-4002 create/edit.
 - [ ] V2-4003 priority/status.
 - [ ] V2-4004 target price/max budget.
 - [ ] V2-4005 planned account.
 - [ ] V2-4006 Mark Purchased.
-- [ ] V2-4007 optional exactly-once Expense.
-- [ ] V2-4008 archive.
-- [ ] V2-4009 UI + responsive.
+- [ ] V2-4007 optional exactly-once Expense & generic edit/delete protection.
+- [ ] V2-4008 Wishlist purchase reversal ("Unmark as Purchased" atomic flow).
+- [ ] V2-4009 archive.
+- [ ] V2-4010 UI + responsive.
 
 ## V2-500 Dashboard
 - [ ] V2-5001 Money overview read model.

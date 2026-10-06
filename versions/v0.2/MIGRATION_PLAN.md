@@ -7,14 +7,16 @@ v0.2 migration is additive-first and must preserve all v0.1 data.
 ## Phase 1 — Add schema
 
 Add:
-- PersonalDebt;
-- Loan;
-- LoanPayment;
-- WishlistItem;
-- new nullable relations;
-- new indexes.
+- `PersonalDebt`;
+- `Loan` (with `emiGeneratesExpense Boolean @default(true)`, `principalAlreadyRecognized Boolean @default(false)`, and `obligationId String? @unique`);
+- `LoanPayment` (with `transactionId String? @unique` and `obligationOccurrenceId String? @unique`);
+- `WishlistItem` (with `transactionId String? @unique`);
+- `FinancialTransaction.personalDebtId String?` (many-to-one foreign key to `PersonalDebt`);
+- Prisma relation references on `FinancialTransaction` (`loanPayment LoanPayment?`, `wishlistItem WishlistItem?`) without duplicate scalar columns;
+- new nullable relations and indexes.
 
-Extend accepted FinancialTransaction type vocabulary in code.
+Extend accepted `FinancialTransaction.type` vocabulary in code:
+`INCOME | EXPENSE | TRANSFER | LEND | BORROW | DEBT_COLLECT | DEBT_REPAY`.
 
 Do not rewrite existing transaction type values.
 

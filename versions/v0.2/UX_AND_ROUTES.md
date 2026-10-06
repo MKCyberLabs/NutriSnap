@@ -86,15 +86,16 @@ Primary:
 `Add Loan / EMI`
 
 Wizard:
-1. Loan type
+1. Loan type (including Credit Card EMI)
 2. Name/lender
 3. Current outstanding
 4. EMI
 5. Next EMI date
 6. Payment account
-7. Interest/tenure optional
-8. Product/merchant if PRODUCT_EMI
-9. Reminder offsets
+7. If Credit Card EMI: toggle "Purchase was already logged as Expense" (controls `emiGeneratesExpense`)
+8. Interest/tenure optional
+9. Product/merchant if PRODUCT_EMI
+10. Reminder offsets
 
 Card:
 - name;
@@ -105,8 +106,8 @@ Card:
 - progress only if meaningful inputs exist.
 
 Actions:
-- Record EMI Paid
-- Update Outstanding
+- Record EMI Paid (dialog includes optional principal/interest/fees inputs, with explanatory helper text explaining that loan balance does not decrease without principal split)
+- Update Outstanding (reconciliation)
 - Edit
 - Close
 
@@ -139,6 +140,7 @@ Actions:
 - Edit
 - Mark Ready
 - Mark Purchased
+- Unmark as Purchased / Revert Purchase (available on PURCHASED items; atomically reverses transaction and restores READY state)
 - Archive
 
 Mark Purchased modal:
@@ -154,6 +156,10 @@ Every editable entity gets a consistent overflow menu:
 - Edit
 - Archive/Close
 - destructive option only when safe.
+
+Locking & Guardrails:
+- Account opening balance: locked/read-only with explanatory tooltip once account has posted transactions.
+- Generic transaction editor: transactions linked to Wishlist, Loan Payment, Debt, or Obligation display a "Linked domain item" badge; delete and edit buttons are blocked, routing user to the owning domain action.
 
 No browser `prompt()` or `confirm()`.
 Use proper dialogs/sheets.

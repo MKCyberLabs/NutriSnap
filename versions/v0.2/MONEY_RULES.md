@@ -63,8 +63,14 @@ Adding an already-running Home Loan with ₹12,00,000 outstanding:
 
 EMI payment:
 - cash/account decreases;
-- personal cashflow may record EMI as Expense category `EMI`;
-- loan outstanding decreases only by known principal component or explicit reconciliation.
+- when `loan.emiGeneratesExpense == true`, records EMI as Expense category `EMI`;
+- loan outstanding decreases only by known principal component (`principalPaid > 0`) or explicit reconciliation. Never infer principal reduction from EMI amount alone (V2-Q003);
+- UI must explain that outstanding principal does not reduce automatically without the principal component.
+
+Linked EMI Obligation fulfillment:
+- Marking a linked EMI Obligation as paid delegates to `LoanService.recordEmiPayment()`;
+- Creates exactly one `LoanPayment`, updates next EMI date, and updates `outstandingPrincipal` only if `principalPaid` is provided;
+- Atomic and occurrence-idempotent: repeated calls on the same occurrence return the existing payment without creating duplicate expenses or deducting principal again.
 
 ## 6. Product EMI
 
@@ -83,16 +89,21 @@ Do not add full product price as current Expense when tracking an already-runnin
 
 Each actual EMI paid may become an Expense.
 
-## 7. Credit card
+## 7. Credit card & Credit Card EMI (V2-Q001)
 
 Current v0.1 account type CREDIT_CARD remains.
 
-A Credit Card EMI Loan may reference a credit card account but must not double-count:
-- purchase expense;
-- card payment;
-- EMI expense.
+To prevent double-counting between purchase expense, card bill payments, and EMI payments:
 
-Architecture Gate A must document chosen card-EMI rule before coding.
+1. **Snapshot Running Credit Card EMI** (`emiGeneratesExpense = true`, `principalAlreadyRecognized = false`):
+   - For an already-running Credit Card EMI entered as an as-of snapshot:
+   - Do NOT reconstruct or create the original historical purchase Expense;
+   - Track future EMI payments only. Each EMI payment creates a linked `EXPENSE` transaction (category `EMI`).
+2. **Converted Purchase to Credit Card EMI** (`emiGeneratesExpense = false`, `principalAlreadyRecognized = true`):
+   - When a purchase was already recorded as an `EXPENSE` on the Credit Card account in NutriSnap and subsequently converted to EMI:
+   - `Loan.emiGeneratesExpense` is set to `false`;
+   - Subsequent `LoanPayment` records do NOT create duplicate `EXPENSE` transactions;
+   - The liability is tracked on the Loan, and cash outflow is recognized when the card bill is paid via standard `TRANSFER` from Bank to Credit Card.
 
 ## 8. Wishlist
 
@@ -102,10 +113,15 @@ Adding a ₹80,000 laptop wishlist:
 - does not create loan.
 
 Mark Purchased for ₹75,000:
-- optionally create one Expense;
+- optionally create and link one Expense transaction;
 - set actualPrice;
 - status PURCHASED;
-- repeated action does not create duplicate expense.
+- repeated action is idempotent.
+
+Wishlist-linked transaction safety:
+- Transactions linked to Wishlist items are domain-owned;
+- Generic transaction editor and deleter MUST reject edits and deletions (`409 Conflict`);
+- Deletion or reversal is permitted only via Wishlist "Unmark as Purchased" / "Revert Purchase", which atomically removes the transaction, restores account balances, and resets the item to `READY`.
 
 ## 9. Edit rules
 
@@ -116,14 +132,21 @@ Editable anytime:
 - credit limit;
 - active/archive status.
 
-Opening balance:
-- editable only before posted activity OR through an explicit correction workflow approved at architecture gate.
+Opening balance (V2-Q002):
+- editable ONLY while account has zero posted transactions (`count(FinancialTransaction) == 0`);
+- once any transaction has posted, opening balance edits are rejected (`400 Bad Request`);
+- balance corrections must be performed via future explicit balance adjustment / reconciliation workflow.
 
 ### Standalone transaction
-Editable with ownership and validation.
+Editable/deletable with ownership and validation ONLY if unlinked.
 
 ### Domain-linked transaction
-Must be edited through its domain service.
+Transactions linked to:
+- `loanPayment`;
+- `wishlistItem`;
+- `personalDebt`;
+- `obligationOccurrence`
+cannot be edited or deleted via generic transaction endpoints (`409 Conflict`). They must be modified or reverted through their respective domain flows.
 
 ### Obligation
 Future schedule fields editable.
@@ -139,7 +162,7 @@ Historical payments are not silently rewritten.
 
 ### Wishlist
 All planning metadata editable before Purchase.
-Purchased transaction changes go through purchase edit flow.
+Purchased items must use Wishlist purchase correction flow.
 
 ## 10. No investments
 

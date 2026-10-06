@@ -19,7 +19,7 @@ Review specifically:
 3. Is PersonalDebt separated correctly from formal Loan?
 4. Is LoanPayment idempotent and safe with existing Obligation occurrences?
 5. Does loan outstanding avoid guessing principal/interest?
-6. Does Product EMI avoid double-counting?
+6. Do Product EMI and Credit Card EMI avoid double-counting?
 7. Is Wishlist correctly non-ledger until purchase?
 8. Are transaction edit rules safe for domain-linked rows?
 9. Is v0.1 -> v0.2 migration additive and reversible?
