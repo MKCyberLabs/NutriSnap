@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <rect width="1440" height="900" fill="#F7FAF8"/>
+  <rect x="0" y="0" width="232" height="900" fill="#FFFFFF" stroke="#E5ECE8"/>
+  <circle cx="36" cy="38" r="18" fill="#16A34A"/>
+  <text x="66" y="45" font-family="Inter,Arial" font-size="24" font-weight="700" fill="#111827">NutriSnap</text>
+  <g font-family="Inter,Arial" font-size="14" fill="#344054">
+    <rect x="16" y="92" width="200" height="40" rx="10" fill="#EAF8EF"/>
+    <text x="52" y="117" fill="#0F7A38" font-weight="600">Today</text>
+    <text x="52" y="165">Food</text>
+    <text x="52" y="205">Water</text>
+    <text x="52" y="245">Money</text>
+    <text x="68" y="281" font-size="12">Overview</text>
+    <text x="68" y="313" font-size="12">Accounts</text>
+    <text x="68" y="345" font-size="12">Transactions</text>
+    <text x="68" y="377" font-size="12">Bills &amp; Subscriptions</text>
+    <text x="52" y="421">Reminders</text>
+    <text x="52" y="461">Settings</text>
+    <text x="52" y="821">Admin</text>
+    <text x="52" y="861">MK CyberLabs Admin</text>
+  </g>
+  <g font-family="Inter,Arial">
+    <text x="272" y="62" font-size="30" font-weight="700" fill="#111827">Today</text>
+    <text x="272" y="87" font-size="13" fill="#667085">Tuesday, 6 October 2026</text>
+    <rect x="1218" y="34" width="154" height="42" rx="10" fill="#16A34A"/>
+    <text x="1251" y="60" font-size="14" font-weight="600" fill="#FFFFFF">+ Quick Add</text>
+
+    <g>
+      <rect x="272" y="120" width="260" height="120" rx="14" fill="#EAF3FF"/>
+      <text x="292" y="150" font-size="12" fill="#667085">Total Balance</text>
+      <text x="292" y="190" font-size="28" font-weight="700" fill="#111827">₹0.00</text>
+    </g>
+    <g>
+      <rect x="548" y="120" width="260" height="120" rx="14" fill="#EAF8EF"/>
+      <text x="568" y="150" font-size="12" fill="#667085">Monthly Income</text>
+      <text x="568" y="190" font-size="28" font-weight="700" fill="#0F7A38">₹0.00</text>
+    </g>
+    <g>
+      <rect x="824" y="120" width="260" height="120" rx="14" fill="#FDECEC"/>
+      <text x="844" y="150" font-size="12" fill="#667085">Monthly Expenses</text>
+      <text x="844" y="190" font-size="28" font-weight="700" fill="#B42318">₹0.00</text>
+    </g>
+    <g>
+      <rect x="1100" y="120" width="272" height="120" rx="14" fill="#FFF4DF"/>
+      <text x="1120" y="150" font-size="12" fill="#667085">Upcoming Bill</text>
+      <text x="1120" y="188" font-size="18" font-weight="700" fill="#111827">None due</text>
+    </g>
+
+    <rect x="272" y="264" width="320" height="360" rx="14" fill="#FFF" stroke="#E5ECE8"/>
+    <text x="292" y="298" font-size="16" font-weight="700" fill="#111827">Today's Focus</text>
+    <text x="292" y="344" font-size="14" fill="#344054">Log your meals</text>
+    <text x="292" y="392" font-size="14" fill="#344054">Drink water</text>
+    <text x="292" y="440" font-size="14" fill="#344054">Review expenses</text>
+    <text x="292" y="488" font-size="14" fill="#344054">Upcoming bill</text>
+    <text x="292" y="536" font-size="14" fill="#344054">Next reminder</text>
+
+    <rect x="608" y="264" width="456" height="360" rx="14" fill="#FFF" stroke="#E5ECE8"/>
+    <text x="628" y="298" font-size="16" font-weight="700" fill="#111827">Recent Transactions</text>
+    <text x="628" y="350" font-size="13" fill="#98A2B3">Real recent transactions appear here</text>
+
+    <rect x="1080" y="264" width="292" height="220" rx="14" fill="#FFF" stroke="#E5ECE8"/>
+    <text x="1100" y="298" font-size="16" font-weight="700" fill="#111827">Health &amp; Wellness</text>
+    <text x="1100" y="345" font-size="13" fill="#344054">Food calories / goal</text>
+    <rect x="1100" y="360" width="236" height="8" rx="4" fill="#EAF8EF"/>
+    <rect x="1100" y="360" width="80" height="8" rx="4" fill="#16A34A"/>
+    <text x="1100" y="415" font-size="13" fill="#344054">Water ml / goal</text>
+    <rect x="1100" y="430" width="236" height="8" rx="4" fill="#EAF3FF"/>
+    <rect x="1100" y="430" width="60" height="8" rx="4" fill="#2F80ED"/>
+
+    <rect x="1080" y="500" width="292" height="124" rx="14" fill="#EAF8EF"/>
+    <text x="1100" y="535" font-size="14" font-weight="700" fill="#0F7A38">Small steps, big results.</text>
+    <text x="1100" y="562" font-size="12" fill="#344054">Health + Wealth in one calm view.</text>
+
+    <rect x="272" y="648" width="1100" height="196" rx="14" fill="#FFF" stroke="#E5ECE8"/>
+    <text x="292" y="682" font-size="16" font-weight="700" fill="#111827">Module continuation</text>
+    <text x="292" y="712" font-size="13" fill="#667085">Responsive page content continues below the fold.</text>
+  </g>
+</svg>
