@@ -3,33 +3,50 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Navbar } from '@/components/layout/Navbar';
+import { AppShell } from '@/components/app-shell/AppShell';
+import { PageHeader } from '@/components/app-shell/PageHeader';
+import { SegmentedFilter } from '@/components/design-system/SegmentedFilter';
+import { StatusPill } from '@/components/design-system/StatusPill';
+import { MoneyAmount } from '@/components/design-system/MoneyAmount';
+import { LoadingCard } from '@/components/design-system/LoadingCard';
+import { EmptyState } from '@/components/design-system/EmptyState';
+import { ErrorState } from '@/components/design-system/ErrorState';
+import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { getAuthSession } from '@/lib/auth-mock';
 import { getReminders, saveReminder } from '@/app/settings/actions';
 import { getObligations, markObligationPaid } from '@/app/finance/actions';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
 import {
   Bell,
   Utensils,
   Clock,
-  Calendar as CalendarIcon,
+  Calendar,
   CheckCircle2,
   Plus,
   Loader2,
-  Repeat,
-  Wallet,
-  ShieldCheck,
+  ReceiptText,
+  Smartphone,
+  CreditCard,
+  Building,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 export default function RemindersPage() {
   const router = useRouter();
@@ -37,8 +54,10 @@ export default function RemindersPage() {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [healthReminders, setHealthReminders] = useState<any[]>([]);
   const [obligations, setObligations] = useState<any[]>([]);
+  const [filter, setFilter] = useState<string>('ALL');
 
   // Dialog state for adding a health reminder
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
@@ -46,6 +65,8 @@ export default function RemindersPage() {
   const [newTime, setNewTime] = useState('08:00');
 
   const loadData = useCallback(async (userId: string) => {
+    setLoading(true);
+    setError(null);
     try {
       const [rems, obs] = await Promise.all([
         getReminders(userId),
@@ -54,15 +75,11 @@ export default function RemindersPage() {
       setHealthReminders(rems);
       setObligations(obs);
     } catch (err: any) {
-      toast({
-        title: 'Error loading reminders',
-        description: err?.message || 'Could not fetch reminder data',
-        variant: 'destructive',
-      });
+      setError(err?.message || 'Could not fetch reminder data.');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     const session = getAuthSession();
@@ -150,48 +167,62 @@ export default function RemindersPage() {
     }
   };
 
+  const getKindIcon = (kind: string) => {
+    switch (kind) {
+      case 'RECHARGE':
+        return <Smartphone className="h-4 w-4" />;
+      case 'CREDIT_CARD':
+        return <CreditCard className="h-4 w-4" />;
+      case 'RENT':
+        return <Building className="h-4 w-4" />;
+      default:
+        return <ReceiptText className="h-4 w-4" />;
+    }
+  };
+
+  const activeObligations = obligations.filter((o) => o.isActive && !o.isArchived);
+
+  const filterOptions = [
+    { label: 'All', value: 'ALL', count: healthReminders.length + activeObligations.length },
+    { label: 'Health', value: 'HEALTH', count: healthReminders.length },
+    { label: 'Bills', value: 'BILLS', count: activeObligations.length },
+  ];
+
+  const showHealth = filter === 'ALL' || filter === 'HEALTH';
+  const showBills = filter === 'ALL' || filter === 'BILLS';
+
   return (
-    <div className="min-h-screen bg-gray-50/60 pb-24 md:pb-12">
-      <Navbar />
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
-                Shared Notification Hub
-              </span>
-              <Badge variant="outline" className="text-[10px] text-gray-500 py-0">
-                Timezone Aware
-              </Badge>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mt-1">
-              Reminders & Schedules
-            </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              One unified recurrence engine for your health routines and wealth obligations
-            </p>
-          </div>
-
+    <AppShell>
+      <PageHeader
+        title="Reminders"
+        description="Unified schedule for daily health habits and recurring financial obligations"
+        action={
           <Dialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="rounded-2xl gap-2 font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200">
-                <Plus className="h-4 w-4" /> Add Health Reminder
+              <Button
+                size="sm"
+                className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Health Reminder</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[400px] rounded-2xl p-6">
-              <DialogHeader>
-                <DialogTitle className="text-lg font-bold">Add Health Reminder</DialogTitle>
+            <DialogContent className="sm:max-w-[400px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
+              <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
+                <DialogTitle className="text-base font-semibold text-[#111827]">
+                  Add Daily Health Reminder
+                </DialogTitle>
               </DialogHeader>
-              <div className="space-y-3 pt-2">
-                <div>
-                  <Label className="text-xs font-semibold">Reminder Category</Label>
+              <div className="space-y-4 pt-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-[#344054]">
+                    Reminder Category
+                  </Label>
                   <Select value={newCategory} onValueChange={setNewCategory}>
-                    <SelectTrigger className="rounded-xl mt-1">
+                    <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
                       <SelectItem value="Breakfast">Breakfast</SelectItem>
                       <SelectItem value="Lunch">Lunch</SelectItem>
                       <SelectItem value="Dinner">Dinner</SelectItem>
@@ -201,126 +232,213 @@ export default function RemindersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label className="text-xs font-semibold">Time of Day</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rem-time" className="text-xs font-semibold text-[#344054]">
+                    Time of Day
+                  </Label>
                   <Input
+                    id="rem-time"
                     type="time"
                     value={newTime}
                     onChange={(e) => setNewTime(e.target.value)}
-                    className="rounded-xl mt-1 text-lg font-bold"
+                    className="h-11 rounded-[10px] border-[#E5ECE8] text-base font-semibold"
                   />
                 </div>
                 <Button
                   disabled={submitting || !newTime}
                   onClick={handleAddHealthReminder}
-                  className="w-full rounded-xl mt-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
                 >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Daily Reminder'}
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Reminder'
+                  )}
                 </Button>
               </div>
             </DialogContent>
           </Dialog>
+        }
+      />
+
+      {error ? (
+        <ErrorState
+          title="Could not load reminders"
+          message={error}
+          onRetry={() => {
+            const session = getAuthSession();
+            if (session) loadData(session.id);
+          }}
+          className="my-8"
+        />
+      ) : loading ? (
+        <div className="space-y-4">
+          <LoadingCard height="60px" lines={1} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <LoadingCard key={i} height="120px" lines={3} />
+            ))}
+          </div>
         </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Filter Chips */}
+          <SegmentedFilter
+            options={filterOptions}
+            selected={filter}
+            onChange={setFilter}
+            size="md"
+          />
 
-        {/* Tabs for Health vs Wealth Reminders */}
-        <Tabs defaultValue="health" className="space-y-4">
-          <TabsList className="bg-gray-100 p-1 rounded-2xl">
-            <TabsTrigger value="health" className="rounded-xl text-xs font-semibold data-[state=active]:bg-white">
-              Health Reminders ({healthReminders.length})
-            </TabsTrigger>
-            <TabsTrigger value="wealth" className="rounded-xl text-xs font-semibold data-[state=active]:bg-white">
-              Wealth Obligations & Bills ({obligations.length})
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Health Reminders Tab */}
-          <TabsContent value="health" className="space-y-4">
-            {healthReminders.length === 0 ? (
-              <Card className="rounded-3xl border-dashed border-2 p-8 text-center bg-transparent">
-                <Utensils className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-700">No health reminders configured.</p>
-                <p className="text-xs text-gray-400 mt-1">Add daily reminders for meals, snacks, or hydration.</p>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {healthReminders.map((rem) => (
-                  <Card key={rem.id} className="rounded-3xl border border-gray-100 shadow-sm p-5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
-                        <Utensils className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900 text-sm">{rem.category || rem.title}</p>
-                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                          <Clock className="h-3 w-3" /> Daily at {rem.time || rem.timeOfDay}
-                        </p>
-                      </div>
-                    </div>
-
-                    <Switch
-                      checked={rem.isActive}
-                      onCheckedChange={(checked) => handleToggleReminder(rem, checked)}
-                      aria-label={`Toggle ${rem.category || rem.title} reminder`}
-                    />
-                  </Card>
-                ))}
+          {/* Health Reminders Section */}
+          {showHealth && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-[#111827]">
+                  Health &amp; Nutrition Reminders
+                </h2>
+                <span className="text-xs text-[#667085]">
+                  {healthReminders.length} scheduled
+                </span>
               </div>
-            )}
-          </TabsContent>
 
-          {/* Wealth Obligations Tab */}
-          <TabsContent value="wealth" className="space-y-4">
-            {obligations.length === 0 ? (
-              <Card className="rounded-3xl border-dashed border-2 p-8 text-center bg-transparent">
-                <Wallet className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-700">No scheduled bills or obligations.</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Schedule recharges, subscriptions, or credit card bills to receive automated reminders.
-                </p>
-                <Button asChild size="sm" className="rounded-xl mt-3 bg-emerald-600 text-white">
-                  <Link href="/finance">Go to Money Hub</Link>
-                </Button>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {obligations.map((ob) => (
-                  <Card key={ob.id} className="rounded-3xl border border-gray-100 shadow-sm p-5 flex flex-col justify-between space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline" className="text-xs font-semibold">
-                          {ob.kind}
-                        </Badge>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {ob.recurrenceType === 'EVERY_N_DAYS' ? `Every ${ob.recurrenceInterval} days` : ob.recurrenceType}
-                        </Badge>
-                      </div>
-                      <p className="font-bold text-gray-900 text-base">{ob.title}</p>
-                      {ob.amount && (
-                        <p className="text-xl font-black text-gray-900">
-                          ₹{parseFloat(ob.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                        <CalendarIcon className="h-3.5 w-3.5 text-amber-500" />
-                        Next Due: {format(new Date(ob.nextDueAt), 'EEEE, dd MMM yyyy')}
-                      </p>
-                    </div>
-
-                    <Button
-                      size="sm"
-                      disabled={submitting}
-                      onClick={() => handleMarkPaid(ob.id, ob.nextDueAt)}
-                      className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs"
+              {healthReminders.length === 0 ? (
+                <EmptyState
+                  icon={<Utensils className="h-5 w-5" />}
+                  title="No health reminders configured"
+                  description="Set daily reminders for meals, snacks, or hydration checks."
+                  className="py-8 bg-white"
+                />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {healthReminders.map((rem) => (
+                    <div
+                      key={rem.id}
+                      className="rounded-[14px] border border-[#E5ECE8] bg-white p-4 shadow-[0_1px_3px_rgba(16,24,40,0.04)] flex items-center justify-between gap-3 hover:border-[#16A34A]/40 transition-colors"
                     >
-                      Mark Paid
-                    </Button>
-                  </Card>
-                ))}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-10 w-10 rounded-xl bg-[#EAF8EF] text-[#16A34A] flex items-center justify-center shrink-0">
+                          <Utensils className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-[#111827] truncate">
+                            {rem.category || rem.title}
+                          </div>
+                          <div className="text-xs text-[#667085] flex items-center gap-1 mt-0.5">
+                            <Clock className="h-3 w-3" />
+                            <span>Daily at {rem.time || rem.timeOfDay}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Switch
+                        checked={rem.isActive}
+                        onCheckedChange={(checked) => handleToggleReminder(rem, checked)}
+                        aria-label={`Toggle ${rem.category || rem.title} reminder`}
+                        className="data-[state=checked]:bg-[#16A34A]"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bills & Wealth Reminders Section */}
+          {showBills && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-[#111827]">
+                  Wealth &amp; Bill Obligations
+                </h2>
+                <Link
+                  href="/finance/bills"
+                  className="text-xs font-semibold text-[#16A34A] hover:text-[#0F7A38]"
+                >
+                  Manage bills →
+                </Link>
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
+
+              {activeObligations.length === 0 ? (
+                <EmptyState
+                  icon={<ReceiptText className="h-5 w-5" />}
+                  title="No bills scheduled"
+                  description="Schedule mobile recharges, utility bills, or credit card dues to get notified."
+                  className="py-8 bg-white"
+                />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {activeObligations.map((ob) => {
+                    let d: Date;
+                    try {
+                      d = typeof ob.nextDueAt === 'string' ? parseISO(ob.nextDueAt) : ob.nextDueAt;
+                    } catch {
+                      d = new Date();
+                    }
+                    const isPast = d.getTime() < Date.now();
+                    const relativeText = formatDistanceToNow(d, { addSuffix: true });
+
+                    return (
+                      <div
+                        key={ob.id}
+                        className="rounded-[14px] border border-[#E5ECE8] bg-white p-4 shadow-[0_1px_3px_rgba(16,24,40,0.04)] flex flex-col justify-between gap-3 hover:border-[#F59E0B]/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-10 w-10 rounded-xl bg-[#FFF4DF] text-[#F59E0B] flex items-center justify-center shrink-0">
+                              {getKindIcon(ob.kind)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-[#111827] truncate">
+                                {ob.title}
+                              </div>
+                              <div className="text-xs text-[#667085] flex items-center gap-1 mt-0.5">
+                                <Calendar className="h-3 w-3" />
+                                <span>Due {format(d, 'dd MMM yyyy')}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <StatusPill
+                            label={isPast ? 'Overdue' : relativeText}
+                            tone={isPast ? 'red' : 'amber'}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-[#E5ECE8]/60">
+                          <div>
+                            <MoneyAmount
+                              amount={ob.amount}
+                              type="NEUTRAL"
+                              size="sm"
+                            />
+                            <div className="text-[10px] text-[#667085]">
+                              {ob.recurrenceType === 'EVERY_N_DAYS'
+                                ? `Every ${ob.recurrenceInterval}d`
+                                : ob.recurrenceType}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={submitting}
+                            onClick={() => handleMarkPaid(ob.id, ob.nextDueAt)}
+                            className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Paid</span>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </AppShell>
   );
 }

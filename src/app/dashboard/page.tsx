@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
+import { AppShell } from "@/components/app-shell/AppShell";
 import { getAuthSession } from "@/lib/auth-mock";
 import {
   User,
@@ -340,10 +340,6 @@ export default function DashboardPage() {
     const session = getAuthSession();
     if (!session) {
       router.push("/");
-      return;
-    }
-    if (session.role === "ADMIN") {
-      router.push("/admin");
       return;
     }
     if (!session.onboarded) {
@@ -875,14 +871,13 @@ export default function DashboardPage() {
   if (!isMounted) return null;
 
   return (
-    <div className="min-h-svh bg-gradient-to-br from-rose-50 via-slate-100 to-emerald-50 dark:from-slate-950 dark:via-rose-950/20 dark:to-emerald-950/20 font-sans">
-      <Navbar />
-      <main className="container mx-auto px-4 py-8 max-w-7xl relative z-10">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-          <div className="space-y-4">
+    <AppShell>
+      <div className="space-y-6">
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-6">
+          <div className="space-y-3">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight text-foreground">
-                Wellness Hub
+              <h1 className="text-2xl sm:text-[30px] font-bold tracking-tight text-[#111827]">
+                Food
               </h1>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
                 <Tabs
@@ -1623,7 +1618,7 @@ export default function DashboardPage() {
             </aside>
           </motion.div>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

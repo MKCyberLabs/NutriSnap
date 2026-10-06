@@ -55,7 +55,7 @@ export default function OnboardingPage() {
         title: "Setup Complete!",
         description: "Your health profile has been personalized.",
       });
-      router.push('/dashboard');
+      router.push('/today');
     }
   };
 

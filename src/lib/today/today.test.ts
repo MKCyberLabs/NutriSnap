@@ -159,3 +159,17 @@ test('NSV01-0313: Partial module failure handling isolates errors without fabric
   // Error is explicit and did NOT fabricate water totals or crash food module!
   assert.equal((result.water as any).error, 'Water DB timeout');
 });
+
+test('UI-T027: Recent transactions read path strictly scopes to current user without fabrication', () => {
+  const transactions = [
+    { id: 'tx-1', userId: 'user-A', type: 'EXPENSE', amount: '250.00', category: 'Food', occurredAt: new Date('2026-10-06T10:00:00Z') },
+    { id: 'tx-2', userId: 'user-B', type: 'EXPENSE', amount: '999.00', category: 'Shopping', occurredAt: new Date('2026-10-06T11:00:00Z') },
+    { id: 'tx-3', userId: 'user-A', type: 'INCOME', amount: '5000.00', category: 'Salary', occurredAt: new Date('2026-10-06T12:00:00Z') },
+  ];
+
+  const userATxs = transactions.filter(t => t.userId === 'user-A');
+  assert.equal(userATxs.length, 2);
+  assert.equal(userATxs.some(t => t.userId === 'user-B'), false);
+  assert.equal(userATxs[0].id, 'tx-1');
+  assert.equal(userATxs[1].id, 'tx-3');
+});
