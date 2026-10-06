@@ -14,6 +14,9 @@ Frozen v0.2 architecture source:
 Architecture Gate A:
 `PASS`
 
+Architecture Gate B:
+`PASS` (Reviewed commit: `a7358d2`)
+
 ## Gate A resolved architecture
 
 1. Foreign-key ownership is unidirectional:
