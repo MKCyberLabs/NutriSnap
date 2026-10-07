@@ -209,6 +209,57 @@ export function calculateAccountBalance(
 }
 
 /**
+ * Computes credit card usage (amount used / outstanding) and available credit
+ * from opening balance and ledger transactions.
+ * - Card expenses increase used
+ * - Payments (transfers into card) decrease used
+ * - Income / refunds to card decrease used
+ * - Transfers out of card increase used
+ * Available Credit = Credit Limit - Amount Used
+ */
+export function calculateCreditCardUsage(
+  openingBalance: Prisma.Decimal | number | string = 0,
+  transactions: Array<{
+    type: string;
+    amount: Prisma.Decimal | number | string;
+    accountId: string;
+    transferAccountId?: string | null;
+  }>,
+  creditCardAccountId: string,
+  creditLimit?: Prisma.Decimal | number | string | null
+): {
+  amountUsed: Prisma.Decimal;
+  availableCredit: Prisma.Decimal | null;
+} {
+  let used = new Prisma.Decimal(openingBalance);
+
+  for (const tx of transactions) {
+    const amount = new Prisma.Decimal(tx.amount);
+    if (tx.accountId === creditCardAccountId) {
+      if (tx.type === 'EXPENSE') {
+        used = used.plus(amount);
+      } else if (tx.type === 'INCOME') {
+        used = used.minus(amount);
+      } else if (tx.type === 'TRANSFER') {
+        used = used.plus(amount);
+      }
+    } else if (tx.transferAccountId === creditCardAccountId) {
+      if (tx.type === 'TRANSFER') {
+        used = used.minus(amount);
+      }
+    }
+  }
+
+  let availableCredit: Prisma.Decimal | null = null;
+  if (creditLimit !== undefined && creditLimit !== null) {
+    const limit = new Prisma.Decimal(creditLimit);
+    availableCredit = limit.minus(used);
+  }
+
+  return { amountUsed: used, availableCredit };
+}
+
+/**
  * Computes monthly income and expense totals from transactions.
  * Non-negotiable invariant: TRANSFER and personal debt transactions (LEND, BORROW,
  * DEBT_COLLECT, DEBT_REPAY) move value between accounts/persons and must NEVER

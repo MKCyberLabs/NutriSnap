@@ -16,6 +16,7 @@ import {
   getAccounts,
   getTransactions,
   recordTransaction,
+  updateTransaction,
   deleteTransaction,
 } from '@/app/finance/actions';
 import { ArrowLeftRight } from 'lucide-react';
@@ -61,13 +62,33 @@ export default function TransactionsPage() {
     loadData(session.id);
   }, [router, loadData]);
 
+  const handleEdit = async (txId: string, data: any) => {
+    const session = getAuthSession();
+    if (!session) return;
+    try {
+      const res = await updateTransaction(session.id, txId, data);
+      if (res && (res as any).error) {
+        throw new Error((res as any).error);
+      }
+      await loadData(session.id);
+      return res;
+    } catch (err: any) {
+      toast({
+        title: 'Error updating transaction',
+        description: err?.message,
+        variant: 'destructive',
+      });
+      throw err;
+    }
+  };
+
   const handleDelete = async (txId: string) => {
     const session = getAuthSession();
     if (!session) return;
     try {
       await deleteTransaction(session.id, txId);
       toast({ title: 'Transaction deleted' });
-      loadData(session.id);
+      await loadData(session.id);
     } catch (err: any) {
       toast({
         title: 'Error deleting transaction',
@@ -187,7 +208,13 @@ export default function TransactionsPage() {
                   <TransactionRow
                     key={tx.id}
                     transaction={tx}
+                    accounts={accounts}
+                    onEdit={handleEdit}
                     onDelete={handleDelete}
+                    onTransactionUpdated={() => {
+                      const session = getAuthSession();
+                      if (session) loadData(session.id);
+                    }}
                   />
                 ))}
               </div>

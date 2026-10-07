@@ -8,6 +8,7 @@ import {
   parseAndValidateAmount,
   validateTransferInvariants,
   calculateAccountBalance,
+  calculateCreditCardUsage,
   calculateMonthlyTotals,
   calculateCategoryBreakdown,
   calculateDebtOutstanding,
@@ -121,6 +122,10 @@ export async function getAccounts(userId: string, db: PrismaClientLike = default
     ];
 
     const currentBalance = calculateAccountBalance(acc.openingBalance, allTx, acc.id);
+    const isCreditCard = acc.type === 'CREDIT_CARD';
+    const ccUsage = isCreditCard
+      ? calculateCreditCardUsage(acc.openingBalance, allTx, acc.id, acc.creditLimit)
+      : null;
 
     return {
       id: acc.id,
@@ -130,6 +135,8 @@ export async function getAccounts(userId: string, db: PrismaClientLike = default
       openingBalance: acc.openingBalance.toString(),
       currentBalance: currentBalance.toString(),
       creditLimit: acc.creditLimit ? acc.creditLimit.toString() : null,
+      amountUsed: ccUsage ? ccUsage.amountUsed.toString() : null,
+      availableCredit: ccUsage && ccUsage.availableCredit ? ccUsage.availableCredit.toString() : null,
       statementDay: acc.statementDay,
       paymentDueDay: acc.paymentDueDay,
       defaultPaymentAccountId: acc.defaultPaymentAccountId,
@@ -322,6 +329,10 @@ export async function getTransactions(
       account: { select: { id: true, name: true, type: true } },
       transferAccount: { select: { id: true, name: true, type: true } },
       obligation: { select: { id: true, title: true, kind: true } },
+      obligationOccurrence: { select: { id: true } },
+      loanPayment: { select: { id: true } },
+      wishlistItem: { select: { id: true } },
+      creditCardPayment: { select: { id: true } },
     }
   });
 
@@ -331,9 +342,23 @@ export async function getTransactions(
     amount: t.amount.toString(),
     category: t.category,
     occurredAt: t.occurredAt.toISOString(),
+    accountId: t.accountId,
+    transferAccountId: t.transferAccountId,
     account: t.account,
     transferAccount: t.transferAccount,
     obligation: t.obligation,
+    personalDebtId: t.personalDebtId,
+    obligationOccurrence: t.obligationOccurrence,
+    loanPayment: t.loanPayment,
+    wishlistItem: t.wishlistItem,
+    creditCardPayment: t.creditCardPayment,
+    isSystemManaged: Boolean(
+      t.obligationOccurrence ||
+      t.loanPayment ||
+      t.wishlistItem ||
+      t.creditCardPayment ||
+      t.personalDebtId
+    ),
     note: t.note,
     createdAt: t.createdAt.toISOString(),
   }));

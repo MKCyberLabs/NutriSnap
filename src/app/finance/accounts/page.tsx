@@ -16,6 +16,7 @@ import { getAuthSession } from '@/lib/auth-mock';
 import {
   getAccounts,
   createAccount,
+  updateAccount,
   archiveAccount,
 } from '@/app/finance/actions';
 import { Landmark, WalletCards } from 'lucide-react';
@@ -27,6 +28,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
+  const [editingAccount, setEditingAccount] = useState<any | null>(null);
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -54,13 +56,34 @@ export default function AccountsPage() {
     loadData(session.id);
   }, [router, loadData]);
 
+  const handleUpdateAccount = async (data: any) => {
+    const session = getAuthSession();
+    if (!session || !editingAccount) return;
+    try {
+      const res = await updateAccount(session.id, editingAccount.id, data);
+      if (res && (res as any).error) {
+        throw new Error((res as any).error);
+      }
+      setEditingAccount(null);
+      await loadData(session.id);
+      return res;
+    } catch (err: any) {
+      toast({
+        title: 'Error updating account',
+        description: err?.message,
+        variant: 'destructive',
+      });
+      throw err;
+    }
+  };
+
   const handleArchive = async (accountId: string) => {
     const session = getAuthSession();
     if (!session) return;
     try {
       await archiveAccount(session.id, accountId);
       toast({ title: 'Account archived', description: 'Account hidden from active lists.' });
-      loadData(session.id);
+      await loadData(session.id);
     } catch (err: any) {
       toast({
         title: 'Error archiving account',
@@ -79,6 +102,7 @@ export default function AccountsPage() {
         description="Manage your banks, cash, wallets and credit cards"
         action={
           <AccountForm
+            accounts={accounts}
             onSubmitAction={async (data) => {
               const session = getAuthSession();
               if (session) return await createAccount(session.id, data);
@@ -133,6 +157,7 @@ export default function AccountsPage() {
               description="Create a bank, cash, wallet or credit card account to start tracking money."
               action={
                 <AccountForm
+                  accounts={accounts}
                   onSubmitAction={async (data) => {
                     const session = getAuthSession();
                     if (session) return await createAccount(session.id, data);
@@ -151,6 +176,7 @@ export default function AccountsPage() {
                   key={acc.id}
                   account={acc}
                   accounts={accounts}
+                  onEdit={(accountToEdit) => setEditingAccount(accountToEdit)}
                   onArchive={handleArchive}
                   onRefresh={() => {
                     const session = getAuthSession();
@@ -161,6 +187,25 @@ export default function AccountsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Edit Account Dialog Modal */}
+      {editingAccount && (
+        <AccountForm
+          mode="edit"
+          open={true}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setEditingAccount(null);
+          }}
+          initialData={editingAccount}
+          accounts={accounts}
+          onSubmitAction={handleUpdateAccount}
+          onAccountUpdated={() => {
+            setEditingAccount(null);
+            const session = getAuthSession();
+            if (session) loadData(session.id);
+          }}
+        />
       )}
     </AppShell>
   );

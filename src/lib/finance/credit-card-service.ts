@@ -634,9 +634,9 @@ export async function getCreditCardDetails(
   const creditLimit = account.creditLimit;
   const availableCredit = creditLimit ? creditLimit.minus(ledgerBalance) : null;
 
-  // Active / Latest open or partial statement
+  // Active / Latest open or partial statement (fully paid statements are not active)
   const statements = account.creditCardStatements;
-  const activeStatement = statements.find((s: any) => s.status !== 'PAID') || statements[0] || null;
+  const activeStatement = statements.find((s: any) => s.status !== 'PAID') || null;
 
   let activeStatementSummary = null;
   if (activeStatement) {
