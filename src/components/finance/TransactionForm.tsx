@@ -142,13 +142,18 @@ export function TransactionForm({
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           {/* Segmented Type Picker */}
-          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F7FAF8] border border-[#E5ECE8]">
+          <div
+            role="group"
+            aria-label="Transaction Type"
+            className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F7FAF8] border border-[#E5ECE8]"
+          >
             {(['EXPENSE', 'INCOME', 'TRANSFER'] as TransactionType[]).map((t) => (
               <button
                 key={t}
                 type="button"
+                aria-pressed={txType === t}
                 onClick={() => setTxType(t)}
-                className={`py-2 rounded-lg text-xs font-semibold capitalize transition-all ${
+                className={`py-2 rounded-lg text-xs font-semibold capitalize transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] focus-visible:ring-offset-2 ${
                   txType === t
                     ? t === 'EXPENSE'
                       ? 'bg-white text-[#B42318] shadow-xs'

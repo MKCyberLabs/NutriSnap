@@ -129,3 +129,7 @@
 ## 2026-10-01 - [Redundant Screen Reader Announcements on Close Icons]
 **Learning:** Discovered that the default Close buttons in Radix UI primitives (e.g., Dialog, Sheet, Toast) often render an internal `<X />` icon without an `aria-hidden="true"` attribute. While the `DialogPrimitive.Close` wrapper includes an `<span className="sr-only">Close</span>`, screen readers might redundantly announce the SVG icon if it's not explicitly hidden, causing unnecessary auditory noise.
 **Action:** When working with primitive or customized close buttons that include both screen-reader-only text and a visual icon, always add `aria-hidden="true"` to the decorative SVG/icon component to ensure a clean, single announcement.
+
+## 2024-11-20 - [Accessible Custom Segmented Controls]
+**Learning:** Found custom segmented controls in `TransactionForm.tsx` and `DebtForm.tsx` (using buttons to switch between EXPENSE/INCOME/TRANSFER and RECEIVABLE/PAYABLE) that lacked accessibility grouping, active state indication, and keyboard focus visibility.
+**Action:** When creating custom interactive UI elements used as toggles or single-select groups in React/Next.js, wrap the group in a container with `role="group"` and `aria-label`. Ensure individual buttons have `type="button"`, explicit `aria-pressed` attributes matching their active state, and explicit `focus-visible` classes (e.g., `focus-visible:ring-2`) for keyboard and screen reader accessibility. Also, ensure any decorative icons inside these buttons have `aria-hidden="true"`.
