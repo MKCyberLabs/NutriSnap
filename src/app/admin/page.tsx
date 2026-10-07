@@ -139,14 +139,25 @@ export default function AdminPage() {
     setDeleteId(null);
   };
 
+  // ⚡ Bolt Optimization: Pre-compute lowercase search targets.
+  // This avoids O(N) string concatenation and memory allocations per keystroke,
+  // reducing garbage collection pressure and improving render speed during search.
+  const mappedUsers = useMemo(() => {
+    return managedUsers.map(u => ({
+      original: u,
+      searchString: `${u.name || ''} ${u.email || ''}`.toLowerCase()
+    }));
+  }, [managedUsers]);
+
+  // ⚡ Bolt Optimization: Fast O(N) lookup against pre-computed strings.
+  // The search term is lowercased exactly once per keystroke, rather than N times.
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return managedUsers;
     const term = searchTerm.toLowerCase();
-    return managedUsers.filter(u =>
-      (u.name || '').toLowerCase().includes(term) ||
-      (u.email || '').toLowerCase().includes(term)
-    );
-  }, [managedUsers, searchTerm]);
+    return mappedUsers
+      .filter(u => u.searchString.includes(term))
+      .map(u => u.original);
+  }, [mappedUsers, searchTerm, managedUsers]);
 
   return (
     <AppShell>
