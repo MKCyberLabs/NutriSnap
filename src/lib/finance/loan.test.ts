@@ -354,6 +354,135 @@ test('V2-300: Loans & EMI Test Suite (V2-T040..V2-T052)', async () => {
       /Account not found or unauthorized/
     );
 
+    // -------------------------------------------------------------------------
+    // V2-T053: Automatic EMI obligation lifecycle on loan creation, update, and close
+    // -------------------------------------------------------------------------
+    // 1. Create a new active loan with emiAmount and nextEmiDate
+    const newLoanRes = await loanService.createLoan(userA.id, {
+      name: 'Auto Loan Honda',
+      loanType: 'VEHICLE',
+      lender: 'HDFC Bank',
+      openingOutstanding: '600000.00',
+      originalPrincipal: '800000.00',
+      emiAmount: '18500.00',
+      nextEmiDate: '2026-11-15',
+      paymentAccountId: bankAId,
+    }, db);
+    assert.equal(newLoanRes.success, true);
+    const newLoanId = newLoanRes.loan.id;
+
+    // Verify linked EMI obligation was created
+    const linkedObs = await db.obligation.findMany({
+      where: {
+        userId: userA.id,
+        kind: 'EMI',
+        title: { contains: 'Auto Loan Honda' },
+      }
+    });
+    assert.equal(linkedObs.length, 1);
+    const linkedOb = linkedObs[0];
+    assert.equal(linkedOb.amount?.toString(), '18500');
+    assert.equal(linkedOb.isActive, true);
+
+    // 2. Safe edit of loan: update EMI amount and due date
+    const updatedLoanRes = await loanService.updateLoan(userA.id, newLoanId, {
+      name: 'Auto Loan Honda City',
+      emiAmount: '19000.00',
+      nextEmiDate: '2026-11-20',
+    }, db);
+    assert.equal(updatedLoanRes.success, true);
+    assert.equal(updatedLoanRes.loan.name, 'Auto Loan Honda City');
+    assert.equal(updatedLoanRes.loan.emiAmount, '19000');
+
+    // Verify linked obligation was updated idempotently without duplicates
+    const linkedObsAfterUpdate = await db.obligation.findMany({
+      where: {
+        userId: userA.id,
+        kind: 'EMI',
+        OR: [
+          { title: { contains: 'Auto Loan Honda' } },
+          { id: linkedOb.id },
+        ],
+      }
+    });
+    assert.equal(linkedObsAfterUpdate.length, 1);
+    assert.equal(linkedObsAfterUpdate[0].amount?.toString(), '19000');
+    assert.equal(linkedObsAfterUpdate[0].title, 'EMI: Auto Loan Honda City (HDFC Bank)');
+
+    // 3. Update loan metadata rejects direct mutation of outstandingPrincipal
+    await assert.rejects(
+      async () => {
+        await loanService.updateLoan(userA.id, newLoanId, {
+          outstandingPrincipal: '400000.00',
+        } as any, db);
+      },
+      /outstandingPrincipal cannot be updated directly/
+    );
+
+    await assert.rejects(
+      async () => {
+        await loanService.updateLoan(userA.id, newLoanId, {
+          openingOutstanding: '400000.00',
+        } as any, db);
+      },
+      /openingOutstanding cannot be updated directly/
+    );
+
+    // 4. Cross-user update rejected
+    await assert.rejects(
+      async () => {
+        await loanService.updateLoan(userB.id, newLoanId, {
+          name: 'Hacked Loan',
+        }, db);
+      },
+      /Loan not found or unauthorized/
+    );
+
+    // 5. Create dummy reminder delivery claim to verify cleanup on loan close
+    let rem = await db.reminder.findFirst({
+      where: { userId: userA.id, obligationId: linkedOb.id }
+    });
+    if (!rem) {
+      rem = await db.reminder.create({
+        data: {
+          userId: userA.id,
+          obligationId: linkedOb.id,
+          type: 'BILL',
+          title: linkedOb.title,
+          time: '09:00',
+          recurrenceType: 'MONTHLY',
+        }
+      });
+    }
+
+    await db.reminderDelivery.create({
+      data: {
+        userId: userA.id,
+        reminderId: rem.id,
+        obligationId: linkedOb.id,
+        occurrenceKey: '2026-11-20',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-20T09:00:00Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // Close the loan
+    const closeNewRes = await loanService.closeLoan(userA.id, newLoanId, db);
+    assert.equal(closeNewRes.success, true);
+
+    // Linked obligation should now be inactive and archived
+    const obAfterClose = await db.obligation.findUnique({ where: { id: linkedOb.id } });
+    assert.equal(obAfterClose?.isActive, false);
+    assert.equal(obAfterClose?.isArchived, true);
+
+    // Pending reminder deliveries for this obligation should be removed
+    const pendingDeliveries = await db.reminderDelivery.findMany({
+      where: { obligationId: linkedOb.id, status: 'PENDING' }
+    });
+    assert.equal(pendingDeliveries.length, 0);
+
   } finally {
     await db.$disconnect();
   }

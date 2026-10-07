@@ -325,6 +325,78 @@ test('V2-200: Personal Debt (Friends & Family) Test Suite (V2-T020..V2-T030)', a
     const activeDebts = await debtService.getDebts(userA.id, {}, db);
     assert.equal(activeDebts.some((d: any) => d.id === newDebtId), false);
 
+    // -------------------------------------------------------------------------
+    // V2-T031: Safe debt update and invariant enforcement
+    // -------------------------------------------------------------------------
+    // 1. Create a fresh open debt
+    const debtToUpdate = await debtService.createDebt(userA.id, {
+      direction: 'RECEIVABLE',
+      counterpartyName: 'Suresh Sharma',
+      title: 'Festival advance',
+      originalAmount: '8000.00',
+      accountId: bankAId,
+    }, db);
+    assert.equal(debtToUpdate.success, true);
+    const updateDebtId = debtToUpdate.debt.id;
+
+    // Check balance before edit
+    const accountsBeforeEdit = await financeService.getAccounts(userA.id, db);
+    const balanceBefore = accountsBeforeEdit.find((a: any) => a.id === bankAId).currentBalance;
+
+    // 2. Safe edit of mutable fields
+    const updatedDebtRes = await debtService.updateDebt(userA.id, updateDebtId, {
+      counterpartyName: 'Suresh K. Sharma',
+      title: 'Diwali Festival Advance',
+      dueAt: '2026-12-25',
+      notes: 'Agreed repayment by Christmas',
+    }, db);
+
+    assert.equal(updatedDebtRes.success, true);
+    assert.equal(updatedDebtRes.debt.counterpartyName, 'Suresh K. Sharma');
+    assert.equal(updatedDebtRes.debt.title, 'Diwali Festival Advance');
+    assert.equal(updatedDebtRes.debt.notes, 'Agreed repayment by Christmas');
+    assert.equal(updatedDebtRes.debt.originalAmount, '8000');
+
+    // Verify outstanding amount remains untouched via getDebts
+    const debtsList = await debtService.getDebts(userA.id, {}, db);
+    const fetchedDebt = debtsList.find((d: any) => d.id === updateDebtId);
+    assert.equal(fetchedDebt.outstandingAmount, '8000');
+
+    // Account balance and transaction count are unchanged
+    const accountsAfterEdit = await financeService.getAccounts(userA.id, db);
+    const balanceAfter = accountsAfterEdit.find((a: any) => a.id === bankAId).currentBalance;
+    assert.equal(balanceBefore, balanceAfter);
+
+    // 3. Reject alteration of originalAmount
+    await assert.rejects(
+      async () => {
+        await debtService.updateDebt(userA.id, updateDebtId, {
+          originalAmount: '12000.00',
+        } as any, db);
+      },
+      /originalAmount cannot be/
+    );
+
+    // 4. Reject alteration of direction
+    await assert.rejects(
+      async () => {
+        await debtService.updateDebt(userA.id, updateDebtId, {
+          direction: 'PAYABLE',
+        } as any, db);
+      },
+      /direction cannot be/
+    );
+
+    // 5. Cross-user debt update rejected
+    await assert.rejects(
+      async () => {
+        await debtService.updateDebt(userB.id, updateDebtId, {
+          title: 'Hacked debt title',
+        }, db);
+      },
+      /Debt not found or unauthorized/
+    );
+
   } finally {
     await db.$disconnect();
   }

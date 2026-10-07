@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,9 +27,13 @@ import { useToast } from '@/hooks/use-toast';
 
 interface ObligationFormProps {
   accounts: { id: string; name: string }[];
-  onObligationCreated: () => void;
+  onObligationCreated?: () => void;
   onSubmitAction: (data: any) => Promise<any>;
   trigger?: React.ReactNode;
+  obligation?: any;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 export function ObligationForm({
@@ -37,10 +41,32 @@ export function ObligationForm({
   onObligationCreated,
   onSubmitAction,
   trigger,
+  obligation,
+  open: controlledOpen,
+  onOpenChange,
+  onSuccess,
 }: ObligationFormProps) {
-  const [open, setOpen] = useState(false);
+  const isEdit = Boolean(obligation);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (val: boolean) => {
+    if (onOpenChange) onOpenChange(val);
+    if (!isControlled) setInternalOpen(val);
+  };
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const formatDateForInput = (d: any) => {
+    if (!d) return '';
+    try {
+      const date = new Date(d);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
 
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<ObligationKind>('BILL');
@@ -49,6 +75,26 @@ export function ObligationForm({
   const [recurrence, setRecurrence] = useState<'ONCE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'EVERY_N_DAYS'>('MONTHLY');
   const [interval, setInterval] = useState('84');
   const [accountId, setAccountId] = useState('');
+
+  useEffect(() => {
+    if (obligation) {
+      setTitle(obligation.title || '');
+      setKind(obligation.kind || 'BILL');
+      setAmount(obligation.amount ? String(obligation.amount) : '');
+      setDueAt(formatDateForInput(obligation.nextDueAt || obligation.dueAt));
+      setRecurrence(obligation.recurrenceType || 'MONTHLY');
+      setInterval(obligation.recurrenceInterval ? String(obligation.recurrenceInterval) : '84');
+      setAccountId(obligation.accountId || obligation.account?.id || 'none');
+    } else {
+      setTitle('');
+      setKind('BILL');
+      setAmount('');
+      setDueAt('');
+      setRecurrence('MONTHLY');
+      setInterval('84');
+      setAccountId('');
+    }
+  }, [obligation, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,18 +112,28 @@ export function ObligationForm({
       const payload: any = {
         title: title.trim(),
         kind,
-        dueAt: new Date(dueAt).toISOString(),
         recurrenceType: recurrence,
         recurrenceInterval: recurrence === 'EVERY_N_DAYS' ? parseInt(interval, 10) || 1 : undefined,
-        reminderOffsetsMin: [1440, 0], // 1 day before, due day
       };
+
+      if (dueAt) {
+        payload.dueAt = new Date(dueAt).toISOString();
+      }
+
+      if (!isEdit) {
+        payload.reminderOffsetsMin = [1440, 0]; // 1 day before, due day
+      }
 
       if (amount && parseFloat(amount) > 0) {
         payload.amount = parseFloat(amount).toFixed(2);
+      } else if (isEdit) {
+        payload.amount = null;
       }
 
       if (accountId && accountId !== 'none') {
         payload.accountId = accountId;
+      } else if (isEdit) {
+        payload.accountId = null;
       }
 
       const res = await onSubmitAction(payload);
@@ -86,19 +142,24 @@ export function ObligationForm({
       }
 
       toast({
-        title: 'Obligation created',
-        description: `Successfully scheduled "${title}".`,
+        title: isEdit ? 'Obligation updated' : 'Obligation created',
+        description: isEdit
+          ? `Successfully updated "${title}".`
+          : `Successfully scheduled "${title}".`,
       });
 
-      setTitle('');
-      setAmount('');
-      setDueAt('');
+      if (!isEdit) {
+        setTitle('');
+        setAmount('');
+        setDueAt('');
+      }
       setOpen(false);
-      onObligationCreated();
+      onObligationCreated?.();
+      onSuccess?.();
     } catch (err: any) {
       toast({
-        title: 'Error creating obligation',
-        description: err?.message || 'Could not schedule obligation.',
+        title: isEdit ? 'Error updating obligation' : 'Error creating obligation',
+        description: err?.message || (isEdit ? 'Could not update obligation.' : 'Could not schedule obligation.'),
         variant: 'destructive',
       });
     } finally {
@@ -108,21 +169,23 @@ export function ObligationForm({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button
-            size="sm"
-            className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Bill / Obligation</span>
-          </Button>
-        )}
-      </DialogTrigger>
+      {!isEdit && (
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button
+              size="sm"
+              className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Bill / Obligation</span>
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[460px] rounded-[18px] bg-white p-6 border border-[#E5ECE8] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
           <DialogTitle className="text-lg font-semibold text-[#111827]">
-            Schedule Bill or Obligation
+            {isEdit ? 'Edit Bill / Obligation' : 'Schedule Bill or Obligation'}
           </DialogTitle>
         </DialogHeader>
 
@@ -261,10 +324,10 @@ export function ObligationForm({
             {submitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Scheduling...
+                {isEdit ? 'Saving...' : 'Scheduling...'}
               </>
             ) : (
-              'Save Obligation'
+              isEdit ? 'Save Changes' : 'Save Obligation'
             )}
           </Button>
         </form>

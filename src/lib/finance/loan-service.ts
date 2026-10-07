@@ -4,7 +4,7 @@ import { Prisma } from '../../../prisma/generated/client';
 const Decimal = Prisma.Decimal;
 type Decimal = Prisma.Decimal;
 import { parseAndValidateAmount } from './finance';
-import { getNextOccurrence, RecurrenceRule } from '../recurrence/recurrence';
+import { getNextOccurrence, RecurrenceRule, clampDayToMonth } from '../recurrence/recurrence';
 
 const defaultPrisma = prisma;
 type PrismaClientLike = any;
@@ -20,6 +20,22 @@ export const LOAN_TYPES = [
   'OTHER',
 ] as const;
 export type LoanType = (typeof LOAN_TYPES)[number];
+
+export const updateLoanSchema = z.object({
+  name: z.string().trim().min(1, 'Loan name is required').max(100).optional(),
+  loanType: z.enum(LOAN_TYPES).optional(),
+  lender: z.string().trim().min(1, 'Lender is required').max(100).optional(),
+  emiAmount: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
+  dueDay: z.number().int().min(1).max(31).optional().nullable(),
+  nextEmiDate: z.string().or(z.date()).optional().nullable(),
+  interestRatePercent: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
+  interestRateType: z.enum(['FIXED', 'FLOATING', 'UNKNOWN']).optional(),
+  tenureMonths: z.number().int().min(1).optional().nullable(),
+  paymentAccountId: z.string().optional().nullable(),
+  productName: z.string().trim().max(100).optional().nullable(),
+  merchant: z.string().trim().max(100).optional().nullable(),
+  notes: z.string().trim().max(255).optional().nullable(),
+});
 
 export const createLoanSchema = z.object({
   name: z.string().trim().min(1, 'Loan name is required').max(100),
@@ -97,26 +113,71 @@ export async function createLoan(
   const startDateVal = parsed.startDate ? new Date(parsed.startDate) : null;
   const expectedEndDateVal = parsed.expectedEndDate ? new Date(parsed.expectedEndDate) : null;
 
+  // Calculate effectiveNextEmiDate if dueDay is provided without explicit nextEmiDate
+  let effectiveNextEmiDate = nextEmiDateVal;
+  if (!effectiveNextEmiDate && parsed.dueDay) {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const clampedDay = clampDayToMonth(year, month, parsed.dueDay);
+    let candidate = new Date(Date.UTC(year, month, clampedDay, 12, 0, 0));
+    if (candidate.getTime() <= now.getTime()) {
+      let nextMonth = month + 1;
+      let nextYear = year;
+      if (nextMonth > 11) {
+        nextMonth = 0;
+        nextYear += 1;
+      }
+      const nextClamped = clampDayToMonth(nextYear, nextMonth, parsed.dueDay);
+      candidate = new Date(Date.UTC(nextYear, nextMonth, nextClamped, 12, 0, 0));
+    }
+    effectiveNextEmiDate = candidate;
+  }
+
   const executeInTransaction = async (tx: any) => {
     let linkedObligationId: string | null = null;
 
-    if (parsed.createLinkedObligation && emiAmountDecimal && nextEmiDateVal) {
-      const ob = await tx.obligation.create({
-        data: {
+    if (emiAmountDecimal && effectiveNextEmiDate) {
+      const existingOb = await tx.obligation.findFirst({
+        where: {
           userId,
-          title: `EMI: ${parsed.name} (${parsed.lender})`,
           kind: 'EMI',
-          amount: emiAmountDecimal,
-          accountId: parsed.paymentAccountId || null,
-          dueAt: nextEmiDateVal,
-          recurrenceType: 'MONTHLY',
-          reminderOffsetsMin: [2880, 1440, 0], // 2 days, 1 day, due day
-          isActive: true,
-          nextDueAt: nextEmiDateVal,
-          notes: `Linked to loan ${parsed.name}`,
+          title: `EMI: ${parsed.name} (${parsed.lender})`,
+          isArchived: false,
         }
       });
-      linkedObligationId = ob.id;
+
+      if (existingOb) {
+        linkedObligationId = existingOb.id;
+        await tx.obligation.update({
+          where: { id: existingOb.id },
+          data: {
+            amount: emiAmountDecimal,
+            dueAt: effectiveNextEmiDate,
+            nextDueAt: effectiveNextEmiDate,
+            accountId: parsed.paymentAccountId || null,
+            isActive: true,
+          }
+        });
+      } else {
+        const ob = await tx.obligation.create({
+          data: {
+            userId,
+            title: `EMI: ${parsed.name} (${parsed.lender})`,
+            kind: 'EMI',
+            amount: emiAmountDecimal,
+            accountId: parsed.paymentAccountId || null,
+            dueAt: effectiveNextEmiDate,
+            recurrenceType: 'MONTHLY',
+            recurrenceInterval: 1,
+            reminderOffsetsMin: [2880, 1440, 0], // 2 days, 1 day, due day
+            isActive: true,
+            nextDueAt: effectiveNextEmiDate,
+            notes: `Linked to loan ${parsed.name}`,
+          }
+        });
+        linkedObligationId = ob.id;
+      }
     }
 
     const loan = await tx.loan.create({
@@ -137,7 +198,7 @@ export async function createLoan(
         tenureMonths: parsed.tenureMonths || null,
         startDate: startDateVal,
         expectedEndDate: expectedEndDateVal,
-        nextEmiDate: nextEmiDateVal,
+        nextEmiDate: effectiveNextEmiDate,
         dueDay: parsed.dueDay || null,
         paymentAccountId: parsed.paymentAccountId || null,
         productName: parsed.productName || null,
@@ -551,6 +612,228 @@ export async function reconcileOutstanding(
 }
 
 /**
+ * Updates loan metadata (safe mutable fields).
+ * Invariant: outstandingPrincipal cannot be edited directly; corrections must use reconcileOutstanding.
+ * Synchronizes linked Obligation if emiAmount or due date/day changes without creating duplicates.
+ */
+export async function updateLoan(
+  userId: string,
+  loanId: string,
+  data: unknown,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  if (typeof data === 'object' && data !== null) {
+    if ('outstandingPrincipal' in data && (data as any).outstandingPrincipal !== undefined) {
+      throw new Error('outstandingPrincipal cannot be updated directly; use reconcileOutstanding instead');
+    }
+    if ('openingOutstanding' in data && (data as any).openingOutstanding !== undefined) {
+      throw new Error('openingOutstanding cannot be updated directly; use reconcileOutstanding instead');
+    }
+  }
+
+  const parsed = updateLoanSchema.parse(data);
+
+  const loan = await db.loan.findUnique({
+    where: { id: loanId },
+    include: { obligation: true }
+  });
+
+  if (!loan || loan.userId !== userId) {
+    throw new Error('Loan not found or unauthorized');
+  }
+
+  if (loan.status === 'ARCHIVED') {
+    throw new Error('Cannot update an archived loan');
+  }
+
+  if (parsed.paymentAccountId !== undefined && parsed.paymentAccountId !== null) {
+    const acc = await db.financialAccount.findUnique({
+      where: { id: parsed.paymentAccountId },
+      select: { userId: true, isActive: true }
+    });
+    if (!acc || acc.userId !== userId) {
+      throw new Error('Payment account not found or unauthorized');
+    }
+  }
+
+  const updateData: any = {};
+  if (parsed.name !== undefined) updateData.name = parsed.name;
+  if (parsed.lender !== undefined) updateData.lender = parsed.lender;
+  if (parsed.loanType !== undefined) updateData.loanType = parsed.loanType;
+  if (parsed.interestRateType !== undefined) updateData.interestRateType = parsed.interestRateType;
+  if (parsed.tenureMonths !== undefined) updateData.tenureMonths = parsed.tenureMonths;
+  if (parsed.paymentAccountId !== undefined) updateData.paymentAccountId = parsed.paymentAccountId;
+  if (parsed.productName !== undefined) updateData.productName = parsed.productName;
+  if (parsed.merchant !== undefined) updateData.merchant = parsed.merchant;
+  if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+
+  if (parsed.interestRatePercent !== undefined) {
+    updateData.interestRatePercent = parsed.interestRatePercent !== null
+      ? new Decimal(parsed.interestRatePercent.toString())
+      : null;
+  }
+
+  let emiChanged = false;
+  let newEmiAmountDecimal = loan.emiAmount;
+  if (parsed.emiAmount !== undefined) {
+    newEmiAmountDecimal = parsed.emiAmount !== null
+      ? parseAndValidateAmount(parsed.emiAmount.toString())
+      : null;
+    updateData.emiAmount = newEmiAmountDecimal;
+    emiChanged = true;
+  }
+
+  let dueChanged = false;
+  let newDueDay = loan.dueDay;
+  if (parsed.dueDay !== undefined) {
+    newDueDay = parsed.dueDay;
+    updateData.dueDay = newDueDay;
+    dueChanged = true;
+  }
+
+  let newNextEmiDate = loan.nextEmiDate;
+  if (parsed.nextEmiDate !== undefined) {
+    newNextEmiDate = parsed.nextEmiDate ? new Date(parsed.nextEmiDate) : null;
+    updateData.nextEmiDate = newNextEmiDate;
+    dueChanged = true;
+  } else if (parsed.dueDay !== undefined && parsed.dueDay !== null) {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const clampedDay = clampDayToMonth(year, month, parsed.dueDay);
+    let candidate = new Date(Date.UTC(year, month, clampedDay, 12, 0, 0));
+    if (candidate.getTime() <= now.getTime()) {
+      let nextMonth = month + 1;
+      let nextYear = year;
+      if (nextMonth > 11) {
+        nextMonth = 0;
+        nextYear += 1;
+      }
+      const nextClamped = clampDayToMonth(nextYear, nextMonth, parsed.dueDay);
+      candidate = new Date(Date.UTC(nextYear, nextMonth, nextClamped, 12, 0, 0));
+    }
+    newNextEmiDate = candidate;
+    updateData.nextEmiDate = newNextEmiDate;
+    dueChanged = true;
+  }
+
+  const executeInTransaction = async (tx: any) => {
+    const effectiveEmiAmount = newEmiAmountDecimal;
+    const effectiveNextDue = newNextEmiDate;
+    const effectiveName = parsed.name || loan.name;
+    const effectiveLender = parsed.lender || loan.lender;
+    const effectiveAccountId = parsed.paymentAccountId !== undefined ? parsed.paymentAccountId : loan.paymentAccountId;
+
+    let linkedObligationId = loan.obligationId;
+
+    if (linkedObligationId) {
+      const obUpdate: any = {};
+      if (emiChanged && effectiveEmiAmount) {
+        obUpdate.amount = effectiveEmiAmount;
+      }
+      if (dueChanged && effectiveNextDue) {
+        obUpdate.dueAt = effectiveNextDue;
+        obUpdate.nextDueAt = effectiveNextDue;
+      }
+      if (parsed.name || parsed.lender) {
+        obUpdate.title = `EMI: ${effectiveName} (${effectiveLender})`;
+      }
+      if (parsed.paymentAccountId !== undefined) {
+        obUpdate.accountId = effectiveAccountId || null;
+      }
+
+      if (Object.keys(obUpdate).length > 0) {
+        await tx.obligation.update({
+          where: { id: linkedObligationId },
+          data: obUpdate,
+        });
+
+        if (dueChanged) {
+          await tx.reminderDelivery.deleteMany({
+            where: {
+              obligationId: linkedObligationId,
+              status: 'PENDING',
+            }
+          });
+        }
+      }
+    } else if (effectiveEmiAmount && effectiveNextDue && loan.status === 'ACTIVE') {
+      const existingOb = await tx.obligation.findFirst({
+        where: {
+          userId,
+          kind: 'EMI',
+          title: `EMI: ${effectiveName} (${effectiveLender})`,
+          isArchived: false,
+        }
+      });
+
+      if (existingOb) {
+        linkedObligationId = existingOb.id;
+        await tx.obligation.update({
+          where: { id: existingOb.id },
+          data: {
+            amount: effectiveEmiAmount,
+            nextDueAt: effectiveNextDue,
+            dueAt: effectiveNextDue,
+            accountId: effectiveAccountId || null,
+            isActive: true,
+          }
+        });
+      } else {
+        const createdOb = await tx.obligation.create({
+          data: {
+            userId,
+            title: `EMI: ${effectiveName} (${effectiveLender})`,
+            kind: 'EMI',
+            amount: effectiveEmiAmount,
+            accountId: effectiveAccountId || null,
+            dueAt: effectiveNextDue,
+            recurrenceType: 'MONTHLY',
+            recurrenceInterval: 1,
+            reminderOffsetsMin: [2880, 1440, 0],
+            isActive: true,
+            nextDueAt: effectiveNextDue,
+            notes: `Linked to loan ${effectiveName}`,
+          }
+        });
+        linkedObligationId = createdOb.id;
+      }
+
+      updateData.obligationId = linkedObligationId;
+    }
+
+    const updatedLoan = await tx.loan.update({
+      where: { id: loanId },
+      data: updateData,
+    });
+
+    return updatedLoan;
+  };
+
+  const updatedLoan = typeof db.$transaction === 'function'
+    ? await db.$transaction(executeInTransaction)
+    : await executeInTransaction(db);
+
+  return {
+    success: true,
+    loan: {
+      id: updatedLoan.id,
+      name: updatedLoan.name,
+      loanType: updatedLoan.loanType,
+      lender: updatedLoan.lender,
+      outstandingPrincipal: updatedLoan.outstandingPrincipal.toString(),
+      emiAmount: updatedLoan.emiAmount ? updatedLoan.emiAmount.toString() : null,
+      dueDay: updatedLoan.dueDay,
+      nextEmiDate: updatedLoan.nextEmiDate ? updatedLoan.nextEmiDate.toISOString() : null,
+      status: updatedLoan.status,
+      obligationId: updatedLoan.obligationId,
+    }
+  };
+}
+
+/**
  * Closes a loan (V2-T050).
  */
 export async function closeLoan(
@@ -562,17 +845,52 @@ export async function closeLoan(
 
   const loan = await db.loan.findUnique({
     where: { id: loanId },
-    select: { userId: true }
+    select: { id: true, userId: true, obligationId: true }
   });
 
   if (!loan || loan.userId !== userId) {
     throw new Error('Loan not found or unauthorized');
   }
 
-  await db.loan.update({
-    where: { id: loanId },
-    data: { status: 'CLOSED' }
-  });
+  const executeInTransaction = async (tx: any) => {
+    await tx.loan.update({
+      where: { id: loanId },
+      data: { status: 'CLOSED' }
+    });
+
+    if (loan.obligationId) {
+      await tx.obligation.update({
+        where: { id: loan.obligationId },
+        data: { isActive: false, isArchived: true }
+      });
+
+      await tx.reminderDelivery.deleteMany({
+        where: {
+          obligationId: loan.obligationId,
+          status: 'PENDING'
+        }
+      });
+    }
+
+    const loanReminders = await tx.reminder.findMany({
+      where: { userId, domain: 'FINANCE', type: 'LOAN_EMI', category: loanId }
+    });
+    for (const rem of loanReminders) {
+      await tx.reminder.update({
+        where: { id: rem.id },
+        data: { isActive: false }
+      });
+      await tx.reminderDelivery.deleteMany({
+        where: { reminderId: rem.id, status: 'PENDING' }
+      });
+    }
+  };
+
+  if (typeof db.$transaction === 'function') {
+    await db.$transaction(executeInTransaction);
+  } else {
+    await executeInTransaction(db);
+  }
 
   return { success: true };
 }
@@ -589,17 +907,52 @@ export async function archiveLoan(
 
   const loan = await db.loan.findUnique({
     where: { id: loanId },
-    select: { userId: true }
+    select: { id: true, userId: true, obligationId: true }
   });
 
   if (!loan || loan.userId !== userId) {
     throw new Error('Loan not found or unauthorized');
   }
 
-  await db.loan.update({
-    where: { id: loanId },
-    data: { status: 'ARCHIVED' }
-  });
+  const executeInTransaction = async (tx: any) => {
+    await tx.loan.update({
+      where: { id: loanId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    if (loan.obligationId) {
+      await tx.obligation.update({
+        where: { id: loan.obligationId },
+        data: { isActive: false, isArchived: true }
+      });
+
+      await tx.reminderDelivery.deleteMany({
+        where: {
+          obligationId: loan.obligationId,
+          status: 'PENDING'
+        }
+      });
+    }
+
+    const loanReminders = await tx.reminder.findMany({
+      where: { userId, domain: 'FINANCE', type: 'LOAN_EMI', category: loanId }
+    });
+    for (const rem of loanReminders) {
+      await tx.reminder.update({
+        where: { id: rem.id },
+        data: { isActive: false }
+      });
+      await tx.reminderDelivery.deleteMany({
+        where: { reminderId: rem.id, status: 'PENDING' }
+      });
+    }
+  };
+
+  if (typeof db.$transaction === 'function') {
+    await db.$transaction(executeInTransaction);
+  } else {
+    await executeInTransaction(db);
+  }
 
   return { success: true };
 }

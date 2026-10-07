@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,9 +23,13 @@ import { useToast } from '@/hooks/use-toast';
 
 interface DebtFormProps {
   accounts: { id: string; name: string }[];
-  onDebtCreated: () => void;
+  onDebtCreated?: () => void;
   onSubmitAction: (data: any) => Promise<any>;
   trigger?: React.ReactNode;
+  debt?: any;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 export function DebtForm({
@@ -33,8 +37,19 @@ export function DebtForm({
   onDebtCreated,
   onSubmitAction,
   trigger,
+  debt,
+  open: controlledOpen,
+  onOpenChange,
+  onSuccess,
 }: DebtFormProps) {
-  const [open, setOpen] = useState(false);
+  const isEdit = Boolean(debt);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (val: boolean) => {
+    if (onOpenChange) onOpenChange(val);
+    if (!isControlled) setInternalOpen(val);
+  };
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -47,6 +62,34 @@ export function DebtForm({
   const [dueAt, setDueAt] = useState('');
   const [notes, setNotes] = useState('');
 
+  useEffect(() => {
+    if (debt) {
+      setDirection((debt.direction as any) || 'RECEIVABLE');
+      setCounterpartyName(debt.counterpartyName || '');
+      setTitle(debt.title || '');
+      setAmount(debt.originalAmount ? String(debt.originalAmount) : '');
+      setNotes(debt.notes || '');
+      if (debt.startedAt) {
+        try {
+          const d = typeof debt.startedAt === 'string' ? new Date(debt.startedAt) : debt.startedAt;
+          setStartedAt(d.toISOString().substring(0, 10));
+        } catch {
+          // ignore
+        }
+      }
+      if (debt.dueAt) {
+        try {
+          const d = typeof debt.dueAt === 'string' ? new Date(debt.dueAt) : debt.dueAt;
+          setDueAt(d.toISOString().substring(0, 10));
+        } catch {
+          setDueAt('');
+        }
+      } else {
+        setDueAt('');
+      }
+    }
+  }, [debt]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!counterpartyName.trim()) {
@@ -54,52 +97,79 @@ export function DebtForm({
       return;
     }
 
-    const val = parseFloat(amount);
-    if (!val || val <= 0) {
-      toast({ title: 'Invalid amount', description: 'Please enter a valid positive amount.', variant: 'destructive' });
-      return;
+    if (!isEdit) {
+      const val = parseFloat(amount);
+      if (!val || val <= 0) {
+        toast({ title: 'Invalid amount', description: 'Please enter a valid positive amount.', variant: 'destructive' });
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      const payload: any = {
-        direction,
-        counterpartyName: counterpartyName.trim(),
-        title: title.trim() || undefined,
-        originalAmount: val.toFixed(2),
-        startedAt: new Date(startedAt).toISOString(),
-        notes: notes.trim() || undefined,
-      };
+      if (isEdit) {
+        const payload: any = {
+          counterpartyName: counterpartyName.trim(),
+          title: title.trim() || null,
+          notes: notes.trim() || null,
+          dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+        };
 
-      if (dueAt) {
-        payload.dueAt = new Date(dueAt).toISOString();
+        const res = await onSubmitAction(payload);
+        if (res && res.error) {
+          throw new Error(res.error);
+        }
+
+        toast({
+          title: 'Debt record updated',
+          description: `Successfully updated record for "${counterpartyName}".`,
+        });
+
+        setOpen(false);
+        if (onSuccess) onSuccess();
+        if (onDebtCreated) onDebtCreated();
+      } else {
+        const val = parseFloat(amount);
+        const payload: any = {
+          direction,
+          counterpartyName: counterpartyName.trim(),
+          title: title.trim() || undefined,
+          originalAmount: val.toFixed(2),
+          startedAt: new Date(startedAt).toISOString(),
+          notes: notes.trim() || undefined,
+        };
+
+        if (dueAt) {
+          payload.dueAt = new Date(dueAt).toISOString();
+        }
+
+        if (accountId && accountId !== 'none') {
+          payload.accountId = accountId;
+        }
+
+        const res = await onSubmitAction(payload);
+        if (res && res.error) {
+          throw new Error(res.error);
+        }
+
+        toast({
+          title: direction === 'RECEIVABLE' ? 'Receivable added' : 'Payable added',
+          description: `Successfully tracked debt with "${counterpartyName}".`,
+        });
+
+        setCounterpartyName('');
+        setTitle('');
+        setAmount('');
+        setAccountId('none');
+        setDueAt('');
+        setNotes('');
+        setOpen(false);
+        if (onSuccess) onSuccess();
+        if (onDebtCreated) onDebtCreated();
       }
-
-      if (accountId && accountId !== 'none') {
-        payload.accountId = accountId;
-      }
-
-      const res = await onSubmitAction(payload);
-      if (res && res.error) {
-        throw new Error(res.error);
-      }
-
-      toast({
-        title: direction === 'RECEIVABLE' ? 'Receivable added' : 'Payable added',
-        description: `Successfully tracked debt with "${counterpartyName}".`,
-      });
-
-      setCounterpartyName('');
-      setTitle('');
-      setAmount('');
-      setAccountId('none');
-      setDueAt('');
-      setNotes('');
-      setOpen(false);
-      onDebtCreated();
     } catch (err: any) {
       toast({
-        title: 'Error creating debt record',
+        title: isEdit ? 'Error updating debt record' : 'Error creating debt record',
         description: err?.message || 'Could not save record.',
         variant: 'destructive',
       });
@@ -110,52 +180,69 @@ export function DebtForm({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button
-            size="sm"
-            className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Record</span>
-          </Button>
-        )}
-      </DialogTrigger>
+      {!isEdit && (
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button
+              size="sm"
+              className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Record</span>
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[460px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
         <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
           <DialogTitle className="text-lg font-semibold text-[#111827]">
-            Add Friend / Family Debt
+            {isEdit ? `Edit Debt: ${debt?.counterpartyName}` : 'Add Friend / Family Debt'}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           {/* Direction Segmented Control */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-[#F7FAF8] rounded-xl border border-[#E5ECE8]">
-            <button
-              type="button"
-              onClick={() => setDirection('RECEIVABLE')}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                direction === 'RECEIVABLE'
-                  ? 'bg-white text-[#16A34A] shadow-xs border border-[#E5ECE8]'
-                  : 'text-[#667085] hover:text-[#111827]'
-              }`}
-            >
-              <ArrowDownLeft className="h-3.5 w-3.5" />
-              <span>I Lent (Owed to Me)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDirection('PAYABLE')}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                direction === 'PAYABLE'
-                  ? 'bg-white text-[#D97706] shadow-xs border border-[#E5ECE8]'
-                  : 'text-[#667085] hover:text-[#111827]'
-              }`}
-            >
-              <ArrowUpRight className="h-3.5 w-3.5" />
-              <span>I Borrowed (I Owe)</span>
-            </button>
-          </div>
+          {isEdit ? (
+            <div className="p-2.5 bg-[#F7FAF8] rounded-xl border border-[#E5ECE8] flex items-center justify-between">
+              <span className="text-xs text-[#667085]">Debt Direction</span>
+              <span
+                className={`text-xs font-semibold px-2.5 py-1 rounded-md ${
+                  direction === 'RECEIVABLE'
+                    ? 'bg-[#EAF8EF] text-[#16A34A]'
+                    : 'bg-[#FFF4DF] text-[#D97706]'
+                }`}
+              >
+                {direction === 'RECEIVABLE' ? 'I Lent (Owed to Me)' : 'I Borrowed (I Owe)'}
+              </span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 p-1 bg-[#F7FAF8] rounded-xl border border-[#E5ECE8]">
+              <button
+                type="button"
+                onClick={() => setDirection('RECEIVABLE')}
+                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  direction === 'RECEIVABLE'
+                    ? 'bg-white text-[#16A34A] shadow-xs border border-[#E5ECE8]'
+                    : 'text-[#667085] hover:text-[#111827]'
+                }`}
+              >
+                <ArrowDownLeft className="h-3.5 w-3.5" />
+                <span>I Lent (Owed to Me)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDirection('PAYABLE')}
+                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  direction === 'PAYABLE'
+                    ? 'bg-white text-[#D97706] shadow-xs border border-[#E5ECE8]'
+                    : 'text-[#667085] hover:text-[#111827]'
+                }`}
+              >
+                <ArrowUpRight className="h-3.5 w-3.5" />
+                <span>I Borrowed (I Owe)</span>
+              </button>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="counterparty" className="text-xs font-semibold text-[#344054]">
@@ -174,7 +261,7 @@ export function DebtForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="debt-amount" className="text-xs font-semibold text-[#344054]">
-              Amount (₹)
+              Original Amount (₹)
             </Label>
             <Input
               id="debt-amount"
@@ -184,9 +271,17 @@ export function DebtForm({
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-base font-medium"
-              required
+              className={`h-11 rounded-[10px] border-[#E5ECE8] text-base font-medium ${
+                isEdit ? 'bg-[#F8FAFC] text-[#64748B] cursor-not-allowed' : ''
+              }`}
+              required={!isEdit}
+              disabled={isEdit}
             />
+            {isEdit && (
+              <p className="text-[11px] text-[#667085]">
+                Original amount is immutable. Use Lend More / Borrow More to record additional movements.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -203,29 +298,31 @@ export function DebtForm({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-[#344054]">
-              Payment Account (optional)
-            </Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
-                <SelectValue placeholder="Select account (optional)" />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
-                <SelectItem value="none" className="text-sm">
-                  None (Record untracked / offline loan)
-                </SelectItem>
-                {accounts.map((acc) => (
-                  <SelectItem key={acc.id} value={acc.id} className="text-sm">
-                    {acc.name} ({direction === 'RECEIVABLE' ? 'Deduct amount' : 'Add amount'})
+          {!isEdit && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-[#344054]">
+                Payment Account (optional)
+              </Label>
+              <Select value={accountId} onValueChange={setAccountId}>
+                <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                  <SelectValue placeholder="Select account (optional)" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                  <SelectItem value="none" className="text-sm">
+                    None (Record untracked / offline loan)
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-[#667085]">
-              Selecting an account automatically updates its balance without affecting monthly income/expense totals.
-            </p>
-          </div>
+                  {accounts.map((acc) => (
+                    <SelectItem key={acc.id} value={acc.id} className="text-sm">
+                      {acc.name} ({direction === 'RECEIVABLE' ? 'Deduct amount' : 'Add amount'})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-[#667085]">
+                Selecting an account automatically updates its balance without affecting monthly income/expense totals.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -237,8 +334,11 @@ export function DebtForm({
                 type="date"
                 value={startedAt}
                 onChange={(e) => setStartedAt(e.target.value)}
-                className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+                className={`h-11 rounded-[10px] border-[#E5ECE8] text-sm ${
+                  isEdit ? 'bg-[#F8FAFC] text-[#64748B] cursor-not-allowed' : ''
+                }`}
                 required
+                disabled={isEdit}
               />
             </div>
             <div className="space-y-1.5">
@@ -280,7 +380,7 @@ export function DebtForm({
                 Saving...
               </>
             ) : (
-              'Save Record'
+              isEdit ? 'Update Record' : 'Save Record'
             )}
           </Button>
         </form>

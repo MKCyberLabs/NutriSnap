@@ -544,4 +544,74 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       /Source account cannot be the credit card being paid/
     );
   });
+
+  await t.test('V2-653d: Fully paid credit card returns activeStatement: null while preserving allStatements history', async () => {
+    const stmt = await db.creditCardStatement.findFirst({
+      where: { accountId: cardA.id, periodKey: '2026-10' }
+    });
+    assert.ok(stmt);
+
+    const payFinal = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmt.id,
+      fromAccountId: bankA.id,
+      amount: 8000,
+    }, db);
+    assert.equal(payFinal.fullyPaid, true);
+    assert.equal(payFinal.statementStatus, 'PAID');
+
+    const details = await creditCardService.getCreditCardDetails(userAId, cardA.id, db);
+    assert.equal(details.activeStatement, null);
+    assert.ok(details.allStatements.length > 0);
+    const stmtInHistory = details.allStatements.find((s: any) => s.id === stmt.id);
+    assert.ok(stmtInHistory);
+    assert.equal(stmtInHistory.status, 'PAID');
+  });
+
+  await t.test('V2-652b: Safe Obligation edit preserves completed occurrence history', async () => {
+    const obDate = new Date('2026-10-01T10:00:00.000Z');
+    const obligation = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Electricity Power Bill',
+        kind: 'BILL',
+        amount: new Decimal(2400),
+        accountId: bankA.id,
+        dueAt: obDate,
+        nextDueAt: obDate,
+        recurrenceType: 'MONTHLY',
+        recurrenceInterval: 1,
+        reminderOffsetsMin: [0],
+        isActive: true,
+      }
+    });
+
+    await financeService.markObligationPaid(userAId, {
+      obligationId: obligation.id,
+      occurrenceKey: '2026-10-01',
+      createExpense: false,
+    }, db);
+
+    const occBefore = await db.obligationOccurrence.findFirst({
+      where: { obligationId: obligation.id, occurrenceKey: '2026-10-01' }
+    });
+    assert.ok(occBefore);
+    assert.equal(occBefore.status, 'COMPLETED');
+
+    const updateRes = await financeService.updateObligation(userAId, obligation.id, {
+      title: 'Bescom Electricity Bill',
+      amount: '2600.00',
+      notes: 'Updated tariff',
+    }, db);
+
+    assert.equal(updateRes.success, true);
+    assert.equal(updateRes.obligation.title, 'Bescom Electricity Bill');
+    assert.equal(new Decimal(updateRes.obligation.amount).toString(), '2600');
+
+    const occAfter = await db.obligationOccurrence.findFirst({
+      where: { obligationId: obligation.id, occurrenceKey: '2026-10-01' }
+    });
+    assert.ok(occAfter);
+    assert.equal(occAfter.id, occBefore.id);
+    assert.equal(occAfter.status, 'COMPLETED');
+  });
 });

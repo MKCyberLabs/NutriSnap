@@ -120,17 +120,16 @@ export async function createCreditCardStatement(
     throw new Error(`Statement for period ${parsed.periodKey} already exists for this card`);
   }
 
-  // Find or create linked Obligation
-  let obligation = await db.obligation.findFirst({
-    where: {
-      userId,
-      accountId: account.id,
-      kind: 'CREDIT_CARD',
-      isArchived: false,
-    }
-  });
-
   const executeInTransaction = async (tx: any) => {
+    let obligation = await tx.obligation.findFirst({
+      where: {
+        userId,
+        accountId: account.id,
+        kind: 'CREDIT_CARD',
+        isArchived: false,
+      }
+    });
+
     if (!obligation) {
       obligation = await tx.obligation.create({
         data: {
@@ -152,6 +151,7 @@ export async function createCreditCardStatement(
         where: { id: obligation.id },
         data: {
           amount: statementAmount,
+          dueAt: dueDate,
           nextDueAt: dueDate,
           isActive: true,
         }
@@ -634,7 +634,7 @@ export async function getCreditCardDetails(
   const creditLimit = account.creditLimit;
   const availableCredit = creditLimit ? creditLimit.minus(ledgerBalance) : null;
 
-  // Active / Latest open or partial statement (fully paid statements are not active)
+  // Active statement is the first open/partial statement; when all statements are paid, activeStatement is null
   const statements = account.creditCardStatements;
   const activeStatement = statements.find((s: any) => s.status !== 'PAID') || null;
 

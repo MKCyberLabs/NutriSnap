@@ -19,6 +19,7 @@ import {
   getAccounts,
   getDebts,
   createDebt,
+  updateDebt,
   recordDebtCollection,
   recordDebtRepayment,
   recordAdditionalLend,
@@ -43,6 +44,8 @@ export default function DebtsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<DebtModalMode>('COLLECT');
   const [selectedDebt, setSelectedDebt] = useState<any>(null);
+  const [editDebtModalOpen, setEditDebtModalOpen] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<any>(null);
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -274,6 +277,10 @@ export default function DebtsPage() {
                 <DebtCard
                   key={debt.id}
                   debt={debt}
+                  onEdit={(d) => {
+                    setEditingDebt(d);
+                    setEditDebtModalOpen(true);
+                  }}
                   onCollect={(d) => handleOpenMovementModal(d, 'COLLECT')}
                   onRepay={(d) => handleOpenMovementModal(d, 'REPAY')}
                   onLendMore={(d) => handleOpenMovementModal(d, 'LEND_MORE')}
@@ -283,6 +290,25 @@ export default function DebtsPage() {
                 />
               ))}
             </div>
+          )}
+
+          {/* Edit Debt Modal */}
+          {editingDebt && (
+            <DebtForm
+              debt={editingDebt}
+              open={editDebtModalOpen}
+              onOpenChange={setEditDebtModalOpen}
+              accounts={accounts}
+              onSubmitAction={async (data) => {
+                const session = getAuthSession();
+                if (!session) throw new Error('Not authenticated');
+                return await updateDebt(session.id, editingDebt.id, data);
+              }}
+              onSuccess={() => {
+                const session = getAuthSession();
+                if (session) loadData(session.id);
+              }}
+            />
           )}
         </div>
       )}

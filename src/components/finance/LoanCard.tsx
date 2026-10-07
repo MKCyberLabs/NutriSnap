@@ -12,6 +12,7 @@ import {
   Sliders,
   DollarSign,
   Percent,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format, parseISO } from 'date-fns';
@@ -37,6 +38,7 @@ interface LoanCardProps {
     paymentAccount?: { id: string; name: string } | null;
     payments?: Array<any>;
   };
+  onEdit?: (loan: any) => void;
   onRecordEmi?: (loan: any) => void;
   onReconcile?: (loan: any) => void;
   onClose?: (loanId: string) => void;
@@ -56,6 +58,7 @@ const LOAN_TYPE_LABELS: Record<string, string> = {
 
 export function LoanCard({
   loan,
+  onEdit,
   onRecordEmi,
   onReconcile,
   onClose,
@@ -191,6 +194,18 @@ export function LoanCard({
 
       <div className="mt-4 pt-3 border-t border-[#E5ECE8]/60 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
+          {onEdit && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onEdit(loan)}
+              className="h-8 px-2.5 rounded-lg border-[#E5ECE8] text-[#344054] hover:bg-[#F9FAFB] text-xs font-medium flex items-center gap-1"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          )}
+
           {isActive && onRecordEmi && (
             <Button
               size="sm"

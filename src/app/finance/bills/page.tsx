@@ -16,6 +16,7 @@ import {
   getAccounts,
   getObligations,
   createObligation,
+  updateObligation,
   markObligationPaid,
   revertObligationPayment,
   toggleObligationActive,
@@ -34,6 +35,8 @@ export default function BillsPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [obligations, setObligations] = useState<any[]>([]);
   const [filter, setFilter] = useState<'UPCOMING' | 'ALL'>('UPCOMING');
+  const [editingObligation, setEditingObligation] = useState<any | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -204,9 +207,37 @@ export default function BillsPage() {
                     if (session) loadData(session.id);
                   }}
                   onArchive={handleArchive}
+                  onEdit={(obligation) => {
+                    setEditingObligation(obligation);
+                    setEditModalOpen(true);
+                  }}
                 />
               ))}
             </div>
+          )}
+
+          {editingObligation && (
+            <ObligationForm
+              accounts={accounts}
+              obligation={editingObligation}
+              open={editModalOpen}
+              onOpenChange={(isOpen) => {
+                setEditModalOpen(isOpen);
+                if (!isOpen) setEditingObligation(null);
+              }}
+              onSubmitAction={async (data) => {
+                const session = getAuthSession();
+                if (session && editingObligation) {
+                  return await updateObligation(session.id, editingObligation.id, data);
+                }
+              }}
+              onSuccess={() => {
+                const session = getAuthSession();
+                if (session) loadData(session.id);
+                setEditingObligation(null);
+                setEditModalOpen(false);
+              }}
+            />
           )}
         </div>
       )}
