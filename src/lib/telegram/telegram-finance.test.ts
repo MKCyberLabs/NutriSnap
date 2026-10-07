@@ -119,6 +119,15 @@ test('NSV01-0631: Telegram Paid callback idempotency and duplicate suppression',
         const occ = { id: `occ-${Date.now()}`, ...data };
         occurrences.set(`${data.obligationId}:${data.occurrenceKey}`, occ);
         return occ;
+      },
+      update: async ({ where, data }: any) => {
+        for (const val of occurrences.values()) {
+          if (val.id === where.id) {
+            Object.assign(val, data);
+            return val;
+          }
+        }
+        return null;
       }
     },
     financialTransaction: {

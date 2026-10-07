@@ -411,3 +411,275 @@ test('NSV01-0536: Existing durable delivery claim and retry behavior preserved a
 
   assert.equal(tick5Result.wealthRemindersSent, 0, 'SENT delivery never resends');
 });
+
+test('V2-6001: Personal Debt due reminder delivers Telegram message and creates delivery record', async () => {
+  const mockBot = createMockBot();
+  const now = new Date('2026-10-10T10:00:00.000Z');
+
+  let createdReminder: any = null;
+  let createdDelivery: any = null;
+  let updatedDelivery: any = null;
+
+  const mockDb = {
+    reminder: {
+      findMany: async () => [],
+      findFirst: async () => createdReminder,
+      create: async (args: any) => {
+        createdReminder = { id: 'rem-debt-1', ...args.data };
+        return createdReminder;
+      },
+    },
+    hydrationSetting: {
+      findMany: async () => [],
+    },
+    obligation: {
+      findMany: async () => [],
+    },
+    personalDebt: {
+      findMany: async () => [
+        {
+          id: 'debt-rec-1',
+          userId: 'usr-debt-1',
+          direction: 'RECEIVABLE',
+          counterpartyName: 'Alice Sharma',
+          title: 'Lent for travel',
+          originalAmount: new Prisma.Decimal('5000.00'),
+          dueAt: new Date('2026-10-10T10:00:00.000Z'),
+          reminderOffsetsMin: [0],
+          status: 'OPEN',
+          user: { id: 'usr-debt-1', telegramId: 'tg-debt-1', timezone: 'Asia/Kolkata' },
+          transactions: [],
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => null,
+      create: async (args: any) => {
+        createdDelivery = { id: 'del-debt-101', ...args.data };
+        return createdDelivery;
+      },
+      update: async (args: any) => {
+        updatedDelivery = { ...createdDelivery, ...args.data };
+        return updatedDelivery;
+      },
+    },
+  };
+
+  const result = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(result.debtsChecked, 1, '1 debt checked');
+  assert.equal(result.wealthRemindersSent, 1, '1 wealth reminder sent');
+  assert.equal(mockBot.sentMessages.length, 1);
+  assert.match(mockBot.sentMessages[0].text, /Collect from \*\*Alice Sharma\*\*/);
+  assert.match(mockBot.sentMessages[0].text, /5,000\.00/);
+  assert.equal(createdReminder?.type, 'PERSONAL_DEBT');
+  assert.equal(createdReminder?.category, 'debt-rec-1');
+  assert.equal(updatedDelivery?.status, 'SENT');
+  assert.equal(updatedDelivery?.attemptCount, 1);
+});
+
+test('V2-6001b: Fully settled debt creates NO reminder', async () => {
+  const mockBot = createMockBot();
+  const now = new Date('2026-10-10T10:00:00.000Z');
+
+  const mockDb = {
+    reminder: { findMany: async () => [], findFirst: async () => null },
+    hydrationSetting: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    personalDebt: {
+      findMany: async () => [
+        {
+          id: 'debt-settled-1',
+          userId: 'usr-debt-2',
+          direction: 'RECEIVABLE',
+          counterpartyName: 'Bob',
+          originalAmount: new Prisma.Decimal('3000.00'),
+          dueAt: new Date('2026-10-10T10:00:00.000Z'),
+          reminderOffsetsMin: [0],
+          status: 'OPEN',
+          user: { id: 'usr-debt-2', telegramId: 'tg-debt-2', timezone: 'UTC' },
+          transactions: [
+            { type: 'DEBT_COLLECT', amount: new Prisma.Decimal('3000.00') },
+          ],
+        },
+      ],
+    },
+    reminderDelivery: { findFirst: async () => null },
+  };
+
+  const result = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(result.debtsChecked, 1);
+  assert.equal(result.wealthRemindersSent, 0, 'No reminder for zero outstanding debt');
+  assert.equal(mockBot.sentMessages.length, 0);
+});
+
+test('V2-6002: Unlinked Loan EMI reminder delivers Telegram message and creates delivery record', async () => {
+  const mockBot = createMockBot();
+  const now = new Date('2026-10-15T09:00:00.000Z');
+
+  let createdReminder: any = null;
+  let createdDelivery: any = null;
+  let updatedDelivery: any = null;
+
+  const mockDb = {
+    reminder: {
+      findMany: async () => [],
+      findFirst: async () => createdReminder,
+      create: async (args: any) => {
+        createdReminder = { id: 'rem-loan-1', ...args.data };
+        return createdReminder;
+      },
+    },
+    hydrationSetting: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    personalDebt: { findMany: async () => [] },
+    loan: {
+      findMany: async () => [
+        {
+          id: 'loan-hdfc-1',
+          userId: 'usr-loan-1',
+          name: 'Home Loan',
+          lender: 'HDFC Bank',
+          emiAmount: new Prisma.Decimal('28500.00'),
+          nextEmiDate: new Date('2026-10-15T09:00:00.000Z'),
+          obligationId: null, // Unlinked loan
+          status: 'ACTIVE',
+          user: { id: 'usr-loan-1', telegramId: 'tg-loan-1', timezone: 'Asia/Kolkata' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => null,
+      create: async (args: any) => {
+        createdDelivery = { id: 'del-loan-101', ...args.data };
+        return createdDelivery;
+      },
+      update: async (args: any) => {
+        updatedDelivery = { ...createdDelivery, ...args.data };
+        return updatedDelivery;
+      },
+    },
+  };
+
+  const result = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(result.loansChecked, 1, '1 loan checked');
+  assert.equal(result.wealthRemindersSent, 1, '1 wealth reminder sent');
+  assert.equal(mockBot.sentMessages.length, 1);
+  assert.match(mockBot.sentMessages[0].text, /Loan EMI Reminder/);
+  assert.match(mockBot.sentMessages[0].text, /Home Loan/);
+  assert.match(mockBot.sentMessages[0].text, /HDFC Bank/);
+  assert.match(mockBot.sentMessages[0].text, /28,500\.00/);
+  assert.equal(createdReminder?.type, 'LOAN_EMI');
+  assert.equal(createdReminder?.category, 'loan-hdfc-1');
+  assert.equal(updatedDelivery?.status, 'SENT');
+  assert.equal(updatedDelivery?.attemptCount, 1);
+});
+
+test('V2-6004: Deduplication prevents repeat delivery of debt and loan reminders on next tick', async () => {
+  const mockBot = createMockBot();
+  const tick1Now = new Date('2026-10-15T09:00:00.000Z');
+  const tick2Now = new Date('2026-10-15T09:01:00.000Z');
+
+  let persistentDebtDelivery: any = null;
+  let persistentLoanDelivery: any = null;
+
+  const mockDb = {
+    reminder: {
+      findMany: async () => [],
+      findFirst: async (args: any) => ({ id: `rem-${args.where.type}` }),
+    },
+    hydrationSetting: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    personalDebt: {
+      findMany: async () => [
+        {
+          id: 'debt-dup-1',
+          userId: 'usr-dup',
+          direction: 'PAYABLE',
+          counterpartyName: 'Charlie',
+          originalAmount: new Prisma.Decimal('2000.00'),
+          dueAt: tick1Now,
+          reminderOffsetsMin: [0],
+          status: 'OPEN',
+          user: { id: 'usr-dup', telegramId: 'tg-dup', timezone: 'UTC' },
+          transactions: [],
+        },
+      ],
+    },
+    loan: {
+      findMany: async () => [
+        {
+          id: 'loan-dup-1',
+          userId: 'usr-dup',
+          name: 'Car Loan',
+          lender: 'SBI',
+          emiAmount: new Prisma.Decimal('8500.00'),
+          nextEmiDate: tick1Now,
+          obligationId: null,
+          status: 'ACTIVE',
+          user: { id: 'usr-dup', telegramId: 'tg-dup', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async (args: any) => {
+        if (args.where.reminderId === 'rem-PERSONAL_DEBT') return persistentDebtDelivery;
+        if (args.where.reminderId === 'rem-LOAN_EMI') return persistentLoanDelivery;
+        return null;
+      },
+      create: async (args: any) => {
+        const item = { id: `del-${args.data.reminderId}`, ...args.data };
+        if (args.data.reminderId === 'rem-PERSONAL_DEBT') persistentDebtDelivery = item;
+        if (args.data.reminderId === 'rem-LOAN_EMI') persistentLoanDelivery = item;
+        return item;
+      },
+      update: async (args: any) => {
+        if (args.where.id === 'del-rem-PERSONAL_DEBT') {
+          persistentDebtDelivery = { ...persistentDebtDelivery, ...args.data };
+          return persistentDebtDelivery;
+        }
+        if (args.where.id === 'del-rem-LOAN_EMI') {
+          persistentLoanDelivery = { ...persistentLoanDelivery, ...args.data };
+          return persistentLoanDelivery;
+        }
+        return { id: args.where.id, ...args.data };
+      },
+    },
+  };
+
+  // --- Tick 1: Both deliver ---
+  const result1 = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now: tick1Now,
+  });
+
+  assert.equal(result1.wealthRemindersSent, 2, 'Debt and Loan both sent on tick 1');
+  assert.equal(mockBot.sentMessages.length, 2);
+  assert.equal(persistentDebtDelivery?.status, 'SENT');
+  assert.equal(persistentLoanDelivery?.status, 'SENT');
+
+  // --- Tick 2: 1 minute later: Neither resends ---
+  const result2 = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now: tick2Now,
+  });
+
+  assert.equal(result2.wealthRemindersSent, 0, 'Zero reminders sent on tick 2 (durable dedupe)');
+  assert.equal(mockBot.sentMessages.length, 2, 'Total sent messages remained 2');
+});

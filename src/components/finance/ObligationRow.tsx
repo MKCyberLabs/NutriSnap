@@ -10,6 +10,11 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  Archive,
+  RotateCcw,
+  Trash2,
+  Pause,
+  Play,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,6 +44,8 @@ interface ObligationRowProps {
     nextDueAt: string | Date;
     recurrenceType: string;
     recurrenceInterval?: number | null;
+    lastCompletedAt?: string | Date | null;
+    isActive?: boolean;
     account?: { id: string; name: string } | null;
   };
   accounts: { id: string; name: string }[];
@@ -49,6 +56,10 @@ interface ObligationRowProps {
     accountId?: string;
   }) => Promise<any>;
   onPaidSuccess: () => void;
+  onUndoPaid?: (params: { obligationId: string; occurrenceKey?: string }) => Promise<any>;
+  onToggleActive?: (id: string, active: boolean) => Promise<any>;
+  onDelete?: (id: string) => Promise<any>;
+  onArchive?: (id: string) => void;
 }
 
 export function ObligationRow({
@@ -56,6 +67,10 @@ export function ObligationRow({
   accounts,
   onMarkPaid,
   onPaidSuccess,
+  onUndoPaid,
+  onToggleActive,
+  onDelete,
+  onArchive,
 }: ObligationRowProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [createExpense, setCreateExpense] = useState(true);
@@ -64,6 +79,74 @@ export function ObligationRow({
   );
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const handleUndoPaid = async () => {
+    if (!onUndoPaid) return;
+    setSubmitting(true);
+    try {
+      const res = await onUndoPaid({ obligationId: obligation.id });
+      if (res && res.error) throw new Error(res.error);
+      toast({
+        title: 'Payment Undone',
+        description: `Reverted last payment for "${obligation.title}". Next due date restored.`,
+      });
+      onPaidSuccess();
+    } catch (err: any) {
+      toast({
+        title: 'Error undoing payment',
+        description: err?.message || 'Could not revert payment',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggle = async () => {
+    if (!onToggleActive) return;
+    setSubmitting(true);
+    try {
+      const nextActive = !obligation.isActive;
+      const res = await onToggleActive(obligation.id, nextActive);
+      if (res && res.error) throw new Error(res.error);
+      toast({
+        title: nextActive ? 'Obligation Resumed' : 'Obligation Paused',
+        description: `Obligation "${obligation.title}" is now ${nextActive ? 'active' : 'paused'}.`,
+      });
+      onPaidSuccess();
+    } catch (err: any) {
+      toast({
+        title: 'Error toggling obligation',
+        description: err?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    if (!confirm(`Are you sure you want to delete "${obligation.title}"?`)) return;
+    setSubmitting(true);
+    try {
+      const res = await onDelete(obligation.id);
+      if (res && res.error) throw new Error(res.error);
+      toast({
+        title: 'Obligation Deleted',
+        description: `Deleted "${obligation.title}".`,
+      });
+      onPaidSuccess();
+    } catch (err: any) {
+      toast({
+        title: 'Cannot delete obligation',
+        description: err?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const getKindIcon = (kind: string) => {
     switch (kind) {
@@ -197,16 +280,69 @@ export function ObligationRow({
           </div>
         </div>
 
-        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-          <DialogTrigger asChild>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {onToggleActive && (
             <Button
+              variant="ghost"
               size="sm"
-              className="h-9 px-3 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+              disabled={submitting}
+              onClick={handleToggle}
+              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+              title={obligation.isActive ? 'Pause obligation' : 'Resume obligation'}
             >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Paid</span>
+              {obligation.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </Button>
-          </DialogTrigger>
+          )}
+
+          {onUndoPaid && obligation.lastCompletedAt && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={submitting}
+              onClick={handleUndoPaid}
+              className="h-9 px-2.5 rounded-[10px] text-xs font-semibold text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] flex items-center gap-1"
+              title="Undo last payment"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Undo Paid</span>
+            </Button>
+          )}
+
+          <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+            <DialogTrigger asChild>
+              <Button
+                size="sm"
+                className="h-9 px-3 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>Paid</span>
+              </Button>
+            </DialogTrigger>
+
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={submitting}
+              onClick={handleDelete}
+              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+              title="Delete obligation"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+
+          {onArchive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onArchive(obligation.id)}
+              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+              title="Archive obligation"
+            >
+              <Archive className="h-4 w-4" />
+            </Button>
+          )}
           <DialogContent className="sm:max-w-[400px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
             <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
               <DialogTitle className="text-base font-semibold text-[#111827]">
@@ -277,5 +413,6 @@ export function ObligationRow({
         </Dialog>
       </div>
     </div>
+  </div>
   );
 }

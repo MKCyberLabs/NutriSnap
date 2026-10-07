@@ -259,6 +259,69 @@ export async function getTodaySummary(userId: string): Promise<TodaySummaryData>
       }
     }
 
+    // Near-term Personal Debts (Friends & Family)
+    const debts = await prisma.personalDebt.findMany({
+      where: {
+        userId: authUser.id,
+        status: 'OPEN',
+        dueAt: { not: null, lte: weekFromNow },
+      },
+    });
+
+    for (const d of debts) {
+      if (!d.dueAt) continue;
+      const dueDate = new Date(d.dueAt);
+      const isDueToday = dueDate.getTime() <= dayEnd.getTime();
+      const isDueWeek = dueDate.getTime() > dayEnd.getTime() && dueDate.getTime() <= weekFromNow.getTime();
+
+      const item: TodayReminderItem = {
+        id: d.id,
+        domain: 'FINANCE',
+        title: d.direction === 'RECEIVABLE' ? `Collect: ${d.counterpartyName}` : `Repay: ${d.counterpartyName}`,
+        timeOrDue: d.dueAt.toISOString(),
+        type: d.direction === 'RECEIVABLE' ? 'DEBT_COLLECT' : 'DEBT_REPAY',
+        isOverdue: dueDate.getTime() < now.getTime(),
+      };
+
+      if (isDueToday) {
+        dueToday.push(item);
+      } else if (isDueWeek) {
+        upcomingThisWeek.push(item);
+      }
+    }
+
+    // Near-term active loans (not already linked to obligations)
+    const unlinkedLoans = await prisma.loan.findMany({
+      where: {
+        userId: authUser.id,
+        status: 'ACTIVE',
+        obligationId: null,
+        nextEmiDate: { not: null, lte: weekFromNow },
+      },
+    });
+
+    for (const l of unlinkedLoans) {
+      if (!l.nextEmiDate) continue;
+      const dueDate = new Date(l.nextEmiDate);
+      const isDueToday = dueDate.getTime() <= dayEnd.getTime();
+      const isDueWeek = dueDate.getTime() > dayEnd.getTime() && dueDate.getTime() <= weekFromNow.getTime();
+
+      const item: TodayReminderItem = {
+        id: l.id,
+        domain: 'FINANCE',
+        title: `EMI: ${l.name}`,
+        timeOrDue: l.nextEmiDate.toISOString(),
+        type: 'EMI',
+        isOverdue: dueDate.getTime() < now.getTime(),
+      };
+
+      if (isDueToday) {
+        dueToday.push(item);
+      } else if (isDueWeek) {
+        upcomingThisWeek.push(item);
+      }
+    }
+
     reminders = {
       status: 'ok',
       dueToday,

@@ -17,11 +17,17 @@ import {
   getObligations,
   createObligation,
   markObligationPaid,
+  revertObligationPayment,
+  toggleObligationActive,
+  deleteObligation,
+  archiveObligation,
 } from '@/app/finance/actions';
 import { ReceiptText } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function BillsPage() {
   const router = useRouter();
+  const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +69,40 @@ export default function BillsPage() {
     const session = getAuthSession();
     if (!session) return;
     return await markObligationPaid(session.id, params);
+  };
+
+  const handleUndoPaid = async (params: any) => {
+    const session = getAuthSession();
+    if (!session) return;
+    return await revertObligationPayment(session.id, params);
+  };
+
+  const handleToggleActive = async (obligationId: string, isActive: boolean) => {
+    const session = getAuthSession();
+    if (!session) return;
+    return await toggleObligationActive(session.id, obligationId, isActive);
+  };
+
+  const handleDelete = async (obligationId: string) => {
+    const session = getAuthSession();
+    if (!session) return;
+    return await deleteObligation(session.id, obligationId);
+  };
+
+  const handleArchive = async (obligationId: string) => {
+    const session = getAuthSession();
+    if (!session) return;
+    try {
+      await archiveObligation(session.id, obligationId);
+      toast({ title: 'Obligation archived', description: 'Hidden from active obligations.' });
+      loadData(session.id);
+    } catch (err: any) {
+      toast({
+        title: 'Error archiving obligation',
+        description: err?.message,
+        variant: 'destructive',
+      });
+    }
   };
 
   const activeObligations = obligations.filter((o) => o.isActive && !o.isArchived);
@@ -156,10 +196,14 @@ export default function BillsPage() {
                   obligation={ob}
                   accounts={accounts}
                   onMarkPaid={handleMarkPaid}
+                  onUndoPaid={handleUndoPaid}
+                  onToggleActive={handleToggleActive}
+                  onDelete={handleDelete}
                   onPaidSuccess={() => {
                     const session = getAuthSession();
                     if (session) loadData(session.id);
                   }}
+                  onArchive={handleArchive}
                 />
               ))}
             </div>

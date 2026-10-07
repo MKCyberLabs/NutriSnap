@@ -7,11 +7,14 @@ import {
   calculateDeliverySchedules,
   shouldDeliverNow,
   formatTelegramBillReminder,
+  formatTelegramDebtReminder,
+  formatTelegramLoanEmiReminder,
   ObligationDeliveryTarget,
   MAX_DELIVERY_ATTEMPTS,
   evaluateDeliverySuccess,
   evaluateDeliveryFailure,
 } from './reminders/delivery-engine';
+import { calculateDebtOutstanding } from './finance/finance';
 
 let isStarted = false;
 
@@ -29,14 +32,18 @@ export interface SchedulerTickResult {
   hydrationSettingsChecked: number;
   hydrationRemindersSent: number;
   obligationsChecked: number;
+  debtsChecked?: number;
+  loansChecked?: number;
   wealthRemindersSent: number;
 }
 
 /**
- * Executes a single scheduler tick across the three independent domains:
+ * Executes a single scheduler tick across independent domains:
  * 1. Health / Meal reminders
  * 2. Hydration reminders
  * 3. Wealth & Obligation reminders
+ * 4. Personal Debt reminders
+ * 5. Loan EMI reminders
  *
  * Each domain is isolated: zero records or an error in one domain never prevents
  * the other domains from processing.
@@ -54,6 +61,8 @@ export async function processSchedulerTick(
     hydrationSettingsChecked: 0,
     hydrationRemindersSent: 0,
     obligationsChecked: 0,
+    debtsChecked: 0,
+    loansChecked: 0,
     wealthRemindersSent: 0,
   };
 
@@ -358,6 +367,351 @@ export async function processSchedulerTick(
     }
   } catch (wealthErr) {
     console.error('[Scheduler] Error in wealth obligation processing:', wealthErr);
+  }
+
+  // --- 4. Personal Debt Reminders ---
+  try {
+    if (typeof db.personalDebt?.findMany === 'function') {
+      const activeDebts = await db.personalDebt.findMany({
+        where: {
+          status: 'OPEN',
+          dueAt: { not: null },
+        },
+        include: { user: true, transactions: true },
+      });
+
+      result.debtsChecked = activeDebts.length;
+
+      for (const debt of activeDebts) {
+        if (!debt.user?.telegramId || !debt.dueAt) continue;
+        const outstanding = calculateDebtOutstanding(debt.direction, debt.originalAmount, debt.transactions || []);
+        if (outstanding.lte(0)) continue;
+
+        const target: ObligationDeliveryTarget = {
+          id: debt.id,
+          userId: debt.userId,
+          title: debt.title || `${debt.direction === 'RECEIVABLE' ? 'Lent to' : 'Borrowed from'} ${debt.counterpartyName}`,
+          kind: 'DEBT',
+          amount: outstanding.toString(),
+          nextDueAt: debt.dueAt,
+          reminderOffsetsMin: debt.reminderOffsetsMin && debt.reminderOffsetsMin.length > 0 ? debt.reminderOffsetsMin : [0],
+          isActive: debt.status === 'OPEN',
+          isArchived: debt.status === 'ARCHIVED',
+        };
+
+        const schedules = calculateDeliverySchedules(target, now);
+
+        for (const sched of schedules) {
+          let reminder = await db.reminder.findFirst({
+            where: {
+              userId: debt.userId,
+              domain: 'FINANCE',
+              type: 'PERSONAL_DEBT',
+              category: debt.id,
+            },
+          });
+
+          if (!reminder) {
+            try {
+              reminder = await db.reminder.create({
+                data: {
+                  userId: debt.userId,
+                  domain: 'FINANCE',
+                  type: 'PERSONAL_DEBT',
+                  category: debt.id,
+                  title: target.title,
+                  isActive: true,
+                },
+              });
+            } catch {
+              reminder = await db.reminder.findFirst({
+                where: {
+                  userId: debt.userId,
+                  domain: 'FINANCE',
+                  type: 'PERSONAL_DEBT',
+                  category: debt.id,
+                },
+              });
+            }
+          }
+
+          if (!reminder) continue;
+
+          const existingDelivery = await db.reminderDelivery.findFirst({
+            where: {
+              reminderId: reminder.id,
+              occurrenceKey: sched.occurrenceKey,
+              offsetMinutes: sched.offsetMinutes,
+              channel: 'TELEGRAM',
+            },
+          });
+
+          const eligibility = shouldDeliverNow({
+            scheduledFor: sched.scheduledFor,
+            now,
+            snoozedUntil: existingDelivery?.snoozedUntil,
+            isStale: sched.isStale,
+            deliveryStatus: (existingDelivery?.status as any) || null,
+            attemptCount: existingDelivery?.attemptCount ?? 0,
+            lastAttemptAt: existingDelivery?.lastAttemptAt ?? null,
+            nextRetryAt: existingDelivery?.nextRetryAt ?? null,
+          });
+
+          if (!eligibility.shouldSend) continue;
+
+          let delivery = existingDelivery;
+          if (!delivery) {
+            try {
+              delivery = await db.reminderDelivery.create({
+                data: {
+                  userId: debt.userId,
+                  reminderId: reminder.id,
+                  occurrenceKey: sched.occurrenceKey,
+                  scheduledFor: sched.scheduledFor,
+                  offsetMinutes: sched.offsetMinutes,
+                  channel: 'TELEGRAM',
+                  status: 'PENDING',
+                  attemptCount: 0,
+                },
+              });
+            } catch {
+              continue;
+            }
+          }
+
+          const payload = formatTelegramDebtReminder({
+            debtId: debt.id,
+            direction: debt.direction,
+            counterpartyName: debt.counterpartyName,
+            amount: outstanding.toString(),
+            dueDate: debt.dueAt,
+            offsetMinutes: sched.offsetMinutes,
+            appBaseUrl: process.env.NEXTAUTH_URL || 'https://nutrisnap.app',
+          });
+
+          try {
+            const sent = await bot.api.sendMessage(debt.user.telegramId, payload.text, {
+              parse_mode: 'Markdown',
+              reply_markup: payload.reply_markup,
+            });
+
+            const successState = evaluateDeliverySuccess({
+              currentAttemptCount: delivery.attemptCount || 0,
+              sentAt: now,
+            });
+
+            await db.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: {
+                status: successState.status,
+                sentAt: successState.sentAt,
+                telegramMessageId: sent.message_id,
+                attemptCount: successState.attemptCount,
+                lastAttemptAt: successState.lastAttemptAt,
+                nextRetryAt: successState.nextRetryAt,
+              },
+            });
+            result.wealthRemindersSent++;
+            console.log(`[Scheduler] Sent debt reminder ${debt.id} to user ${debt.user.id}`);
+          } catch (sendErr: any) {
+            const failureState = evaluateDeliveryFailure({
+              currentAttemptCount: delivery.attemptCount || 0,
+              failedAt: now,
+              failureReason: sendErr?.message || 'Send error',
+            });
+
+            await db.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: {
+                status: failureState.status,
+                failureReason: failureState.failureReason,
+                attemptCount: failureState.attemptCount,
+                lastAttemptAt: failureState.lastAttemptAt,
+                nextRetryAt: failureState.nextRetryAt,
+              },
+            });
+            console.error(
+              `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for debt reminder ${debt.id}:`,
+              sendErr?.message
+            );
+          }
+        }
+      }
+    }
+  } catch (debtErr) {
+    console.error('[Scheduler] Error in debt reminder processing:', debtErr);
+  }
+
+  // --- 5. Unlinked Loan EMI Reminders ---
+  try {
+    if (typeof db.loan?.findMany === 'function') {
+      const activeLoans = await db.loan.findMany({
+        where: {
+          status: 'ACTIVE',
+          obligationId: null,
+          nextEmiDate: { not: null },
+        },
+        include: { user: true },
+      });
+
+      result.loansChecked = activeLoans.length;
+
+      for (const loan of activeLoans) {
+        if (!loan.user?.telegramId || !loan.nextEmiDate) continue;
+
+        const target: ObligationDeliveryTarget = {
+          id: loan.id,
+          userId: loan.userId,
+          title: loan.name,
+          kind: 'EMI',
+          amount: loan.emiAmount ? loan.emiAmount.toString() : null,
+          nextDueAt: loan.nextEmiDate,
+          reminderOffsetsMin: [0],
+          isActive: loan.status === 'ACTIVE',
+          isArchived: loan.status === 'ARCHIVED',
+        };
+
+        const schedules = calculateDeliverySchedules(target, now);
+
+        for (const sched of schedules) {
+          let reminder = await db.reminder.findFirst({
+            where: {
+              userId: loan.userId,
+              domain: 'FINANCE',
+              type: 'LOAN_EMI',
+              category: loan.id,
+            },
+          });
+
+          if (!reminder) {
+            try {
+              reminder = await db.reminder.create({
+                data: {
+                  userId: loan.userId,
+                  domain: 'FINANCE',
+                  type: 'LOAN_EMI',
+                  category: loan.id,
+                  title: loan.name,
+                  isActive: true,
+                },
+              });
+            } catch {
+              reminder = await db.reminder.findFirst({
+                where: {
+                  userId: loan.userId,
+                  domain: 'FINANCE',
+                  type: 'LOAN_EMI',
+                  category: loan.id,
+                },
+              });
+            }
+          }
+
+          if (!reminder) continue;
+
+          const existingDelivery = await db.reminderDelivery.findFirst({
+            where: {
+              reminderId: reminder.id,
+              occurrenceKey: sched.occurrenceKey,
+              offsetMinutes: sched.offsetMinutes,
+              channel: 'TELEGRAM',
+            },
+          });
+
+          const eligibility = shouldDeliverNow({
+            scheduledFor: sched.scheduledFor,
+            now,
+            snoozedUntil: existingDelivery?.snoozedUntil,
+            isStale: sched.isStale,
+            deliveryStatus: (existingDelivery?.status as any) || null,
+            attemptCount: existingDelivery?.attemptCount ?? 0,
+            lastAttemptAt: existingDelivery?.lastAttemptAt ?? null,
+            nextRetryAt: existingDelivery?.nextRetryAt ?? null,
+          });
+
+          if (!eligibility.shouldSend) continue;
+
+          let delivery = existingDelivery;
+          if (!delivery) {
+            try {
+              delivery = await db.reminderDelivery.create({
+                data: {
+                  userId: loan.userId,
+                  reminderId: reminder.id,
+                  occurrenceKey: sched.occurrenceKey,
+                  scheduledFor: sched.scheduledFor,
+                  offsetMinutes: sched.offsetMinutes,
+                  channel: 'TELEGRAM',
+                  status: 'PENDING',
+                  attemptCount: 0,
+                },
+              });
+            } catch {
+              continue;
+            }
+          }
+
+          const payload = formatTelegramLoanEmiReminder({
+            loanId: loan.id,
+            name: loan.name,
+            lender: loan.lender,
+            emiAmount: loan.emiAmount ? loan.emiAmount.toString() : null,
+            dueDate: loan.nextEmiDate,
+            offsetMinutes: sched.offsetMinutes,
+            appBaseUrl: process.env.NEXTAUTH_URL || 'https://nutrisnap.app',
+          });
+
+          try {
+            const sent = await bot.api.sendMessage(loan.user.telegramId, payload.text, {
+              parse_mode: 'Markdown',
+              reply_markup: payload.reply_markup,
+            });
+
+            const successState = evaluateDeliverySuccess({
+              currentAttemptCount: delivery.attemptCount || 0,
+              sentAt: now,
+            });
+
+            await db.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: {
+                status: successState.status,
+                sentAt: successState.sentAt,
+                telegramMessageId: sent.message_id,
+                attemptCount: successState.attemptCount,
+                lastAttemptAt: successState.lastAttemptAt,
+                nextRetryAt: successState.nextRetryAt,
+              },
+            });
+            result.wealthRemindersSent++;
+            console.log(`[Scheduler] Sent loan EMI reminder ${loan.id} to user ${loan.user.id}`);
+          } catch (sendErr: any) {
+            const failureState = evaluateDeliveryFailure({
+              currentAttemptCount: delivery.attemptCount || 0,
+              failedAt: now,
+              failureReason: sendErr?.message || 'Send error',
+            });
+
+            await db.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: {
+                status: failureState.status,
+                failureReason: failureState.failureReason,
+                attemptCount: failureState.attemptCount,
+                lastAttemptAt: failureState.lastAttemptAt,
+                nextRetryAt: failureState.nextRetryAt,
+              },
+            });
+            console.error(
+              `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for loan EMI reminder ${loan.id}:`,
+              sendErr?.message
+            );
+          }
+        }
+      }
+    }
+  } catch (loanErr) {
+    console.error('[Scheduler] Error in loan reminder processing:', loanErr);
   }
 
   return result;

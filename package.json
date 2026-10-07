@@ -11,13 +11,13 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:analysis-contract": "tsx --test src/lib/python-analysis-response.test.ts",
-    "test:finance": "tsx --test src/lib/finance/finance.test.ts src/lib/telegram/telegram-finance.test.ts",
+    "test:finance": "tsx --test src/lib/finance/finance.test.ts src/lib/finance/safe-updates.test.ts src/lib/finance/debt.test.ts src/lib/finance/loan.test.ts src/lib/finance/wishlist.test.ts src/lib/finance/overview.test.ts src/lib/finance/payment-lifecycle.test.ts src/lib/telegram/telegram-finance.test.ts src/lib/scenario/v02-acceptance-scenario.test.ts",
     "test:reminders": "tsx --test src/lib/recurrence/recurrence.test.ts src/lib/migration/migration-backfill.test.ts src/lib/migration/main-to-v01-migration.test.ts src/lib/reminders/reminders-delivery.test.ts src/lib/reminders/scheduler-tick.test.ts",
     "test:today": "tsx --test src/lib/today/today.test.ts",
     "test:security": "tsx --test src/lib/security/security-auth.test.ts src/lib/security/auth-routing.test.ts",
     "test:ui": "tsx --test src/lib/ui-redesign/ui-redesign.test.ts",
     "test:food": "tsx --test src/lib/food/meal-category.test.ts",
-    "test:life-hub": "tsx --test src/lib/finance/finance.test.ts src/lib/telegram/telegram-finance.test.ts src/lib/recurrence/recurrence.test.ts src/lib/migration/migration-backfill.test.ts src/lib/migration/main-to-v01-migration.test.ts src/lib/today/today.test.ts src/lib/reminders/reminders-delivery.test.ts src/lib/reminders/scheduler-tick.test.ts src/lib/security/security-auth.test.ts src/lib/scenario/health-wealth-scenario.test.ts src/lib/scenario/db-acceptance.test.ts",
+    "test:life-hub": "tsx --test src/lib/finance/finance.test.ts src/lib/telegram/telegram-finance.test.ts src/lib/recurrence/recurrence.test.ts src/lib/migration/migration-backfill.test.ts src/lib/migration/main-to-v01-migration.test.ts src/lib/today/today.test.ts src/lib/reminders/reminders-delivery.test.ts src/lib/reminders/scheduler-tick.test.ts src/lib/security/security-auth.test.ts src/lib/finance/payment-lifecycle.test.ts src/lib/scenario/health-wealth-scenario.test.ts src/lib/scenario/db-acceptance.test.ts src/lib/scenario/v02-acceptance-scenario.test.ts",
     "prisma:seed": "prisma db seed"
   },
   "dependencies": {

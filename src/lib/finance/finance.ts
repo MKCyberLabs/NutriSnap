@@ -6,7 +6,15 @@ export type Decimal = Prisma.Decimal;
 export const ACCOUNT_TYPES = ['BANK', 'CASH', 'WALLET', 'CREDIT_CARD'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
-export const TRANSACTION_TYPES = ['INCOME', 'EXPENSE', 'TRANSFER'] as const;
+export const TRANSACTION_TYPES = [
+  'INCOME',
+  'EXPENSE',
+  'TRANSFER',
+  'LEND',
+  'BORROW',
+  'DEBT_COLLECT',
+  'DEBT_REPAY'
+] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
 export const OBLIGATION_KINDS = [
@@ -182,6 +190,18 @@ export function calculateAccountBalance(
         // Incoming transfer
         balance = balance.plus(amount);
       }
+    } else if (tx.type === 'LEND' && tx.accountId === targetAccountId) {
+      // Cash lent to friend/family: account decreases
+      balance = balance.minus(amount);
+    } else if (tx.type === 'DEBT_COLLECT' && tx.accountId === targetAccountId) {
+      // Cash collected back from friend/family: account increases
+      balance = balance.plus(amount);
+    } else if (tx.type === 'BORROW' && tx.accountId === targetAccountId) {
+      // Cash borrowed from friend/family: account increases
+      balance = balance.plus(amount);
+    } else if (tx.type === 'DEBT_REPAY' && tx.accountId === targetAccountId) {
+      // Cash repaid to friend/family: account decreases
+      balance = balance.minus(amount);
     }
   }
 
@@ -190,8 +210,9 @@ export function calculateAccountBalance(
 
 /**
  * Computes monthly income and expense totals from transactions.
- * Non-negotiable invariant: TRANSFER transactions move value between accounts
- * and must NEVER inflate income or expense totals.
+ * Non-negotiable invariant: TRANSFER and personal debt transactions (LEND, BORROW,
+ * DEBT_COLLECT, DEBT_REPAY) move value between accounts/persons and must NEVER
+ * inflate income or expense totals.
  */
 export function calculateMonthlyTotals(
   transactions: Array<{
@@ -209,7 +230,7 @@ export function calculateMonthlyTotals(
     } else if (tx.type === 'EXPENSE') {
       expense = expense.plus(amount);
     }
-    // Note: TRANSFER is strictly excluded from income and expense!
+    // Note: TRANSFER, LEND, BORROW, DEBT_COLLECT, DEBT_REPAY are strictly excluded from income and expense!
   }
 
   return { income, expense };
@@ -251,4 +272,49 @@ export function formatINR(amount: Prisma.Decimal | number | string): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(num);
+}
+
+/**
+ * Computes outstanding balance for a PersonalDebt.
+ * For RECEIVABLE: sum(LEND) - sum(DEBT_COLLECT)
+ * For PAYABLE:    sum(BORROW) - sum(DEBT_REPAY)
+ * If no ledger transaction exists (e.g. untracked initial cash), base is originalAmount.
+ * Invariant: Outstanding must never be negative.
+ */
+export function calculateDebtOutstanding(
+  direction: string,
+  originalAmount: Prisma.Decimal | number | string,
+  transactions: Array<{
+    type: string;
+    amount: Prisma.Decimal | number | string;
+  }>
+): Prisma.Decimal {
+  const orig = new Prisma.Decimal(originalAmount);
+  let lendsOrBorrows = new Prisma.Decimal(0);
+  let collectsOrRepays = new Prisma.Decimal(0);
+  let hasLedgerMovement = false;
+
+  for (const t of transactions) {
+    const amt = new Prisma.Decimal(t.amount);
+    if (direction === 'RECEIVABLE') {
+      if (t.type === 'LEND') {
+        lendsOrBorrows = lendsOrBorrows.plus(amt);
+        hasLedgerMovement = true;
+      } else if (t.type === 'DEBT_COLLECT') {
+        collectsOrRepays = collectsOrRepays.plus(amt);
+      }
+    } else if (direction === 'PAYABLE') {
+      if (t.type === 'BORROW') {
+        lendsOrBorrows = lendsOrBorrows.plus(amt);
+        hasLedgerMovement = true;
+      } else if (t.type === 'DEBT_REPAY') {
+        collectsOrRepays = collectsOrRepays.plus(amt);
+      }
+    }
+  }
+
+  const totalPrincipal = hasLedgerMovement ? lendsOrBorrows : orig;
+  const outstanding = totalPrincipal.minus(collectsOrRepays);
+
+  return outstanding.greaterThan(0) ? outstanding : new Prisma.Decimal(0);
 }
