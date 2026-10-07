@@ -296,6 +296,18 @@ export async function archiveDebt(userId: string, debtId: string) {
 }
 
 /**
+ * Updates personal debt metadata (safe mutable fields).
+ */
+export async function updateDebt(userId: string, debtId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await (debtService as any).updateDebt(authUser.id, debtId, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/debts');
+  revalidatePath('/today');
+  return result;
+}
+
+/**
  * Creates a loan liability snapshot.
  */
 export async function createLoan(userId: string, data: unknown) {
@@ -374,6 +386,19 @@ export async function archiveLoan(userId: string, loanId: string) {
   revalidatePath('/finance');
   revalidatePath('/finance/loans');
   revalidatePath('/today');
+  return result;
+}
+
+/**
+ * Updates loan metadata (safe mutable fields).
+ */
+export async function updateLoan(userId: string, loanId: string, data: unknown) {
+  const authUser = await verifyAuth(userId);
+  const result = await (loanService as any).updateLoan(authUser.id, loanId, data);
+  revalidatePath('/finance');
+  revalidatePath('/finance/loans');
+  revalidatePath('/today');
+  revalidatePath('/reminders');
   return result;
 }
 
