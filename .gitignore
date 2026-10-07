@@ -46,3 +46,6 @@ prisma/generated/
 # Custom Application Data
 /public/uploads/tsconfig.tsbuildinfo
 tsconfig.tsbuildinfo
+
+# Agent orchestration runtime
+.cbds/
