@@ -104,9 +104,13 @@
 ## 5. Independent Review Status
 
 - **Review Task:** `tsk_m4djw0enkbwp6` in cbds run `run_m4b5hrvfwv4xw`.
+- **Review Dispatch:** `dsp_m4dk9we62majh` (attempt 2 of 3).
+- **Review Report ID:** `rpt_m4dncj522e2sa` (accepted, outcome: `blocked`).
 - **Reviewer:** Codex (`gpt-6.1-sol`, `high` reasoning effort, read-only).
+- **Report Subject:** `Sol review blocked`
+- **Report Body:** `Sandbox preflight failed. HEAD=3dab0fdc2535399ede32f15831704a4caa28083c. No model review started.`
 - **Dispatch Outcome:** **BLOCKED by environment sandbox**.
-- **Evidence:** Documented in `docs/experiments/NUTRI_R001_SOL_REVIEW_BLOCKED.md`. The bubblewrap sandbox failed with:
+- **Evidence:** Documented in `docs/experiments/NUTRI_R001_SOL_REVIEW_BLOCKED.md`. The bubblewrap sandbox preflight failed with:
   ```text
   bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
   ```
