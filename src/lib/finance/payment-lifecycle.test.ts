@@ -1562,4 +1562,319 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(result.amountUsed.toString(), '3000');
     assert.equal(result.availableCredit?.toString(), '47000');
   });
+
+  await t.test('SOL-R002-001 & SOL-R001-002: Revert CC payment from Bills targets specific payment and supports idempotent repeated undo', async () => {
+    const cardAcc = await db.financialAccount.create({
+      data: {
+        userId: userAId,
+        name: 'SBI Prime Card R3',
+        type: 'CREDIT_CARD',
+        openingBalance: new Decimal(0),
+        creditLimit: new Decimal(200000),
+        statementDay: 15,
+        paymentDueDay: 5,
+        defaultPaymentAccountId: bankA.id,
+        isActive: true,
+      }
+    });
+
+    const stmtRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardAcc.id,
+      periodKey: '2026-11',
+      statementDate: new Date('2026-11-15T12:00:00.000Z'),
+      dueDate: new Date('2026-12-05T12:00:00.000Z'),
+      statementAmount: 25000,
+    }, db);
+    const stmtId = stmtRes.statement.id;
+    const stmt = await db.creditCardStatement.findUnique({ where: { id: stmtId } });
+    assert.ok(stmt);
+    const obId = stmt.obligationId!;
+    assert.ok(obId);
+
+    // 1. First partial payment of 10,000 recorded directly
+    const directPay = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtId,
+      fromAccountId: bankA.id,
+      amount: 10000,
+      paidAt: new Date(),
+      note: 'Direct partial payment',
+    }, db);
+    assert.equal(directPay.statementStatus, 'PARTIAL');
+    assert.equal(directPay.pendingBalance, '15000');
+
+    // 2. Second payment of remaining 15,000 recorded via markObligationPaid from Bills
+    const billPay = await financeService.markObligationPaid(userAId, {
+      obligationId: obId,
+      occurrenceKey: '2026-12-05',
+      accountId: bankA.id,
+    }, db);
+    assert.equal(billPay.success, true);
+    assert.equal(billPay.statementStatus, 'PAID');
+
+    // Verify 2 payments exist
+    const paymentsBeforeUndo = await db.creditCardPayment.findMany({
+      where: { statementId: stmtId },
+      orderBy: { createdAt: 'asc' },
+    });
+    assert.equal(paymentsBeforeUndo.length, 2);
+    assert.equal(paymentsBeforeUndo[0].id, directPay.paymentId);
+    assert.equal(paymentsBeforeUndo[1].transactionId, billPay.transactionId);
+
+    // 3. First undo from Bills via revertObligationPayment
+    const undoRes1 = await financeService.revertObligationPayment(userAId, {
+      obligationId: obId,
+      occurrenceKey: '2026-12-05',
+    }, db);
+    assert.equal(undoRes1.success, true);
+    assert.equal(undoRes1.alreadyReversed, false);
+    assert.equal(undoRes1.restoredStatus, 'PARTIAL');
+    assert.equal(undoRes1.pendingBalance, '15000');
+
+    // Verify only the second payment was undone, the first payment (directPay) remains intact!
+    const paymentsAfterFirstUndo = await db.creditCardPayment.findMany({
+      where: { statementId: stmtId },
+    });
+    assert.equal(paymentsAfterFirstUndo.length, 1);
+    assert.equal(paymentsAfterFirstUndo[0].id, directPay.paymentId);
+
+    // 4. Repeated undo from Bills: must return idempotent success and NEVER reverse directPay!
+    const undoRes2 = await financeService.revertObligationPayment(userAId, {
+      obligationId: obId,
+      occurrenceKey: '2026-12-05',
+    }, db);
+    assert.equal(undoRes2.success, true);
+    assert.equal(undoRes2.alreadyReversed, true);
+
+    const paymentsAfterSecondUndo = await db.creditCardPayment.findMany({
+      where: { statementId: stmtId },
+    });
+    assert.equal(paymentsAfterSecondUndo.length, 1, 'First payment must NOT be reversed on repeated undo');
+    assert.equal(paymentsAfterSecondUndo[0].id, directPay.paymentId);
+  });
+
+  await t.test('SOL-R001-007: Alias normalization across timezones recognizes past completions idempotently', async () => {
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Internet Fiber Bill',
+        kind: 'SUBSCRIPTION',
+        amount: new Decimal('999.00'),
+        dueAt: new Date('2026-08-20T12:00:00.000Z'),
+        nextDueAt: new Date('2026-08-20T12:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Mark paid with occurrenceKey '2026-08-20T12:00'
+    const firstPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-20T12:00',
+      createExpense: true,
+      accountId: bankA.id,
+    }, db);
+    assert.equal(firstPay.success, true);
+    assert.equal(firstPay.alreadyCompleted, false);
+
+    // Call again with date-only alias '2026-08-20'
+    const secondPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-20',
+      createExpense: true,
+      accountId: bankA.id,
+    }, db);
+    assert.equal(secondPay.success, true);
+    assert.equal(secondPay.alreadyCompleted, true);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R001-004: Stale EMI callback overtaken guard returns stale without corrupting loan', async () => {
+    const testLoan = await db.loan.create({
+      data: {
+        userId: userAId,
+        name: 'Two-Wheeler Loan R3',
+        lender: 'HDFC Bank',
+        loanType: 'VEHICLE',
+        openingOutstanding: new Decimal('70000.00'),
+        outstandingPrincipal: new Decimal('70000.00'),
+        tenureMonths: 24,
+        emiAmount: new Decimal('3800.00'),
+        startDate: new Date('2026-01-05T12:00:00.000Z'),
+        nextEmiDate: new Date('2026-04-05T12:00:00.000Z'),
+        dueDay: 5,
+        status: 'ACTIVE',
+      }
+    });
+
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: testLoan.name,
+        kind: 'EMI',
+        amount: testLoan.emiAmount,
+        dueAt: testLoan.nextEmiDate!,
+        nextDueAt: testLoan.nextEmiDate!,
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+    await db.loan.update({ where: { id: testLoan.id }, data: { obligationId: ob.id } });
+
+    // Stale occurrence key from February arrives when nextEmiDate is April
+    const staleRes = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-02-05',
+      accountId: bankA.id,
+    }, db);
+
+    assert.equal(staleRes.success, true);
+    assert.equal(staleRes.alreadyCompleted, true);
+
+    // Verify loan was NOT corrupted or advanced
+    const loanAfterStale = await db.loan.findUnique({ where: { id: testLoan.id } });
+    assert.equal(loanAfterStale?.nextEmiDate?.toISOString(), new Date('2026-04-05T12:00:00.000Z').toISOString());
+    assert.equal(loanAfterStale?.outstandingPrincipal.toString(), '70000');
+
+    // Clean up
+    await db.loan.delete({ where: { id: testLoan.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R002-004 & SOL-R002-005: Crash recovery lease timeout in scheduler recovers stale SENDING deliveries', async () => {
+    const { getOccurrenceKey } = await import('../recurrence/recurrence');
+    const schedUser3 = await db.user.create({
+      data: {
+        id: `usr_sched_lease_${timestamp}`,
+        email: `sched_lease_${timestamp}@test.com`,
+        name: 'Sched Lease User',
+        password: 'password123',
+        telegramId: `tg_lease_${timestamp}`,
+        timezone: 'UTC',
+      }
+    });
+
+    const obDue = new Date(Date.now() - 60000); // 1 minute ago
+    const ob = await db.obligation.create({
+      data: {
+        userId: schedUser3.id,
+        title: 'Lease Timeout Test Bill',
+        kind: 'BILL',
+        amount: new Decimal('1200.00'),
+        dueAt: obDue,
+        nextDueAt: obDue,
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const reminder = await db.reminder.create({
+      data: {
+        userId: schedUser3.id,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        obligationId: ob.id,
+        title: ob.title,
+        isActive: true,
+      }
+    });
+
+    // Create a delivery with exact occurrenceKey that was left stuck in SENDING from a crashed worker 10 minutes ago
+    const staleAttemptTime = new Date(Date.now() - 10 * 60 * 1000);
+    const expectedOccurrenceKey = getOccurrenceKey(obDue, 'UTC');
+    const stuckDelivery = await db.reminderDelivery.create({
+      data: {
+        userId: schedUser3.id,
+        reminderId: reminder.id,
+        obligationId: ob.id,
+        occurrenceKey: expectedOccurrenceKey,
+        scheduledFor: obDue,
+        offsetMinutes: 0,
+        channel: 'TELEGRAM',
+        status: 'SENDING',
+        attemptCount: 1,
+        lastAttemptAt: staleAttemptTime,
+      }
+    });
+
+    let sentLeaseMsg = false;
+    const testBot: any = {
+      api: {
+        sendMessage: async () => {
+          sentLeaseMsg = true;
+          return { message_id: 888 };
+        }
+      }
+    };
+
+    // Run scheduler tick - should recover the expired lease and complete delivery
+    await processSchedulerTick({
+      prismaClient: db,
+      botClient: testBot,
+      now: new Date(),
+    });
+
+    assert.equal(sentLeaseMsg, true, 'Scheduler must recover expired lease and send telegram notification');
+    const updatedDelivery = await db.reminderDelivery.findUnique({ where: { id: stuckDelivery.id } });
+    assert.equal(updatedDelivery?.status, 'SENT');
+
+    // Clean up
+    await db.reminderDelivery.deleteMany({ where: { userId: schedUser3.id } });
+    await db.reminder.deleteMany({ where: { userId: schedUser3.id } });
+    await db.obligation.deleteMany({ where: { userId: schedUser3.id } });
+    await db.user.delete({ where: { id: schedUser3.id } });
+  });
+
+  await t.test('SOL-R002-007: getObligations read model correctly exposes isCreditCardStatement and statement details', async () => {
+    const cardAcc = await db.financialAccount.create({
+      data: {
+        userId: userAId,
+        name: 'HDFC Tata Neu Card R3',
+        type: 'CREDIT_CARD',
+        openingBalance: new Decimal(0),
+        creditLimit: new Decimal(100000),
+        statementDay: 10,
+        paymentDueDay: 30,
+        defaultPaymentAccountId: bankA.id,
+        isActive: true,
+      }
+    });
+
+    const stmtRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardAcc.id,
+      periodKey: '2026-12',
+      statementDate: new Date('2026-12-10T12:00:00.000Z'),
+      dueDate: new Date('2026-12-30T12:00:00.000Z'),
+      statementAmount: 14500,
+    }, db);
+
+    const stmt = await db.creditCardStatement.findUnique({ where: { id: stmtRes.statement.id } });
+    assert.ok(stmt);
+    const obligations = await financeService.getObligations(userAId, db);
+    const ccOb = obligations.find((o) => o.id === stmt.obligationId);
+    assert.ok(ccOb);
+    assert.equal(ccOb.isCreditCardStatement, true);
+    assert.ok(ccOb.creditCardStatement);
+    assert.equal(ccOb.creditCardStatement.id, stmtRes.statement.id);
+  });
+
+  await t.test('SOL-R002-008: DebtForm date preservation helpers avoid timezone drift and preserve exact timestamps', async () => {
+    const { toPreservedCalendarIso, formatToDateInput } = await import('../../components/finance/DebtForm');
+
+    // Test calendar date YYYY-MM-DD input
+    const dateInput = '2026-10-15';
+    const preservedIso = toPreservedCalendarIso(dateInput, 'Asia/Kolkata');
+    assert.ok(preservedIso.includes('2026-10-15'));
+
+    // Test formatting back to date input
+    const formatted = formatToDateInput(preservedIso, 'Asia/Kolkata');
+    assert.equal(formatted, '2026-10-15');
+
+    // Test exact timestamp preservation when date string is unchanged
+    const exactOriginal = '2026-10-15T12:00:00.000Z';
+    const originalFormatted = formatToDateInput(exactOriginal, 'UTC');
+    assert.equal(originalFormatted, '2026-10-15');
+  });
 });

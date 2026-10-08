@@ -20,6 +20,48 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2, Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { TZDate } from '@date-fns/tz';
+
+function getUserTimezone(preferredTz?: string): string {
+  if (preferredTz) return preferredTz;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+  } catch {
+    return 'Asia/Kolkata';
+  }
+}
+
+export function toPreservedCalendarIso(dateInput: string | Date, userTz?: string): string {
+  const tz = getUserTimezone(userTz);
+  if (typeof dateInput === 'string') {
+    const match = dateInput.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      return new TZDate(year, month, day, 12, 0, 0, 0, tz).toISOString();
+    }
+  }
+  return new Date(dateInput).toISOString();
+}
+
+export function formatToDateInput(dateVal: any, userTz?: string): string {
+  if (!dateVal) return '';
+  const tz = getUserTimezone(userTz);
+  try {
+    const d = typeof dateVal === 'string' ? new Date(dateVal) : dateVal;
+    const tzDate = new TZDate(d, tz);
+    const year = tzDate.getFullYear();
+    const month = String(tzDate.getMonth() + 1).padStart(2, '0');
+    const day = String(tzDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    if (typeof dateVal === 'string' && dateVal.length >= 10) {
+      return dateVal.substring(0, 10);
+    }
+    return '';
+  }
+}
 
 interface DebtFormProps {
   accounts: { id: string; name: string }[];
@@ -58,32 +100,24 @@ export function DebtForm({
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [accountId, setAccountId] = useState('none');
-  const [startedAt, setStartedAt] = useState(new Date().toISOString().substring(0, 10));
+  const userTz = debt?.user?.timezone || debt?.timezone;
+  const [startedAt, setStartedAt] = useState(() => formatToDateInput(new Date(), userTz));
   const [dueAt, setDueAt] = useState('');
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
     if (debt) {
+      const tz = debt.user?.timezone || debt.timezone;
       setDirection((debt.direction as any) || 'RECEIVABLE');
       setCounterpartyName(debt.counterpartyName || '');
       setTitle(debt.title || '');
       setAmount(debt.originalAmount ? String(debt.originalAmount) : '');
       setNotes(debt.notes || '');
       if (debt.startedAt) {
-        try {
-          const d = typeof debt.startedAt === 'string' ? new Date(debt.startedAt) : debt.startedAt;
-          setStartedAt(d.toISOString().substring(0, 10));
-        } catch {
-          // ignore
-        }
+        setStartedAt(formatToDateInput(debt.startedAt, tz));
       }
       if (debt.dueAt) {
-        try {
-          const d = typeof debt.dueAt === 'string' ? new Date(debt.dueAt) : debt.dueAt;
-          setDueAt(d.toISOString().substring(0, 10));
-        } catch {
-          setDueAt('');
-        }
+        setDueAt(formatToDateInput(debt.dueAt, tz));
       } else {
         setDueAt('');
       }
@@ -107,22 +141,21 @@ export function DebtForm({
 
     setSubmitting(true);
     try {
+      const tz = debt?.user?.timezone || debt?.timezone;
       if (isEdit) {
         let finalDueAt: string | null = null;
         if (debt?.dueAt) {
-          const originalDueStr = (typeof debt.dueAt === 'string' ? new Date(debt.dueAt) : debt.dueAt)
-            .toISOString()
-            .substring(0, 10);
+          const originalDueStr = formatToDateInput(debt.dueAt, tz);
           if (dueAt === originalDueStr) {
             // User did not alter the date; preserve the original exact timestamp (e.g. noon UTC)
             finalDueAt = typeof debt.dueAt === 'string' ? debt.dueAt : debt.dueAt.toISOString();
           } else if (dueAt) {
-            finalDueAt = new Date(dueAt).toISOString();
+            finalDueAt = toPreservedCalendarIso(dueAt, tz);
           } else {
             finalDueAt = null;
           }
         } else if (dueAt) {
-          finalDueAt = new Date(dueAt).toISOString();
+          finalDueAt = toPreservedCalendarIso(dueAt, tz);
         }
 
         const payload: any = {
@@ -152,12 +185,12 @@ export function DebtForm({
           counterpartyName: counterpartyName.trim(),
           title: title.trim() || undefined,
           originalAmount: val.toFixed(2),
-          startedAt: new Date(startedAt).toISOString(),
+          startedAt: startedAt ? toPreservedCalendarIso(startedAt, tz) : new Date().toISOString(),
           notes: notes.trim() || undefined,
         };
 
         if (dueAt) {
-          payload.dueAt = new Date(dueAt).toISOString();
+          payload.dueAt = toPreservedCalendarIso(dueAt, tz);
         }
 
         if (accountId && accountId !== 'none') {

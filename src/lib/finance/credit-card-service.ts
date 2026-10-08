@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '../../../prisma/generated/client';
 const Decimal = Prisma.Decimal;
 type Decimal = Prisma.Decimal;
-import { parseAndValidateAmount } from './finance';
+import { parseAndValidateAmount, calculateCreditCardUsage } from './finance';
 import { getOccurrenceKey, getNextOccurrence, RecurrenceRule } from '../recurrence/recurrence';
 
 const defaultPrisma = prisma;
@@ -478,68 +478,102 @@ export async function revertCreditCardPayment(
 ) {
   if (!userId) throw new Error('Unauthorized: missing userId');
 
-  let payment: any = null;
-  if (input.paymentId) {
-    payment = await db.creditCardPayment.findUnique({
+  let statementId = input.statementId;
+
+  if (!statementId && input.paymentId) {
+    const prePayment = await db.creditCardPayment.findUnique({
       where: { id: input.paymentId },
-      include: {
-        statement: {
-          include: {
-            account: true,
-            obligation: true,
-            payments: true,
-          }
-        },
-        transaction: true,
-      }
+      select: { id: true, userId: true, statementId: true }
     });
-  } else if (input.statementId) {
-    const payments = await db.creditCardPayment.findMany({
-      where: { statementId: input.statementId, userId },
-      orderBy: { paidAt: 'desc' },
-      take: 1,
-      include: {
-        statement: {
-          include: {
-            account: true,
-            obligation: true,
-            payments: true,
-          }
-        },
-        transaction: true,
-      }
-    });
-    payment = payments[0] || null;
+    if (!prePayment) {
+      return {
+        success: true,
+        alreadyReversed: true,
+        message: 'Credit card payment not found or already reversed',
+        revertedPaymentId: input.paymentId,
+        statementStatus: null,
+        restoredStatus: null,
+        pendingBalance: null,
+      };
+    }
+    if (prePayment.userId !== userId) {
+      throw new Error('Unauthorized: payment belongs to another user');
+    }
+    statementId = prePayment.statementId;
   }
 
-  if (!payment) {
+  if (!statementId) {
     return {
       success: true,
       alreadyReversed: true,
-      message: 'Credit card payment not found or already reverted',
+      message: 'Credit card payment not found or already reversed',
+      revertedPaymentId: input.paymentId || null,
+      statementStatus: null,
+      restoredStatus: null,
+      pendingBalance: null,
     };
   }
 
-  if (payment.userId !== userId) {
-    throw new Error('Unauthorized: payment belongs to another user');
-  }
-
-  const statement = payment.statement;
-
   const executeInTransaction = async (tx: any) => {
-    // 1. Delete linked TRANSFER transaction
+    // 1. SOL-R001-002: Acquire statement row lock inside interactive transaction
+    if (typeof tx.$executeRaw === 'function') {
+      await tx.$executeRaw`SELECT id FROM "CreditCardStatement" WHERE id = ${statementId} FOR UPDATE`;
+    }
+
+    // 2. Reread statement under lock
+    const statement = await tx.creditCardStatement.findUnique({
+      where: { id: statementId },
+      include: {
+        account: true,
+        obligation: true,
+        payments: {
+          orderBy: { paidAt: 'desc' },
+          include: { transaction: true }
+        }
+      }
+    });
+
+    if (!statement || statement.userId !== userId) {
+      throw new Error('Credit card statement not found or unauthorized');
+    }
+
+    // 3. Reread target payment under lock
+    let payment: any = null;
+    if (input.paymentId) {
+      payment = await tx.creditCardPayment.findUnique({
+        where: { id: input.paymentId },
+        include: { transaction: true }
+      });
+    } else {
+      payment = statement.payments[0] || null;
+    }
+
+    if (!payment) {
+      return {
+        alreadyReversed: true,
+        revertedPaymentId: input.paymentId || null,
+        restoredStatus: statement.status,
+        restoredPending: statement.statementAmount,
+      };
+    }
+
+    if (payment.userId !== userId) {
+      throw new Error('Unauthorized: payment belongs to another user');
+    }
+
+    // 4. Delete linked TRANSFER transaction
     if (payment.transactionId) {
       await tx.financialTransaction.delete({
         where: { id: payment.transactionId }
       });
     }
 
-    // 2. Delete the payment
+    // 5. Delete the payment
     await tx.creditCardPayment.delete({
       where: { id: payment.id }
     });
 
-    // 3. Recalculate remaining payments
+    // 6. Recalculate remaining payments under lock
     const remainingPayments = await tx.creditCardPayment.findMany({
       where: { statementId: statement.id }
     });
@@ -556,7 +590,7 @@ export async function revertCreditCardPayment(
       data: { status: restoredStatus }
     });
 
-    // 4. Restore Obligation state if it was marked PAID
+    // 7. Restore Obligation state if it was marked PAID
     if (statement.obligation) {
       let ob = statement.obligation;
 
@@ -637,6 +671,7 @@ export async function revertCreditCardPayment(
     }
 
     return {
+      alreadyReversed: false,
       revertedPaymentId: payment.id,
       restoredStatus,
       restoredPending,
@@ -649,10 +684,11 @@ export async function revertCreditCardPayment(
 
   return {
     success: true,
-    alreadyReversed: false,
-    revertedPaymentId: result.revertedPaymentId,
-    restoredStatus: result.restoredStatus,
-    pendingBalance: result.restoredPending.toString(),
+    alreadyReversed: Boolean(result.alreadyReversed),
+    revertedPaymentId: result.revertedPaymentId || null,
+    statementStatus: result.restoredStatus || null,
+    restoredStatus: result.restoredStatus || null,
+    pendingBalance: result.restoredPending !== undefined && result.restoredPending !== null ? result.restoredPending.toString() : null,
   };
 }
 
@@ -693,9 +729,7 @@ export async function getCreditCardDetails(
     throw new Error('Account is not a credit card');
   }
 
-  // Calculate current ledger balance
-  // In Double-Entry logic:
-  // For CREDIT_CARD: opening balance + expenses - transfers_to - income + transfers_from
+  // Calculate current ledger balance and available credit (SOL-R001-015: includes debt ledger transactions)
   const txs = await db.financialTransaction.findMany({
     where: {
       userId,
@@ -706,25 +740,14 @@ export async function getCreditCardDetails(
     }
   });
 
-  let ledgerBalance = account.openingBalance;
-  for (const t of txs) {
-    if (t.accountId === account.id) {
-      if (t.type === 'EXPENSE') {
-        ledgerBalance = ledgerBalance.plus(t.amount);
-      } else if (t.type === 'INCOME') {
-        ledgerBalance = ledgerBalance.minus(t.amount);
-      } else if (t.type === 'TRANSFER') {
-        // Transfer out of credit card increases debt
-        ledgerBalance = ledgerBalance.plus(t.amount);
-      }
-    } else if (t.transferAccountId === account.id) {
-      // Transfer into credit card (payment) reduces debt
-      ledgerBalance = ledgerBalance.minus(t.amount);
-    }
-  }
-
+  const { amountUsed, availableCredit } = calculateCreditCardUsage(
+    account.openingBalance,
+    txs,
+    account.id,
+    account.creditLimit
+  );
+  const ledgerBalance = amountUsed;
   const creditLimit = account.creditLimit;
-  const availableCredit = creditLimit ? creditLimit.minus(ledgerBalance) : null;
 
   // Active statement is the earliest open/partial/overdue statement (due soonest);
   // when all statements are paid, activeStatement is null
