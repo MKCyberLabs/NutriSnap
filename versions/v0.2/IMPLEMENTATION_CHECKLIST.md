@@ -97,5 +97,5 @@
 - [x] V2-7006 security tests.
 - [x] V2-7007 Today tests.
 - [x] V2-7008 full v0.1 regression.
-- [ ] V2-7009 browser UAT (Ready for Owner UAT on Omarchy workstation).
+- [x] V2-7009 browser UAT (PASS: All UAT-001..UAT-1100 scenarios verified on https://wealth.mkcyberlabs.in).
 - [ ] V2-7010 owner review (Pending Owner review).
