@@ -95,3 +95,48 @@
     - `src/lib/finance/loan.test.ts`
   - Findings Resolved: Findings P1 #2, #3, #4, #5 and P2 #6 (loan concurrency row locking, schedule clearing with retained dueDay, monthly recurrence anchoring, metadata edit pause/snooze preservation, LoanForm dueDay precedence).
   - Tests: `test:finance` (52/52), `test:reminders` (55/55), `typecheck` clean, `build` clean, `git diff --check` clean.
+
+---
+
+## 4. Sol Review Round 2 & Round 3 Bounded Repairs
+
+### 4.1 Sol Review Round 2 (Reviewed SHA: `7cef742abbb238f79c04f134fa9c0bd872a8db54`)
+- **Verdict:** `FAIL` (5 evidenced P1 findings, no P0).
+- **Findings Identified:**
+  1. `P1`: Loan metadata edit resubmits `00:00Z` midnight timestamp, causing false `dueChanged` triggering pause/snooze loss.
+  2. `P1`: Paid credit-card cycles retain monthly recurrence; scheduler tick creates reminders for paid cycles.
+  3. `P1`: Loan closure (`closeLoan`/`archiveLoan`) reads loan before tx, potentially missing a concurrently linked obligation.
+  4. `P1`: `ObligationForm.tsx` initializes `dueAt` from `nextDueAt`, replacing recurrence anchor on edit.
+  5. `P1`: Changing `dueDay` overrides an explicit `nextEmiDate: null`.
+
+### 4.2 Round 3 Dispatches
+- **Worker A Dispatch (Repair 3-A):**
+  - Task ID: `tsk_m4dtg58sxq19y`
+  - Dispatch ID: `dsp_m4dtgpj2jx62d`
+  - Pane: `wC:p4` (settled & released)
+  - Worktree: `/home/openclaw/Projects/NutriSnap-worker-a`
+  - Agent: `agy (agy-manickam)`
+  - Status: **COMPLETED / SUCCEEDED**
+  - Commit SHA: `bb6b966ff2be7cf9cee33ca8f7959aa8db1565ec`
+  - Files Changed:
+    - `src/lib/finance/credit-card-service.ts`
+    - `src/lib/finance/payment-lifecycle.test.ts`
+  - Findings Resolved: Finding P1 #2 (CC cycle obligation deactivation on payoff with `recurrenceType: 'ONCE'`, `isActive: false`, purge deliveries; safe restoration on reversal).
+  - Tests: `test:finance` (54/54), `test:reminders` (55/55), `typecheck` clean, `git diff --check` clean.
+
+- **Worker B Dispatch (Repair 3-B):**
+  - Task ID: `tsk_m4dtgfjsw51rm`
+  - Dispatch ID: `dsp_m4dth45artzjt`
+  - Pane: `wC:p5` (settled & released)
+  - Worktree: `/home/openclaw/Projects/NutriSnap-worker-b`
+  - Agent: `agy (agy-rohit)`
+  - Status: **COMPLETED / SUCCEEDED**
+  - Commit SHA: `fae4d7944a90272a9c763893cfdc4441d4fb90a0`
+  - Files Changed:
+    - `src/components/finance/LoanForm.tsx`
+    - `src/components/finance/ObligationForm.tsx`
+    - `src/lib/finance/finance-service.ts`
+    - `src/lib/finance/loan-service.ts`
+    - `src/lib/finance/loan.test.ts`
+  - Findings Resolved: Findings P1 #1, #3, #4, #5 (LoanForm exact timestamp preservation & calendar date comparison in loan-service.ts; loan closure re-read lock `SELECT FOR UPDATE` inside tx; ObligationForm & finance-service recurrence anchor `dueAt` preservation; explicit `nextEmiDate: null` honored on `dueDay` edits).
+  - Tests: `test:finance` (54/54), `test:reminders` (55/55), `test:life-hub` (110/110), `typecheck` clean, `build` clean, `git diff --check` clean.
