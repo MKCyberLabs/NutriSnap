@@ -108,11 +108,28 @@ export function DebtForm({
     setSubmitting(true);
     try {
       if (isEdit) {
+        let finalDueAt: string | null = null;
+        if (debt?.dueAt) {
+          const originalDueStr = (typeof debt.dueAt === 'string' ? new Date(debt.dueAt) : debt.dueAt)
+            .toISOString()
+            .substring(0, 10);
+          if (dueAt === originalDueStr) {
+            // User did not alter the date; preserve the original exact timestamp (e.g. noon UTC)
+            finalDueAt = typeof debt.dueAt === 'string' ? debt.dueAt : debt.dueAt.toISOString();
+          } else if (dueAt) {
+            finalDueAt = new Date(dueAt).toISOString();
+          } else {
+            finalDueAt = null;
+          }
+        } else if (dueAt) {
+          finalDueAt = new Date(dueAt).toISOString();
+        }
+
         const payload: any = {
           counterpartyName: counterpartyName.trim(),
           title: title.trim() || null,
           notes: notes.trim() || null,
-          dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+          dueAt: finalDueAt,
         };
 
         const res = await onSubmitAction(payload);

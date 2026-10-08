@@ -170,7 +170,7 @@ export function TransactionForm({
           amount: amount.trim(),
           category: txType === 'TRANSFER' ? 'Transfer' : category,
           accountId,
-          note: note.trim() || undefined,
+          note: note.trim() ? note.trim() : null,
           occurredAt: parsedOccurredAt,
         };
         if (txType === 'TRANSFER') {

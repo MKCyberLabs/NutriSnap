@@ -236,9 +236,9 @@ export function calculateCreditCardUsage(
   for (const tx of transactions) {
     const amount = new Prisma.Decimal(tx.amount);
     if (tx.accountId === creditCardAccountId) {
-      if (tx.type === 'EXPENSE') {
+      if (tx.type === 'EXPENSE' || tx.type === 'DEBT_REPAY' || tx.type === 'LEND') {
         used = used.plus(amount);
-      } else if (tx.type === 'INCOME') {
+      } else if (tx.type === 'INCOME' || tx.type === 'DEBT_COLLECT' || tx.type === 'BORROW') {
         used = used.minus(amount);
       } else if (tx.type === 'TRANSFER') {
         used = used.plus(amount);

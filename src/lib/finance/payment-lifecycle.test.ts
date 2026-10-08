@@ -1289,4 +1289,277 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(new Decimal(ob1AfterRevert!.amount!).toString(), '20000', 'Obligation amount must be restored');
     assert.equal(ob1AfterRevert?.nextDueAt.toISOString(), '2026-02-10T12:00:00.000Z');
   });
+
+  await t.test('V2-654: SOL-R001-002: Concurrent credit card payments serialize under row lock and prevent duplicate transfers or overpaying', async () => {
+    const cardAcc = await db.financialAccount.create({
+      data: {
+        userId: userAId,
+        name: 'SBI Elite Card',
+        type: 'CREDIT_CARD',
+        openingBalance: new Decimal(0),
+        creditLimit: new Decimal(200000),
+        statementDay: 15,
+        paymentDueDay: 5,
+        defaultPaymentAccountId: bankA.id,
+        isActive: true,
+      }
+    });
+
+    const stmtRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardAcc.id,
+      periodKey: '2026-11',
+      statementDate: new Date('2026-11-15T12:00:00.000Z'),
+      dueDate: new Date('2026-12-05T12:00:00.000Z'),
+      statementAmount: 25000,
+    }, db);
+    assert.equal(stmtRes.success, true);
+    const stmtId = stmtRes.statement.id;
+
+    // Concurrently trigger two full payments of ₹25,000 for the same statement
+    const [res1, res2] = await Promise.all([
+      creditCardService.recordCreditCardPayment(userAId, {
+        statementId: stmtId,
+        fromAccountId: bankA.id,
+        amount: 25000,
+      }, db),
+      creditCardService.recordCreditCardPayment(userAId, {
+        statementId: stmtId,
+        fromAccountId: bankA.id,
+        amount: 25000,
+      }, db),
+    ]);
+
+    // One must have processed the payment, the other must have returned alreadyProcessed under lock
+    assert.ok(res1.alreadyProcessed || res2.alreadyProcessed, 'One concurrent payment must return alreadyProcessed');
+    assert.ok(!res1.alreadyProcessed || !res2.alreadyProcessed, 'Exactly one payment should actually process');
+    assert.equal(res1.statementStatus, 'PAID');
+    assert.equal(res2.statementStatus, 'PAID');
+
+    // Verify only 1 payment and 1 transfer transaction created
+    const payments = await db.creditCardPayment.findMany({ where: { statementId: stmtId } });
+    assert.equal(payments.length, 1, 'Only one CreditCardPayment must exist');
+
+    const transfers = await db.financialTransaction.findMany({
+      where: {
+        userId: userAId,
+        type: 'TRANSFER',
+        transferAccountId: cardAcc.id,
+      }
+    });
+    assert.equal(transfers.length, 1, 'Only one TRANSFER transaction must exist');
+    assert.equal(transfers[0].amount.toString(), '25000');
+
+    // Verify idempotency key concurrent calls
+    const stmtRes2 = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardAcc.id,
+      periodKey: '2026-12',
+      statementDate: new Date('2026-12-15T12:00:00.000Z'),
+      dueDate: new Date('2027-01-05T12:00:00.000Z'),
+      statementAmount: 30000,
+    }, db);
+    const stmt2Id = stmtRes2.statement.id;
+
+    const [idem1, idem2] = await Promise.all([
+      creditCardService.recordCreditCardPayment(userAId, {
+        statementId: stmt2Id,
+        fromAccountId: bankA.id,
+        amount: 5000,
+        idempotencyKey: 'idem-cc-concurrent-key-1',
+      }, db),
+      creditCardService.recordCreditCardPayment(userAId, {
+        statementId: stmt2Id,
+        fromAccountId: bankA.id,
+        amount: 5000,
+        idempotencyKey: 'idem-cc-concurrent-key-1',
+      }, db),
+    ]);
+
+    assert.ok(idem1.alreadyProcessed || idem2.alreadyProcessed);
+    const payments2 = await db.creditCardPayment.findMany({ where: { statementId: stmt2Id } });
+    assert.equal(payments2.length, 1, 'Duplicate idempotency key must not create duplicate payment');
+  });
+
+  await t.test('V2-655: SOL-R001-005 & SOL-R001-006: Statement-linked obligation update guard, Paid transfer routing, and Undo', async () => {
+    const cardAcc = await db.financialAccount.create({
+      data: {
+        userId: userAId,
+        name: 'Axis Magnus Card',
+        type: 'CREDIT_CARD',
+        openingBalance: new Decimal(0),
+        creditLimit: new Decimal(300000),
+        statementDay: 18,
+        paymentDueDay: 8,
+        defaultPaymentAccountId: bankA.id,
+        isActive: true,
+      }
+    });
+
+    const stmtRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardAcc.id,
+      periodKey: '2026-10',
+      statementDate: new Date('2026-10-18T12:00:00.000Z'),
+      dueDate: new Date('2026-11-08T12:00:00.000Z'),
+      statementAmount: 18000,
+    }, db);
+    const stmt = await db.creditCardStatement.findUnique({ where: { id: stmtRes.statement.id } });
+    assert.ok(stmt);
+    const obId = stmt.obligationId!;
+    assert.ok(obId);
+
+    // SOL-R001-006: Attempt updateObligation to modify amount, dueAt, nextDueAt, or recurrence
+    await assert.rejects(
+      async () => financeService.updateObligation(userAId, obId, { amount: 20000 }, db),
+      /Credit card statement obligations must be managed through the Credit Card statement workflow/
+    );
+
+    await assert.rejects(
+      async () => financeService.updateObligation(userAId, obId, { dueAt: new Date('2026-11-10T12:00:00.000Z') }, db),
+      /Credit card statement obligations must be managed through the Credit Card statement workflow/
+    );
+
+    await assert.rejects(
+      async () => financeService.updateObligation(userAId, obId, { recurrenceType: 'MONTHLY' }, db),
+      /Credit card statement obligations must be managed through the Credit Card statement workflow/
+    );
+
+    // Metadata updates (title, notes) should succeed
+    const updateNotesRes = await financeService.updateObligation(userAId, obId, { notes: 'Updated bill note' }, db);
+    assert.equal(updateNotesRes.success, true);
+
+    // SOL-R001-005: markObligationPaid routes through statement payment creating a TRANSFER (not generic EXPENSE on card)
+    const markRes = await financeService.markObligationPaid(userAId, {
+      obligationId: obId,
+      occurrenceKey: '2026-11-08',
+      accountId: bankA.id,
+    }, db);
+
+    assert.equal(markRes.success, true);
+    assert.equal(markRes.statementStatus, 'PAID');
+
+    // Verify statement status is PAID (not left OPEN!)
+    const stmtAfter = await db.creditCardStatement.findUnique({ where: { id: stmt.id } });
+    assert.equal(stmtAfter?.status, 'PAID', 'Statement status must be PAID when obligation marked Paid');
+
+    // Verify created transaction is TRANSFER from bank to card, not generic EXPENSE
+    assert.ok(markRes.transactionId);
+    const createdTx = await db.financialTransaction.findUnique({ where: { id: markRes.transactionId! } });
+    assert.ok(createdTx);
+    assert.equal(createdTx?.type, 'TRANSFER');
+    assert.equal(createdTx?.accountId, bankA.id);
+    assert.equal(createdTx?.transferAccountId, cardAcc.id);
+    assert.equal(createdTx?.amount.toString(), '18000');
+
+    // Verify obligation is deactivated and completed
+    const obAfter = await db.obligation.findUnique({ where: { id: obId } });
+    assert.equal(obAfter?.isActive, false);
+
+    // Revert obligation payment (Undo)
+    const undoRes = await financeService.revertObligationPayment(userAId, {
+      obligationId: obId,
+    }, db);
+
+    assert.equal(undoRes.success, true);
+    assert.equal(undoRes.creditCardReversed, true);
+
+    // Statement status restored to OPEN
+    const stmtRestored = await db.creditCardStatement.findUnique({ where: { id: stmt.id } });
+    assert.equal(stmtRestored?.status, 'OPEN');
+
+    // Obligation reactivated
+    const obRestored = await db.obligation.findUnique({ where: { id: obId } });
+    assert.equal(obRestored?.isActive, true);
+
+    // Transfer transaction deleted
+    const txRestored = await db.financialTransaction.findUnique({ where: { id: markRes.transactionId! } });
+    assert.equal(txRestored, null);
+  });
+
+  await t.test('V2-656: SOL-R001-008: Overlapping scheduler ticks exclusively claim delivery attempt before sendMessage', async () => {
+    const schedUser2 = await db.user.create({
+      data: {
+        id: `usr_sched_claim_${timestamp}`,
+        email: `sched_claim_${timestamp}@test.com`,
+        name: 'Sched Claim User',
+        password: 'password123',
+        telegramId: `tg_claim_${timestamp}`,
+        timezone: 'UTC',
+      }
+    });
+
+    const obDate = new Date('2026-04-10T12:00:00.000Z');
+    const ob = await db.obligation.create({
+      data: {
+        userId: schedUser2.id,
+        title: 'Electricity Overlap Test',
+        kind: 'BILL',
+        amount: new Decimal(4500),
+        dueAt: obDate,
+        nextDueAt: obDate,
+        recurrenceType: 'ONCE',
+        reminderOffsetsMin: [0],
+        isActive: true,
+      }
+    });
+
+    const sentMessages: any[] = [];
+    const slowBot = {
+      sentMessages,
+      api: {
+        sendMessage: async (chatId: string, text: string, options?: any) => {
+          // Artificial 15ms latency to guarantee overlap
+          await new Promise((r) => setTimeout(r, 15));
+          sentMessages.push({ chatId, text, options });
+          return { message_id: 8880 + sentMessages.length };
+        }
+      }
+    };
+
+    // Run 2 overlapping scheduler ticks concurrently
+    await Promise.all([
+      processSchedulerTick({
+        prismaClient: db,
+        botClient: slowBot,
+        now: obDate,
+      }),
+      processSchedulerTick({
+        prismaClient: db,
+        botClient: slowBot,
+        now: obDate,
+      }),
+    ]);
+
+    // Verify exactly ONE Telegram message was sent
+    const userMessages = sentMessages.filter((m) => m.chatId === schedUser2.telegramId);
+    assert.equal(userMessages.length, 1, 'Overlapping scheduler ticks must send exactly ONE message');
+
+    // Verify exactly ONE SENT delivery record exists
+    const deliveries = await db.reminderDelivery.findMany({
+      where: { obligationId: ob.id }
+    });
+    assert.equal(deliveries.length, 1, 'Only one delivery record should be created');
+    assert.equal(deliveries[0].status, 'SENT');
+
+    // Cleanup schedUser2
+    await db.reminderDelivery.deleteMany({ where: { userId: schedUser2.id } });
+    await db.obligation.deleteMany({ where: { userId: schedUser2.id } });
+    await db.user.delete({ where: { id: schedUser2.id } });
+  });
+
+  await t.test('V2-657: SOL-R001-015: calculateCreditCardUsage supports debt ledger transaction types', async () => {
+    const { calculateCreditCardUsage } = await import('./finance');
+    const cardId = 'acc_card_usage_test';
+
+    const transactions = [
+      { type: 'EXPENSE', amount: 5000, accountId: cardId },
+      { type: 'DEBT_REPAY', amount: 2000, accountId: cardId },
+      { type: 'LEND', amount: 1000, accountId: cardId },
+      { type: 'INCOME', amount: 500, accountId: cardId },
+      { type: 'DEBT_COLLECT', amount: 1500, accountId: cardId },
+      { type: 'TRANSFER', amount: 3000, accountId: 'bank_id', transferAccountId: cardId },
+    ];
+
+    const result = calculateCreditCardUsage(0, transactions, cardId, 50000);
+    assert.equal(result.amountUsed.toString(), '3000');
+    assert.equal(result.availableCredit?.toString(), '47000');
+  });
 });

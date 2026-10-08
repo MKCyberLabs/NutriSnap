@@ -234,23 +234,6 @@ export async function recordCreditCardPayment(
 
   const amountDecimal = parseAndValidateAmount(parsed.amount.toString());
 
-  const statement = await db.creditCardStatement.findUnique({
-    where: { id: parsed.statementId },
-    include: {
-      account: true,
-      obligation: true,
-      payments: true,
-    }
-  });
-
-  if (!statement || statement.userId !== userId) {
-    throw new Error('Credit card statement not found or unauthorized');
-  }
-
-  if (statement.status === 'PAID') {
-    throw new Error('Statement is already fully paid');
-  }
-
   // Verify fromAccountId ownership and type
   const fromAccount = await db.financialAccount.findUnique({
     where: { id: parsed.fromAccountId },
@@ -261,47 +244,87 @@ export async function recordCreditCardPayment(
     throw new Error('Source payment account not found or unauthorized');
   }
 
-  if (fromAccount.id === statement.accountId) {
-    throw new Error('Source account cannot be the credit card being paid');
-  }
-
-  // Idempotency check by note key if supplied
-  if (parsed.idempotencyKey) {
-    const keyTag = `[idempotency:${parsed.idempotencyKey}]`;
-    const existingPayment = statement.payments.find(
-      (p: any) => p.note && p.note.includes(keyTag)
-    );
-    if (existingPayment) {
-      return {
-        success: true,
-        alreadyProcessed: true,
-        paymentId: existingPayment.id,
-        statementStatus: statement.status,
-      };
-    }
-  }
-
-  // Calculate pending balance
-  let sumPaidBefore = new Decimal(0);
-  for (const p of statement.payments) {
-    sumPaidBefore = sumPaidBefore.plus(p.amount);
-  }
-  const pendingBefore = statement.statementAmount.minus(sumPaidBefore);
-
-  if (amountDecimal.greaterThan(pendingBefore)) {
-    throw new Error(
-      `Payment amount (${amountDecimal}) cannot exceed pending balance (${pendingBefore})`
-    );
-  }
-
   const paidAtDate = parsed.paidAt ? new Date(parsed.paidAt) : new Date();
   const noteTag = parsed.idempotencyKey ? ` [idempotency:${parsed.idempotencyKey}]` : '';
-  const paymentNote = parsed.note
-    ? `${parsed.note}${noteTag}`
-    : `CC Payment: ${statement.account.name} (${statement.periodKey})${noteTag}`;
 
   const executeInTransaction = async (tx: any) => {
-    // 1. Create TRANSFER transaction from bank account to credit card
+    // 1. SOL-R001-002: Acquire row lock on CreditCardStatement inside transaction
+    if (typeof tx.$executeRaw === 'function') {
+      await tx.$executeRaw`SELECT id FROM "CreditCardStatement" WHERE id = ${parsed.statementId} FOR UPDATE`;
+    }
+
+    // 2. Re-read statement under row lock
+    const statement = await tx.creditCardStatement.findUnique({
+      where: { id: parsed.statementId },
+      include: {
+        account: true,
+        obligation: true,
+        payments: true,
+      }
+    });
+
+    if (!statement || statement.userId !== userId) {
+      throw new Error('Credit card statement not found or unauthorized');
+    }
+
+    if (fromAccount.id === statement.accountId) {
+      throw new Error('Source account cannot be the credit card being paid');
+    }
+
+    // 3. Re-check idempotency key inside transaction under lock
+    if (parsed.idempotencyKey) {
+      const keyTag = `[idempotency:${parsed.idempotencyKey}]`;
+      const existingPayment = statement.payments.find(
+        (p: any) => p.note && p.note.includes(keyTag)
+      );
+      if (existingPayment) {
+        let sumPaid = new Decimal(0);
+        for (const p of statement.payments) {
+          sumPaid = sumPaid.plus(p.amount);
+        }
+        const pending = statement.statementAmount.minus(sumPaid);
+        return {
+          alreadyProcessed: true,
+          payment: existingPayment,
+          transferTx: { id: existingPayment.transactionId },
+          newStatus: statement.status,
+          pendingAfter: pending.lt(0) ? new Decimal(0) : pending,
+          isFullyPaid: statement.status === 'PAID',
+        };
+      }
+    }
+
+    // 4. Re-read payments and verify remaining statement balance under lock
+    let sumPaidBefore = new Decimal(0);
+    for (const p of statement.payments) {
+      sumPaidBefore = sumPaidBefore.plus(p.amount);
+    }
+    const pendingBefore = statement.statementAmount.minus(sumPaidBefore);
+
+    // If already paid, or if concurrent request already completed payment, return existing result without duplicate transfers or overpaying
+    if (statement.status === 'PAID' || pendingBefore.lte(0)) {
+      const latestPayment = statement.payments.length > 0 ? statement.payments[statement.payments.length - 1] : null;
+      return {
+        alreadyProcessed: true,
+        payment: latestPayment,
+        transferTx: latestPayment?.transactionId ? { id: latestPayment.transactionId } : null,
+        newStatus: statement.status,
+        pendingAfter: new Decimal(0),
+        isFullyPaid: true,
+      };
+    }
+
+    if (amountDecimal.greaterThan(pendingBefore)) {
+      throw new Error(
+        `Payment amount (${amountDecimal}) cannot exceed pending balance (${pendingBefore})`
+      );
+    }
+
+    const paymentNote = parsed.note
+      ? `${parsed.note}${noteTag}`
+      : `CC Payment: ${statement.account.name} (${statement.periodKey})${noteTag}`;
+
+    // 5. Create TRANSFER transaction from bank account to credit card
     const transferTx = await tx.financialTransaction.create({
       data: {
         userId,
@@ -315,7 +338,7 @@ export async function recordCreditCardPayment(
       }
     });
 
-    // 2. Create CreditCardPayment record
+    // 6. Create CreditCardPayment record
     const payment = await tx.creditCardPayment.create({
       data: {
         userId,
@@ -328,7 +351,7 @@ export async function recordCreditCardPayment(
       }
     });
 
-    // 3. Recalculate status
+    // 7. Recalculate status
     const sumPaidAfter = sumPaidBefore.plus(amountDecimal);
     const pendingAfter = statement.statementAmount.minus(sumPaidAfter);
     const isFullyPaid = pendingAfter.isZero();
@@ -339,7 +362,7 @@ export async function recordCreditCardPayment(
       data: { status: newStatus }
     });
 
-    // 4. Update linked Obligation
+    // 8. Update linked Obligation
     if (statement.obligation) {
       const ob = statement.obligation;
       if (isFullyPaid) {
@@ -415,6 +438,7 @@ export async function recordCreditCardPayment(
       newStatus,
       pendingAfter,
       isFullyPaid,
+      alreadyProcessed: false,
     };
   };
 
@@ -424,9 +448,9 @@ export async function recordCreditCardPayment(
 
   return {
     success: true,
-    alreadyProcessed: false,
-    paymentId: result.payment.id,
-    transactionId: result.transferTx.id,
+    alreadyProcessed: Boolean(result.alreadyProcessed),
+    paymentId: result.payment?.id || null,
+    transactionId: result.transferTx?.id || null,
     statementStatus: result.newStatus,
     pendingBalance: result.pendingAfter.toString(),
     fullyPaid: result.isFullyPaid,

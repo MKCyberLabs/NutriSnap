@@ -253,6 +253,10 @@ export async function processSchedulerTick(
           },
         });
 
+        if (existingDelivery?.status === 'SENDING') {
+          continue;
+        }
+
         const eligibility = shouldDeliverNow({
           scheduledFor: sched.scheduledFor,
           now,
@@ -268,41 +272,81 @@ export async function processSchedulerTick(
           continue;
         }
 
-        // Atomic claim creation if not already present
-        let delivery = existingDelivery;
-        if (!delivery) {
-          try {
-            let reminderId = ob.reminders?.[0]?.id;
-            if (!reminderId) {
-              const createdReminder = await db.reminder.create({
-                data: {
-                  userId: ob.userId,
-                  domain: 'FINANCE',
-                  type: 'OBLIGATION',
-                  title: ob.title,
-                  obligationId: ob.id,
-                  isActive: true,
-                },
-              });
-              reminderId = createdReminder.id;
-            }
+        // SOL-R001-008: Exclusively claim delivery attempt before invoking sendMessage
+        const claimOperation = async (tx: any) => {
+          let del = await tx.reminderDelivery.findFirst({
+            where: {
+              obligationId: ob.id,
+              occurrenceKey: sched.occurrenceKey,
+              offsetMinutes: sched.offsetMinutes,
+              channel: 'TELEGRAM',
+            },
+          });
 
-            delivery = await db.reminderDelivery.create({
+          if (del) {
+            if (del.status === 'SENDING' || del.status === 'SENT' || del.status === 'ACKNOWLEDGED') {
+              return null;
+            }
+            // Exclusively transition eligible delivery to SENDING
+            const updated = await tx.reminderDelivery.update({
+              where: { id: del.id },
               data: {
-                userId: ob.userId,
-                reminderId,
-                obligationId: ob.id,
-                occurrenceKey: sched.occurrenceKey,
-                scheduledFor: sched.scheduledFor,
-                offsetMinutes: sched.offsetMinutes,
-                channel: 'TELEGRAM',
-                status: 'PENDING',
-                attemptCount: 0,
+                status: 'SENDING',
+                lastAttemptAt: now,
               },
             });
-          } catch {
-            continue;
+            return updated;
           }
+
+          // No delivery exists yet: find or create unique reminder for this obligation
+          let reminder = ob.reminders?.[0] || await tx.reminder.findFirst({
+            where: { obligationId: ob.id },
+            select: { id: true },
+          });
+
+          if (!reminder) {
+            reminder = await tx.reminder.create({
+              data: {
+                userId: ob.userId,
+                domain: 'FINANCE',
+                type: 'OBLIGATION',
+                title: ob.title,
+                obligationId: ob.id,
+                isActive: true,
+              },
+            });
+          }
+
+          // Create new exclusively claimed delivery
+          del = await tx.reminderDelivery.create({
+            data: {
+              userId: ob.userId,
+              reminderId: reminder.id,
+              obligationId: ob.id,
+              occurrenceKey: sched.occurrenceKey,
+              scheduledFor: sched.scheduledFor,
+              offsetMinutes: sched.offsetMinutes,
+              channel: 'TELEGRAM',
+              status: 'SENDING',
+              attemptCount: 0,
+              lastAttemptAt: now,
+            },
+          });
+          return del;
+        };
+
+        let delivery: any = null;
+        try {
+          delivery = typeof db.$transaction === 'function'
+            ? await db.$transaction(claimOperation)
+            : await claimOperation(db);
+        } catch {
+          // Concurrent constraint or conflict error -> already claimed
+          continue;
+        }
+
+        if (!delivery) {
+          continue;
         }
 
         // Deliver via Telegram
