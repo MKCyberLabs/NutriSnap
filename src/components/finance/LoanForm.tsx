@@ -149,8 +149,9 @@ export function LoanForm({
     }
 
     if (!isEdit) {
-      const outVal = parseFloat(openingOutstanding);
-      if (isNaN(outVal) || outVal <= 0) {
+      const cleanOpening = openingOutstanding.trim();
+      const numOpening = Number(cleanOpening);
+      if (!cleanOpening || isNaN(numOpening) || numOpening <= 0) {
         toast({ title: 'Invalid balance', description: 'Enter current outstanding principal greater than 0.', variant: 'destructive' });
         return;
       }
@@ -170,8 +171,9 @@ export function LoanForm({
           notes: notes.trim() || null,
         };
 
-        if (emiAmount && parseFloat(emiAmount) > 0) {
-          payload.emiAmount = parseFloat(emiAmount).toFixed(2);
+        const cleanEmi = emiAmount.trim();
+        if (cleanEmi && !isNaN(Number(cleanEmi)) && Number(cleanEmi) > 0) {
+          payload.emiAmount = cleanEmi;
         } else {
           payload.emiAmount = null;
         }
@@ -188,8 +190,9 @@ export function LoanForm({
           payload.nextEmiDate = null;
         }
 
-        if (interestRatePercent && parseFloat(interestRatePercent) >= 0) {
-          payload.interestRatePercent = parseFloat(interestRatePercent).toFixed(2);
+        const cleanRate = interestRatePercent.trim();
+        if (cleanRate && !isNaN(Number(cleanRate)) && Number(cleanRate) >= 0) {
+          payload.interestRatePercent = cleanRate;
         } else {
           payload.interestRatePercent = null;
         }
@@ -214,20 +217,21 @@ export function LoanForm({
         if (onSuccess) onSuccess();
         if (onLoanCreated) onLoanCreated();
       } else {
-        const outVal = parseFloat(openingOutstanding);
         const payload: any = {
           name: name.trim(),
           lender: lender.trim(),
           loanType,
-          openingOutstanding: outVal.toFixed(2),
+          openingOutstanding: openingOutstanding.trim(),
           createLinkedObligation,
         };
 
-        if (originalPrincipal && parseFloat(originalPrincipal) > 0) {
-          payload.originalPrincipal = parseFloat(originalPrincipal).toFixed(2);
+        const cleanOrig = originalPrincipal.trim();
+        if (cleanOrig && !isNaN(Number(cleanOrig)) && Number(cleanOrig) > 0) {
+          payload.originalPrincipal = cleanOrig;
         }
-        if (emiAmount && parseFloat(emiAmount) > 0) {
-          payload.emiAmount = parseFloat(emiAmount).toFixed(2);
+        const cleanEmi = emiAmount.trim();
+        if (cleanEmi && !isNaN(Number(cleanEmi)) && Number(cleanEmi) > 0) {
+          payload.emiAmount = cleanEmi;
         }
         if (dueDay && parseInt(dueDay, 10) >= 1 && parseInt(dueDay, 10) <= 31) {
           payload.dueDay = parseInt(dueDay, 10);
@@ -235,8 +239,9 @@ export function LoanForm({
         if (nextEmiDate) {
           payload.nextEmiDate = new Date(nextEmiDate).toISOString();
         }
-        if (interestRatePercent && parseFloat(interestRatePercent) >= 0) {
-          payload.interestRatePercent = parseFloat(interestRatePercent).toFixed(2);
+        const cleanRate = interestRatePercent.trim();
+        if (cleanRate && !isNaN(Number(cleanRate)) && Number(cleanRate) >= 0) {
+          payload.interestRatePercent = cleanRate;
         }
         if (tenureMonths && parseInt(tenureMonths, 10) > 0) {
           payload.tenureMonths = parseInt(tenureMonths, 10);

@@ -214,6 +214,8 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     // Outstanding reduced from 50000 to 46000
     const loanAfterPay = await db.loan.findUnique({ where: { id: loanId } });
     assert.equal(new Decimal(loanAfterPay!.outstandingPrincipal).toString(), '46000');
+    const obAfterPay = await db.obligation.findUnique({ where: { id: linkedObId } });
+    assert.equal(obAfterPay?.nextDueAt?.toISOString(), loanAfterPay?.nextEmiDate?.toISOString());
 
     // Generic transaction delete blocked on EMI transaction
     await assert.rejects(
@@ -242,6 +244,8 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     const loanAfterRevert = await db.loan.findUnique({ where: { id: loanId } });
     assert.equal(new Decimal(loanAfterRevert!.outstandingPrincipal).toString(), '50000');
     assert.equal(loanAfterRevert!.nextEmiDate!.toISOString(), emiDate.toISOString());
+    const obAfterRevert = await db.obligation.findUnique({ where: { id: linkedObId } });
+    assert.equal(obAfterRevert?.nextDueAt?.toISOString(), emiDate.toISOString());
 
     // Repeated revert is idempotent
     const repeatRevert = await loanService.revertEmiPayment(userAId, {

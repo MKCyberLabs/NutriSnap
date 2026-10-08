@@ -487,3 +487,339 @@ test('V2-300: Loans & EMI Test Suite (V2-T040..V2-T052)', async () => {
     await db.$disconnect();
   }
 });
+
+test('V2-360: Repair B - Loan Null-Schedule, Hijack Prevention, Recurrence Day, and Closure Cleanup', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const testUser = await db.user.create({
+      data: {
+        id: `usr-loan-repair-${timestamp}`,
+        email: `loan-repair-${timestamp}@test.local`,
+        name: 'User Loan Repair',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bankAcc = await financeService.createAccount(testUser.id, {
+      name: 'Primary Checking',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankId = bankAcc.account.id;
+
+    // -------------------------------------------------------------------------
+    // 1. updateLoan clearing emiAmount deactivates linked obligation
+    // -------------------------------------------------------------------------
+    const loan1Res = await loanService.createLoan(testUser.id, {
+      name: 'Personal Loan A',
+      loanType: 'PERSONAL',
+      lender: 'Axis Bank',
+      openingOutstanding: '50000.00',
+      emiAmount: '5000.00',
+      nextEmiDate: '2026-11-05T10:00:00.000Z',
+    }, db);
+    assert.equal(loan1Res.success, true);
+    const loan1Id = loan1Res.loan.id;
+    assert.ok(loan1Res.loan.obligationId);
+
+    const rem1 = await db.reminder.create({
+      data: {
+        userId: testUser.id,
+        obligationId: loan1Res.loan.obligationId!,
+        type: 'BILL',
+        title: 'EMI Reminder Loan 1',
+        time: '10:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+
+    await db.reminderDelivery.create({
+      data: {
+        userId: testUser.id,
+        obligationId: loan1Res.loan.obligationId!,
+        reminderId: rem1.id,
+        occurrenceKey: '2026-11-05T10:00',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-05T10:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // Clear emiAmount to null
+    const updateClearRes = await loanService.updateLoan(testUser.id, loan1Id, {
+      emiAmount: null,
+    }, db);
+    assert.equal(updateClearRes.success, true);
+    assert.equal(updateClearRes.loan.emiAmount, null);
+
+    // Obligation must be deactivated
+    const ob1AfterClear = await db.obligation.findUnique({
+      where: { id: loan1Res.loan.obligationId! }
+    });
+    assert.equal(ob1AfterClear?.isActive, false);
+
+    // Pending reminder deliveries must be cancelled/removed
+    const pendingDel1 = await db.reminderDelivery.findMany({
+      where: { obligationId: loan1Res.loan.obligationId!, status: 'PENDING' }
+    });
+    assert.equal(pendingDel1.length, 0);
+
+    // Re-activating with emiAmount restores active status
+    const updateRestoreRes = await loanService.updateLoan(testUser.id, loan1Id, {
+      emiAmount: '6000.00',
+    }, db);
+    assert.equal(updateRestoreRes.success, true);
+    const ob1AfterRestore = await db.obligation.findUnique({
+      where: { id: loan1Res.loan.obligationId! }
+    });
+    assert.equal(ob1AfterRestore?.isActive, true);
+    assert.equal(ob1AfterRestore?.amount?.toString(), '6000');
+
+    // -------------------------------------------------------------------------
+    // 2. Creation/update does not hijack unrelated manual obligations
+    // -------------------------------------------------------------------------
+    const manualOb = await db.obligation.create({
+      data: {
+        userId: testUser.id,
+        title: 'EMI: Education Loan (SBI)',
+        kind: 'EMI',
+        amount: new Prisma.Decimal('7500.00'),
+        dueAt: new Date('2026-12-10T10:00:00.000Z'),
+        nextDueAt: new Date('2026-12-10T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Create loan with same name/lender - must NOT hijack manualOb
+    const hijackTestLoan = await loanService.createLoan(testUser.id, {
+      name: 'Education Loan',
+      loanType: 'EDUCATION',
+      lender: 'SBI',
+      openingOutstanding: '200000.00',
+      emiAmount: '7500.00',
+      nextEmiDate: '2026-12-10T10:00:00.000Z',
+    }, db);
+
+    assert.equal(hijackTestLoan.success, true);
+    assert.notEqual(hijackTestLoan.loan.obligationId, manualOb.id);
+
+    // Verify manualOb is completely untouched
+    const manualObCheck = await db.obligation.findUnique({ where: { id: manualOb.id } });
+    assert.equal(manualObCheck?.title, 'EMI: Education Loan (SBI)');
+    assert.equal(manualObCheck?.amount?.toString(), '7500');
+
+    // Create loan without obligation, then update - must NOT hijack manualOb
+    const unlinkedLoan = await loanService.createLoan(testUser.id, {
+      name: 'Education Loan',
+      loanType: 'EDUCATION',
+      lender: 'SBI',
+      openingOutstanding: '100000.00',
+    }, db);
+    assert.equal(unlinkedLoan.loan.obligationId, null);
+
+    const updateUnlinkedRes = await loanService.updateLoan(testUser.id, unlinkedLoan.loan.id, {
+      emiAmount: '7500.00',
+      nextEmiDate: '2026-12-10T10:00:00.000Z',
+    }, db);
+    assert.notEqual(updateUnlinkedRes.loan.obligationId, manualOb.id);
+
+    // -------------------------------------------------------------------------
+    // 3. dueDay=31 handles Feb clamping and recovers to Mar 31
+    // -------------------------------------------------------------------------
+    const dueDayLoanRes = await loanService.createLoan(testUser.id, {
+      name: 'Big Ticket Loan',
+      loanType: 'PERSONAL',
+      lender: 'Kotak Bank',
+      openingOutstanding: '150000.00',
+      emiAmount: '10000.00',
+      dueDay: 31,
+      nextEmiDate: '2026-01-31T12:00:00.000Z',
+      paymentAccountId: bankId,
+    }, db);
+    assert.equal(dueDayLoanRes.success, true);
+    const dueDayLoanId = dueDayLoanRes.loan.id;
+    const dueDayObId = dueDayLoanRes.loan.obligationId!;
+
+    // Pay Jan 31 EMI -> should advance to Feb 28, 2026 (clamped)
+    const payJan = await loanService.recordEmiPayment(testUser.id, {
+      loanId: dueDayLoanId,
+      amount: '10000.00',
+      accountId: bankId,
+      principalPaid: '8000.00',
+      occurredAt: '2026-01-31T12:00:00.000Z',
+    }, db);
+    assert.equal(payJan.success, true);
+
+    const loanAfterJan = await db.loan.findUnique({ where: { id: dueDayLoanId } });
+    const obAfterJan = await db.obligation.findUnique({ where: { id: dueDayObId } });
+
+    assert.equal(loanAfterJan?.nextEmiDate?.toISOString(), '2026-02-28T12:00:00.000Z');
+    assert.equal(obAfterJan?.nextDueAt?.toISOString(), '2026-02-28T12:00:00.000Z');
+
+    // Pay Feb 28 EMI -> should advance and recover to March 31, 2026!
+    const payFeb = await loanService.recordEmiPayment(testUser.id, {
+      loanId: dueDayLoanId,
+      amount: '10000.00',
+      accountId: bankId,
+      principalPaid: '8000.00',
+      occurredAt: '2026-02-28T12:00:00.000Z',
+    }, db);
+    assert.equal(payFeb.success, true);
+
+    const loanAfterFeb = await db.loan.findUnique({ where: { id: dueDayLoanId } });
+    const obAfterFeb = await db.obligation.findUnique({ where: { id: dueDayObId } });
+
+    assert.equal(loanAfterFeb?.nextEmiDate?.toISOString(), '2026-03-31T12:00:00.000Z');
+    assert.equal(obAfterFeb?.nextDueAt?.toISOString(), '2026-03-31T12:00:00.000Z');
+
+    // -------------------------------------------------------------------------
+    // 4. Zero balance via recordEmiPayment or reconcileOutstanding(0) cleans up reminders
+    // -------------------------------------------------------------------------
+    // Path 4a: reconcileOutstanding(0)
+    const reconLoanRes = await loanService.createLoan(testUser.id, {
+      name: 'Reconcile Closure Loan',
+      loanType: 'PERSONAL',
+      lender: 'ICICI Bank',
+      openingOutstanding: '30000.00',
+      emiAmount: '3000.00',
+      nextEmiDate: '2026-11-15T10:00:00.000Z',
+    }, db);
+    const reconLoanId = reconLoanRes.loan.id;
+    const reconObId = reconLoanRes.loan.obligationId!;
+
+    const reconRem = await db.reminder.create({
+      data: {
+        userId: testUser.id,
+        obligationId: reconObId,
+        type: 'BILL',
+        title: 'Recon EMI Reminder',
+        time: '10:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+
+    await db.reminderDelivery.create({
+      data: {
+        userId: testUser.id,
+        obligationId: reconObId,
+        reminderId: reconRem.id,
+        occurrenceKey: '2026-11-15T10:00',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-15T10:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    const reconRes = await loanService.reconcileOutstanding(testUser.id, reconLoanId, '0.00', 'Paid off in full', db);
+    assert.equal(reconRes.success, true);
+    assert.equal(reconRes.status, 'CLOSED');
+
+    const reconObAfter = await db.obligation.findUnique({ where: { id: reconObId } });
+    assert.equal(reconObAfter?.isActive, false);
+    assert.equal(reconObAfter?.isArchived, true);
+
+    const reconPendingDel = await db.reminderDelivery.findMany({
+      where: { obligationId: reconObId, status: 'PENDING' }
+    });
+    assert.equal(reconPendingDel.length, 0);
+
+    // Path 4b: recordEmiPayment pays remaining balance in full
+    const fullPayLoanRes = await loanService.createLoan(testUser.id, {
+      name: 'Full Payoff Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '5000.00',
+      emiAmount: '5000.00',
+      nextEmiDate: '2026-11-20T10:00:00.000Z',
+      paymentAccountId: bankId,
+    }, db);
+    const fullPayLoanId = fullPayLoanRes.loan.id;
+    const fullPayObId = fullPayLoanRes.loan.obligationId!;
+
+    const fullPayRem = await db.reminder.create({
+      data: {
+        userId: testUser.id,
+        obligationId: fullPayObId,
+        type: 'BILL',
+        title: 'Full Pay EMI Reminder',
+        time: '10:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+
+    await db.reminderDelivery.create({
+      data: {
+        userId: testUser.id,
+        obligationId: fullPayObId,
+        reminderId: fullPayRem.id,
+        occurrenceKey: '2026-11-20T10:00',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-20T10:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    const fullPayRes = await loanService.recordEmiPayment(testUser.id, {
+      loanId: fullPayLoanId,
+      amount: '5000.00',
+      accountId: bankId,
+      principalPaid: '5000.00',
+      occurredAt: '2026-11-20T10:00:00.000Z',
+    }, db);
+    assert.equal(fullPayRes.success, true);
+    assert.equal(fullPayRes.closed, true);
+    assert.equal(fullPayRes.remainingPrincipal, '0');
+
+    const fullPayObAfter = await db.obligation.findUnique({ where: { id: fullPayObId } });
+    assert.equal(fullPayObAfter?.isActive, false);
+    assert.equal(fullPayObAfter?.isArchived, true);
+
+    const fullPayPendingDel = await db.reminderDelivery.findMany({
+      where: { obligationId: fullPayObId, status: 'PENDING' }
+    });
+    assert.equal(fullPayPendingDel.length, 0);
+
+    // -------------------------------------------------------------------------
+    // 5. Direct EMI payment advances linked obligation nextDueAt
+    // -------------------------------------------------------------------------
+    const advLoanRes = await loanService.createLoan(testUser.id, {
+      name: 'Advance Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'SBI',
+      openingOutstanding: '100000.00',
+      emiAmount: '10000.00',
+      nextEmiDate: '2026-05-15T10:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bankId,
+    }, db);
+    const advLoanId = advLoanRes.loan.id;
+    const advObId = advLoanRes.loan.obligationId!;
+
+    const payAdv = await loanService.recordEmiPayment(testUser.id, {
+      loanId: advLoanId,
+      amount: '10000.00',
+      accountId: bankId,
+      principalPaid: '8000.00',
+      occurredAt: '2026-05-15T10:00:00.000Z',
+    }, db);
+    assert.equal(payAdv.success, true);
+
+    const advLoanAfter = await db.loan.findUnique({ where: { id: advLoanId } });
+    const advObAfter = await db.obligation.findUnique({ where: { id: advObId } });
+
+    assert.equal(advLoanAfter?.nextEmiDate?.toISOString(), '2026-06-15T10:00:00.000Z');
+    assert.equal(advObAfter?.nextDueAt?.toISOString(), '2026-06-15T10:00:00.000Z');
+
+  } finally {
+    await db.$disconnect();
+  }
+});
