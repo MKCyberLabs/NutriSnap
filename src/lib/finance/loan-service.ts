@@ -129,6 +129,7 @@ export const recordEmiPaymentSchema = z.object({
   interestPaid: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
   feesPaid: z.union([z.number(), z.string(), z.instanceof(Decimal)]).optional().nullable(),
   obligationOccurrenceId: z.string().optional().nullable(),
+  obligationPaymentId: z.string().optional().nullable(),
   note: z.string().trim().max(255).optional().nullable(),
   idempotencyKey: z.string().trim().max(100).optional().nullable(),
 });
@@ -520,6 +521,22 @@ export async function recordEmiPayment(
     }
   }
 
+  // Idempotency check 3: by obligationPaymentId
+  if (parsed.obligationPaymentId) {
+    const obTag = `[obligationPayment:${parsed.obligationPaymentId}]`;
+    const existing = loan.payments.find((p: any) => p.note && p.note.includes(obTag));
+    if (existing) {
+      return {
+        success: true,
+        alreadyProcessed: true,
+        paymentId: existing.id,
+        transactionId: existing.transactionId,
+        remainingPrincipal: loan.outstandingPrincipal.toString(),
+        closed: loan.status === 'CLOSED',
+      };
+    }
+  }
+
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { timezone: true }
@@ -527,13 +544,20 @@ export async function recordEmiPayment(
   const userTimezone = user?.timezone || 'Asia/Kolkata';
 
   const occurredAtDate = parsed.occurredAt ? new Date(parsed.occurredAt) : new Date();
-  const noteTag = parsed.idempotencyKey ? ` [idempotency:${parsed.idempotencyKey}]` : '';
+  const noteTags: string[] = [];
+  if (parsed.idempotencyKey) {
+    noteTags.push(`[idempotency:${parsed.idempotencyKey}]`);
+  }
+  if (parsed.obligationPaymentId) {
+    noteTags.push(`[obligationPayment:${parsed.obligationPaymentId}]`);
+  }
+  const tagsSuffix = noteTags.length > 0 ? ` ${noteTags.join(' ')}` : '';
   const paymentNote = parsed.note
-    ? `${parsed.note}${noteTag}`
-    : `EMI Payment: ${loan.name}${noteTag}`;
+    ? `${parsed.note}${tagsSuffix}`
+    : `EMI Payment: ${loan.name}${tagsSuffix}`;
 
   const executeInTransaction = async (tx: any) => {
-    // Finding 3: Re-read and lock loan inside tx to avoid missing concurrently linked obligations
+    // Row lock loan inside tx to serialize concurrent updates
     if (typeof tx.$queryRaw === 'function') {
       await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loan.id} FOR UPDATE`;
     }
@@ -555,6 +579,51 @@ export async function recordEmiPayment(
 
     if (!currentLoan || currentLoan.userId !== userId) {
       throw new Error('Loan not found or unauthorized');
+    }
+
+    // Ticket R001-P1-01: Re-check idempotency under transaction lock with cross-user isolation
+    let existingPayment: any = null;
+
+    if (parsed.obligationOccurrenceId) {
+      existingPayment = await tx.loanPayment.findFirst({
+        where: {
+          obligationOccurrenceId: parsed.obligationOccurrenceId,
+          loanId: currentLoan.id,
+          userId,
+        },
+      });
+    }
+
+    if (!existingPayment && parsed.idempotencyKey) {
+      const keyTag = `[idempotency:${parsed.idempotencyKey}]`;
+      existingPayment = await tx.loanPayment.findFirst({
+        where: {
+          loanId: currentLoan.id,
+          userId,
+          note: { contains: keyTag },
+        },
+      });
+    }
+
+    if (!existingPayment && parsed.obligationPaymentId) {
+      const obTag = `[obligationPayment:${parsed.obligationPaymentId}]`;
+      existingPayment = await tx.loanPayment.findFirst({
+        where: {
+          loanId: currentLoan.id,
+          userId,
+          note: { contains: obTag },
+        },
+      });
+    }
+
+    if (existingPayment) {
+      return {
+        alreadyProcessed: true,
+        paymentId: existingPayment.id,
+        transactionId: existingPayment.transactionId,
+        remainingPrincipal: currentLoan.outstandingPrincipal.toString(),
+        closed: currentLoan.status === 'CLOSED',
+      };
     }
 
     let createdTxId: string | null = null;
@@ -656,6 +725,7 @@ export async function recordEmiPayment(
     }
 
     return {
+      alreadyProcessed: false,
       payment,
       createdTxId,
       newOutstanding,
@@ -667,6 +737,17 @@ export async function recordEmiPayment(
   const result = typeof db.$transaction === 'function'
     ? await db.$transaction(executeInTransaction)
     : await executeInTransaction(db);
+
+  if (result.alreadyProcessed) {
+    return {
+      success: true,
+      alreadyProcessed: true,
+      paymentId: result.paymentId,
+      transactionId: result.transactionId,
+      remainingPrincipal: result.remainingPrincipal,
+      closed: result.closed,
+    };
+  }
 
   return {
     success: true,
@@ -716,7 +797,14 @@ export async function reconcileOutstanding(
 
     const currentLoan = await tx.loan.findUnique({
       where: { id: loanId },
-      select: { id: true, userId: true, status: true, obligationId: true }
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        obligationId: true,
+        nextEmiDate: true,
+        emiAmount: true,
+      }
     });
 
     if (!currentLoan || currentLoan.userId !== userId) {
@@ -735,6 +823,46 @@ export async function reconcileOutstanding(
     if (isClosed) {
       // Finding #5 & Finding 3: Centralized closure cleanup using locked obligationId
       await cleanupLoanRemindersAndObligation(tx, userId, loanId, currentLoan.obligationId);
+    } else if (currentLoan.status === 'CLOSED' && !isClosed && outstandingDecimal.greaterThan(0)) {
+      // Ticket R001-P1-04: When a CLOSED loan is reopened to ACTIVE
+      if (currentLoan.obligationId) {
+        const hasActiveSchedule = Boolean(
+          currentLoan.nextEmiDate &&
+          currentLoan.emiAmount &&
+          !new Decimal(currentLoan.emiAmount.toString()).isZero()
+        );
+
+        if (hasActiveSchedule) {
+          await tx.obligation.update({
+            where: { id: currentLoan.obligationId },
+            data: { isActive: true, isArchived: false }
+          });
+
+          const loanReminders = await tx.reminder.findMany({
+            where: {
+              userId,
+              OR: [
+                { domain: 'FINANCE', type: 'LOAN_EMI', category: loanId },
+                { obligationId: currentLoan.obligationId }
+              ]
+            }
+          });
+
+          for (const rem of loanReminders) {
+            if (!rem.isActive) {
+              await tx.reminder.update({
+                where: { id: rem.id },
+                data: { isActive: true }
+              });
+            }
+          }
+        } else {
+          await tx.obligation.update({
+            where: { id: currentLoan.obligationId },
+            data: { isActive: false }
+          });
+        }
+      }
     }
 
     return updated;
@@ -865,15 +993,23 @@ export async function updateLoan(
     }
 
     let effectiveNextDue: Date | null = currentLoan.nextEmiDate;
-    const nextEmiDateProvided = parsed.nextEmiDate !== undefined;
 
-    // Finding 5: Explicit schedule clear with dueDay change:
-    // If parsed.nextEmiDate === null, user explicitly requested schedule clearing.
-    // Do NOT recalculate a replacement date when dueDay changes; honor explicit null.
+    // Ticket R001-P1-02 & R001-P1-03: Single deterministic precedence order for nextEmiDate
     if (parsed.nextEmiDate === null) {
+      // 1) If parsed.nextEmiDate === null: explicitly cleared/suspended
       effectiveNextDue = null;
       updateData.nextEmiDate = null;
+    } else if (
+      parsed.nextEmiDate !== undefined &&
+      (!currentLoan.nextEmiDate || !isSameCalendarDate(new Date(parsed.nextEmiDate), currentLoan.nextEmiDate, userTimezone))
+    ) {
+      // 2) Else if parsed.nextEmiDate !== undefined AND (either !currentLoan.nextEmiDate or !isSameCalendarDate(...)):
+      // Explicit new date submitted takes precedence over automatic calculation
+      effectiveNextDue = new Date(parsed.nextEmiDate);
+      updateData.nextEmiDate = effectiveNextDue;
     } else if (dueDayChanged && typeof parsed.dueDay === 'number') {
+      // 3) Else if dueDayChanged && typeof parsed.dueDay === 'number':
+      // Calculate candidate from changed dueDay
       const targetDay = parsed.dueDay;
       const now = new Date();
       const nowInTz = new TZDate(now, userTimezone);
@@ -893,29 +1029,15 @@ export async function updateLoan(
       }
       effectiveNextDue = new Date(candidate.getTime());
       updateData.nextEmiDate = effectiveNextDue;
-    } else if (nextEmiDateProvided) {
-      effectiveNextDue = parsed.nextEmiDate ? new Date(parsed.nextEmiDate) : null;
-      updateData.nextEmiDate = effectiveNextDue;
-    } else if (dueDayProvided && typeof parsed.dueDay === 'number' && !currentLoan.nextEmiDate) {
-      const targetDay = parsed.dueDay;
-      const now = new Date();
-      const nowInTz = new TZDate(now, userTimezone);
-      const year = nowInTz.getFullYear();
-      const month = nowInTz.getMonth();
-      const clampedDay = clampDayToMonth(year, month, targetDay);
-      let candidate = new TZDate(year, month, clampedDay, 12, 0, 0, 0, userTimezone);
-      if (candidate.getTime() <= now.getTime()) {
-        let nextMonth = month + 1;
-        let nextYear = year;
-        if (nextMonth > 11) {
-          nextMonth = 0;
-          nextYear += 1;
-        }
-        const nextClamped = clampDayToMonth(nextYear, nextMonth, targetDay);
-        candidate = new TZDate(nextYear, nextMonth, nextClamped, 12, 0, 0, 0, userTimezone);
+    } else if (parsed.nextEmiDate !== undefined) {
+      // 4) Else if parsed.nextEmiDate !== undefined:
+      // Keep provided/existing date
+      if (currentLoan.nextEmiDate) {
+        effectiveNextDue = currentLoan.nextEmiDate;
+      } else {
+        effectiveNextDue = new Date(parsed.nextEmiDate);
+        updateData.nextEmiDate = effectiveNextDue;
       }
-      effectiveNextDue = new Date(candidate.getTime());
-      updateData.nextEmiDate = effectiveNextDue;
     }
 
     // Finding 1: Compare calendar dates in user's timezone rather than raw UTC timestamps

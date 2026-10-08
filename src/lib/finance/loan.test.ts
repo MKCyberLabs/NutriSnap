@@ -1523,3 +1523,315 @@ test('V2-380: Repair 3-B - Loan dates, closure lock, bill anchor, schedule clear
     await db.$disconnect();
   }
 });
+
+test('V2-390: Repair 4 - P1 Tickets R001-P1-01..04', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr-r4-${timestamp}`,
+        email: `r4-${timestamp}@test.local`,
+        name: 'User Repair4 Test',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const userB = await db.user.create({
+      data: {
+        id: `usr-r4-b-${timestamp}`,
+        email: `r4b-${timestamp}@test.local`,
+        name: 'User Repair4 Beta',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bankA = await financeService.createAccount(user.id, {
+      name: 'Salary Bank A',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankAId = bankA.account.id;
+
+    const bankB = await financeService.createAccount(userB.id, {
+      name: 'Salary Bank B',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+    const bankBId = bankB.account.id;
+
+    // -------------------------------------------------------------------------
+    // 1. Ticket R001-P1-01: Concurrency idempotency under transaction lock
+    // Promise.all with identical idempotencyKey on recordEmiPayment results in
+    // exactly 1 payment created and 1 alreadyProcessed: true result; principal deducted only once.
+    // -------------------------------------------------------------------------
+    const cLoanRes = await loanService.createLoan(user.id, {
+      name: 'Concurrent Idempotency Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '50000.00',
+      emiAmount: '5000.00',
+      nextEmiDate: '2026-11-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bankAId,
+    }, db);
+    assert.equal(cLoanRes.success, true);
+    const cLoanId = cLoanRes.loan.id;
+
+    const [payRes1, payRes2] = await Promise.all([
+      loanService.recordEmiPayment(user.id, {
+        loanId: cLoanId,
+        amount: '5000.00',
+        accountId: bankAId,
+        principalPaid: '5000.00',
+        idempotencyKey: `idemp-race-${timestamp}`,
+      }, db),
+      loanService.recordEmiPayment(user.id, {
+        loanId: cLoanId,
+        amount: '5000.00',
+        accountId: bankAId,
+        principalPaid: '5000.00',
+        idempotencyKey: `idemp-race-${timestamp}`,
+      }, db),
+    ]);
+
+    assert.equal(payRes1.success, true);
+    assert.equal(payRes2.success, true);
+
+    const results = [payRes1, payRes2];
+    const initialProcessed = results.find(r => !r.alreadyProcessed);
+    const idempotentProcessed = results.find(r => r.alreadyProcessed);
+
+    assert.ok(initialProcessed, 'One payment must succeed as newly processed');
+    assert.ok(idempotentProcessed, 'Second concurrent payment must return alreadyProcessed: true');
+    assert.equal(idempotentProcessed.paymentId, initialProcessed.paymentId, 'Both calls must return the same paymentId');
+
+    const paymentsInDb = await db.loanPayment.findMany({
+      where: { loanId: cLoanId },
+    });
+    assert.equal(paymentsInDb.length, 1, 'Exactly 1 loan payment must be created');
+
+    const loanAfterConcurrent = await db.loan.findUnique({
+      where: { id: cLoanId },
+    });
+    assert.equal(loanAfterConcurrent?.outstandingPrincipal.toString(), '45000', 'Principal must be deducted only once');
+
+    // Test obligationPaymentId idempotency
+    const obPayRes1 = await loanService.recordEmiPayment(user.id, {
+      loanId: cLoanId,
+      amount: '5000.00',
+      accountId: bankAId,
+      principalPaid: '5000.00',
+      obligationPaymentId: `obpay-race-${timestamp}`,
+    }, db);
+    assert.equal(obPayRes1.success, true);
+    assert.equal(obPayRes1.alreadyProcessed, false);
+
+    const obPayRes2 = await loanService.recordEmiPayment(user.id, {
+      loanId: cLoanId,
+      amount: '5000.00',
+      accountId: bankAId,
+      principalPaid: '5000.00',
+      obligationPaymentId: `obpay-race-${timestamp}`,
+    }, db);
+    assert.equal(obPayRes2.success, true);
+    assert.equal(obPayRes2.alreadyProcessed, true);
+    assert.equal(obPayRes2.paymentId, obPayRes1.paymentId);
+
+    // Cross-user isolation: User B cannot record payment on User A's loan
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(userB.id, {
+          loanId: cLoanId,
+          amount: '5000.00',
+          accountId: bankBId,
+          idempotencyKey: `idemp-race-${timestamp}`,
+        }, db);
+      },
+      /unauthorized|not found/i,
+      'Cross-user payment attempt must be rejected'
+    );
+
+    // -------------------------------------------------------------------------
+    // 2. Ticket R001-P1-02: Schedule clearing + rename test
+    // Clearing schedule (nextEmiDate: null), then renaming the loan keeps
+    // nextEmiDate: null and obligation inactive.
+    // -------------------------------------------------------------------------
+    const clearLoanRes = await loanService.createLoan(user.id, {
+      name: 'Schedule Clear Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'Axis Bank',
+      openingOutstanding: '30000.00',
+      emiAmount: '2500.00',
+      nextEmiDate: '2026-11-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bankAId,
+      createLinkedObligation: true,
+    }, db);
+    assert.equal(clearLoanRes.success, true);
+    const clearLoanId = clearLoanRes.loan.id;
+    const clearObId = clearLoanRes.loan.obligationId!;
+
+    // Step A: Explicitly clear the schedule
+    const clearRes = await loanService.updateLoan(user.id, clearLoanId, {
+      nextEmiDate: null,
+    }, db);
+    assert.equal(clearRes.success, true);
+    assert.equal(clearRes.loan.nextEmiDate, null);
+
+    const obAfterClear = await db.obligation.findUnique({ where: { id: clearObId } });
+    assert.equal(obAfterClear?.isActive, false, 'Linked obligation must be inactive after schedule clear');
+
+    // Step B: Rename the loan (metadata-only edit, sending existing dueDay 15)
+    const renameRes = await loanService.updateLoan(user.id, clearLoanId, {
+      name: 'Renamed Schedule Clear Loan',
+      dueDay: 15,
+    }, db);
+    assert.equal(renameRes.success, true);
+    assert.equal(renameRes.loan.name, 'Renamed Schedule Clear Loan');
+    assert.equal(renameRes.loan.nextEmiDate, null, 'nextEmiDate must remain null after metadata rename edit');
+
+    const loanAfterRename = await db.loan.findUnique({ where: { id: clearLoanId } });
+    assert.equal(loanAfterRename?.nextEmiDate, null, 'DB nextEmiDate must remain null');
+
+    const obAfterRename = await db.obligation.findUnique({ where: { id: clearObId } });
+    assert.equal(obAfterRename?.isActive, false, 'Linked obligation must remain inactive after rename');
+
+    // -------------------------------------------------------------------------
+    // 3. Ticket R001-P1-03: Precedence test
+    // Changing dueDay and providing explicit nextEmiDate preserves the explicit date.
+    // -------------------------------------------------------------------------
+    const precLoanRes = await loanService.createLoan(user.id, {
+      name: 'Precedence Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'SBI',
+      openingOutstanding: '40000.00',
+      emiAmount: '4000.00',
+      nextEmiDate: '2026-11-10T12:00:00.000Z',
+      dueDay: 10,
+      paymentAccountId: bankAId,
+    }, db);
+    assert.equal(precLoanRes.success, true);
+    const precLoanId = precLoanRes.loan.id;
+
+    const explicitDate = '2026-11-20T12:00:00.000Z';
+    const precUpdateRes = await loanService.updateLoan(user.id, precLoanId, {
+      dueDay: 25,
+      nextEmiDate: explicitDate,
+    }, db);
+    assert.equal(precUpdateRes.success, true);
+    assert.equal(precUpdateRes.loan.dueDay, 25);
+    assert.equal(
+      new Date(precUpdateRes.loan.nextEmiDate!).toISOString(),
+      new Date(explicitDate).toISOString(),
+      'Explicit nextEmiDate must take precedence over automatic dueDay calculation'
+    );
+
+    const loanAfterPrec = await db.loan.findUnique({ where: { id: precLoanId } });
+    assert.equal(
+      loanAfterPrec?.nextEmiDate?.toISOString(),
+      new Date(explicitDate).toISOString(),
+      'DB nextEmiDate must match explicit date'
+    );
+
+    // -------------------------------------------------------------------------
+    // 4. Ticket R001-P1-04: Reopen test
+    // CLOSED loan reconciled to positive outstanding reactivates linked obligation
+    // when schedule exists; leaves obligation inactive when schedule is null.
+    // -------------------------------------------------------------------------
+    // 4a. Case A: Schedule exists (nextEmiDate && emiAmount)
+    const reopenLoanRes = await loanService.createLoan(user.id, {
+      name: 'Reopen Active Schedule Loan',
+      loanType: 'PERSONAL',
+      lender: 'ICICI Bank',
+      openingOutstanding: '20000.00',
+      emiAmount: '2000.00',
+      nextEmiDate: '2026-11-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bankAId,
+      createLinkedObligation: true,
+    }, db);
+    assert.equal(reopenLoanRes.success, true);
+    const reopenLoanId = reopenLoanRes.loan.id;
+    const reopenObId = reopenLoanRes.loan.obligationId!;
+
+    const reopenRem = await db.reminder.create({
+      data: {
+        userId: user.id,
+        obligationId: reopenObId,
+        type: 'LOAN_EMI',
+        category: reopenLoanId,
+        domain: 'FINANCE',
+        title: 'Reopen Loan Reminder',
+        time: '12:00',
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const closeRes = await loanService.reconcileOutstanding(user.id, reopenLoanId, 0, 'Payoff', db);
+    assert.equal(closeRes.success, true);
+    assert.equal(closeRes.status, 'CLOSED');
+
+    const obAfterClose = await db.obligation.findUnique({ where: { id: reopenObId } });
+    assert.equal(obAfterClose?.isActive, false);
+    assert.equal(obAfterClose?.isArchived, true);
+
+    const remAfterClose = await db.reminder.findUnique({ where: { id: reopenRem.id } });
+    assert.equal(remAfterClose?.isActive, false);
+
+    const reopenRes = await loanService.reconcileOutstanding(user.id, reopenLoanId, '10000.00', 'Correction / Reopen', db);
+    assert.equal(reopenRes.success, true);
+    assert.equal(reopenRes.status, 'ACTIVE');
+    assert.equal(reopenRes.outstandingPrincipal, '10000');
+
+    const obAfterReopen = await db.obligation.findUnique({ where: { id: reopenObId } });
+    assert.equal(obAfterReopen?.isActive, true, 'Linked obligation must be reactivated when loan reopens with active schedule');
+    assert.equal(obAfterReopen?.isArchived, false, 'Linked obligation must unarchive when loan reopens');
+
+    const remAfterReopen = await db.reminder.findUnique({ where: { id: reopenRem.id } });
+    assert.equal(remAfterReopen?.isActive, true, 'Loan reminders must be reactivated when loan reopens');
+
+    // Repeated reconcile is idempotent: does not duplicate or re-archive
+    const repeatReopenRes = await loanService.reconcileOutstanding(user.id, reopenLoanId, '9000.00', 'Second adjust', db);
+    assert.equal(repeatReopenRes.success, true);
+    assert.equal(repeatReopenRes.status, 'ACTIVE');
+
+    const obAfterRepeat = await db.obligation.findUnique({ where: { id: reopenObId } });
+    assert.equal(obAfterRepeat?.isActive, true);
+    assert.equal(obAfterRepeat?.isArchived, false);
+
+    // 4b. Case B: Schedule is null (cleared schedule)
+    const nullSchedLoanRes = await loanService.createLoan(user.id, {
+      name: 'Reopen Null Schedule Loan',
+      loanType: 'PERSONAL',
+      lender: 'Axis Bank',
+      openingOutstanding: '15000.00',
+      emiAmount: '1500.00',
+      nextEmiDate: '2026-11-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bankAId,
+      createLinkedObligation: true,
+    }, db);
+    const nullSchedLoanId = nullSchedLoanRes.loan.id;
+    const nullSchedObId = nullSchedLoanRes.loan.obligationId!;
+
+    await loanService.updateLoan(user.id, nullSchedLoanId, { nextEmiDate: null }, db);
+    await loanService.reconcileOutstanding(user.id, nullSchedLoanId, 0, 'Payoff', db);
+
+    const reopenNullRes = await loanService.reconcileOutstanding(user.id, nullSchedLoanId, '8000.00', 'Reopen no schedule', db);
+    assert.equal(reopenNullRes.success, true);
+    assert.equal(reopenNullRes.status, 'ACTIVE');
+
+    const obAfterReopenNull = await db.obligation.findUnique({ where: { id: nullSchedObId } });
+    assert.equal(obAfterReopenNull?.isActive, false, 'Linked obligation must remain inactive when loan has no active schedule (nextEmiDate null)');
+
+  } finally {
+    await db.$disconnect();
+  }
+});

@@ -193,10 +193,11 @@ export function LoanForm({
         const isDueDayEdited = newDueDayVal !== initialDueDay;
         const isNextEmiDateEdited = currentNextEmiDateStr !== initialNextEmiDateStr;
 
-        // Finding 1 & 5: If nextEmiDate was edited, submit new ISO or null.
-        // If dueDay was edited and nextEmiDate was unchanged, omit nextEmiDate so server calculates from dueDay.
-        // If nextEmiDate was unchanged, do NOT resubmit as 00:00Z midnight; preserve initialData.nextEmiDate exact ISO string.
-        if (isDueDayEdited) {
+        // Ticket R001-P1-02: If loan?.nextEmiDate is null and nextEmiDate input is empty,
+        // preserve cleared schedule (do not submit or force generation of new date).
+        if (!loan?.nextEmiDate && !currentNextEmiDateStr) {
+          payload.nextEmiDate = null;
+        } else if (isDueDayEdited) {
           if (isNextEmiDateEdited) {
             payload.nextEmiDate = currentNextEmiDateStr ? new Date(currentNextEmiDateStr).toISOString() : null;
           }
