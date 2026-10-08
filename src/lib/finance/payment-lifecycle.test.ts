@@ -5,6 +5,7 @@ const Decimal = Prisma.Decimal;
 import * as financeService from './finance-service';
 import * as loanService from './loan-service';
 import * as creditCardService from './credit-card-service';
+import { processSchedulerTick } from '../scheduler';
 
 const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
 
@@ -485,9 +486,11 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(occ.status, 'COMPLETED');
     assert.equal(occ.transactionId, null);
 
-    // Obligation schedule advanced to next month
+    // Obligation deactivated on full payoff
     const obAfterFull = await db.obligation.findUnique({ where: { id: linkedOb.id } });
-    assert.ok(new Date(obAfterFull!.nextDueAt).getTime() > new Date(linkedOb.nextDueAt).getTime());
+    assert.equal(obAfterFull!.isActive, false);
+    assert.equal(obAfterFull!.isArchived, true);
+    assert.equal(obAfterFull!.recurrenceType, 'ONCE');
 
     // 5. Revert Payment: undo the latest ₹8,000 payment
     const revertPay3 = await creditCardService.revertCreditCardPayment(userAId, {
@@ -503,7 +506,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     });
     assert.equal(tx3Deleted, null);
 
-    // Completed occurrence removed and obligation restored to ₹8,000 pending
+    // Completed occurrence removed and obligation restored to ₹8,000 pending and reactivated
     const occAfterRevert = await db.obligationOccurrence.findFirst({
       where: { obligationId: linkedOb.id }
     });
@@ -512,6 +515,8 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     const obAfterRevert = await db.obligation.findUnique({ where: { id: linkedOb.id } });
     assert.equal(new Decimal(obAfterRevert!.amount!).toString(), '8000');
     assert.equal(obAfterRevert!.nextDueAt.toISOString(), linkedOb.nextDueAt.toISOString());
+    assert.equal(obAfterRevert!.isActive, true);
+    assert.equal(obAfterRevert!.isArchived, false);
   });
 
   await t.test('V2-653c: Cross-user and safety invariants for credit cards', async () => {
@@ -748,6 +753,8 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     // Statement 1 obligation cleared/completed
     const ob1AfterFullPay = await db.obligation.findUnique({ where: { id: ob1Id } });
     assert.equal(ob1AfterFullPay?.amount, null);
+    assert.equal(ob1AfterFullPay?.isActive, false);
+    assert.equal(ob1AfterFullPay?.isArchived, true);
 
     // Statement 2 obligation remains completely active with ₹35,000
     const ob2AfterFullPay = await db.obligation.findUnique({ where: { id: ob2Id } });
@@ -780,6 +787,8 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
 
     const ob2AfterFull2 = await db.obligation.findUnique({ where: { id: ob2Id } });
     assert.equal(ob2AfterFull2?.amount, null);
+    assert.equal(ob2AfterFull2?.isActive, false);
+    assert.equal(ob2AfterFull2?.isArchived, true);
 
     // Both statements fully paid -> activeStatement is null
     const cardDetails = await creditCardService.getCreditCardDetails(userAId, cardMulti.id, db);
@@ -847,6 +856,8 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
 
     const obJanAfterPay = await db.obligation.findUnique({ where: { id: obJanId } });
     assert.equal(obJanAfterPay?.amount, null);
+    assert.equal(obJanAfterPay?.isActive, false);
+    assert.equal(obJanAfterPay?.isArchived, true);
 
     // 2. Cycle 2: February statement (₹35,000 due 2026-03-10) created after Jan is fully paid
     const stmtFebRes = await creditCardService.createCreditCardStatement(userAId, {
@@ -930,10 +941,12 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(revertJan1.restoredStatus, 'PARTIAL');
     assert.equal(new Decimal(revertJan1.pendingBalance).toString(), '15000');
 
-    // Verify Jan obligation restored to ₹15,000
+    // Verify Jan obligation restored to ₹15,000 and reactivated
     const obJanAfterRevert1 = await db.obligation.findUnique({ where: { id: obJanId } });
     assert.equal(new Decimal(obJanAfterRevert1!.amount!).toString(), '15000');
     assert.equal(obJanAfterRevert1!.nextDueAt.toISOString(), '2026-02-10T12:00:00.000Z');
+    assert.equal(obJanAfterRevert1!.isActive, true);
+    assert.equal(obJanAfterRevert1!.isArchived, false);
 
     // CRUCIAL FINDING P1 #1 ISOLATION CHECKS:
     // Feb obligation must be COMPLETELY UNTOUCHED!
@@ -1083,5 +1096,197 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(stmtAprRepeat.success, true);
     assert.equal(stmtAprRepeat.statement.id, stmtApr1.statement.id);
     assert.equal(stmtAprRepeat.alreadyExists, true);
+  });
+
+  await t.test('V2-653g: Paid CC cycle obligation is deactivated (isActive: false) and suppressed from scheduler reminder deliveries, while open cycle remains active and receives reminders', async () => {
+    // 1. Setup user with telegramId so scheduler processes their obligations
+    const schedUserId = `usr_sched_cc_${timestamp}`;
+    const schedUser = await db.user.create({
+      data: {
+        id: schedUserId,
+        email: `sched_cc_${timestamp}@test.com`,
+        name: 'CC Sched User',
+        password: 'password123',
+        telegramId: `tg_cc_${timestamp}`,
+        timezone: 'UTC',
+      }
+    });
+
+    const schedBank = await db.financialAccount.create({
+      data: {
+        userId: schedUserId,
+        name: 'Sched Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(100000),
+        isActive: true,
+      }
+    });
+
+    const schedCard = await db.financialAccount.create({
+      data: {
+        userId: schedUserId,
+        name: 'Sched Platinum Card',
+        type: 'CREDIT_CARD',
+        openingBalance: new Decimal(0),
+        creditLimit: new Decimal(200000),
+        statementDay: 20,
+        paymentDueDay: 10,
+        defaultPaymentAccountId: schedBank.id,
+        isActive: true,
+      }
+    });
+
+    // 2. Create Statement 1 (Jan 2026, due 2026-02-10)
+    const stmt1Res = await creditCardService.createCreditCardStatement(schedUserId, {
+      accountId: schedCard.id,
+      periodKey: '2026-01',
+      statementDate: '2026-01-20T12:00:00.000Z',
+      dueDate: '2026-02-10T12:00:00.000Z',
+      statementAmount: 20000,
+      minimumDue: 1000,
+    }, db);
+    assert.equal(stmt1Res.success, true);
+    const stmt1Id = stmt1Res.statement.id;
+    const stmt1Db = await db.creditCardStatement.findUnique({ where: { id: stmt1Id } });
+    assert.ok(stmt1Db?.obligationId);
+    const ob1Id = stmt1Db.obligationId!;
+
+    // Verify Statement 1 obligation created with ONCE recurrence and active
+    const ob1 = await db.obligation.findUnique({ where: { id: ob1Id } });
+    assert.ok(ob1);
+    assert.equal(ob1.recurrenceType, 'ONCE');
+    assert.equal(ob1.recurrenceInterval, 1);
+    assert.equal(ob1.isActive, true);
+    assert.equal(ob1.isArchived, false);
+    assert.equal(new Decimal(ob1.amount!).toString(), '20000');
+
+    // Create a pre-existing PENDING delivery for Statement 1 to verify it gets acknowledged on payoff
+    const rem1 = await db.reminder.create({
+      data: {
+        userId: schedUserId,
+        obligationId: ob1Id,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob1.title,
+        isActive: true,
+      }
+    });
+    const deliv1 = await db.reminderDelivery.create({
+      data: {
+        userId: schedUserId,
+        reminderId: rem1.id,
+        obligationId: ob1Id,
+        occurrenceKey: '2026-02-10',
+        scheduledFor: new Date('2026-02-10T12:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // 3. Create Statement 2 (Feb 2026, due 2026-03-10)
+    const stmt2Res = await creditCardService.createCreditCardStatement(schedUserId, {
+      accountId: schedCard.id,
+      periodKey: '2026-02',
+      statementDate: '2026-02-20T12:00:00.000Z',
+      dueDate: '2026-03-10T12:00:00.000Z',
+      statementAmount: 35000,
+      minimumDue: 1750,
+    }, db);
+    assert.equal(stmt2Res.success, true);
+    const stmt2Id = stmt2Res.statement.id;
+    const stmt2Db = await db.creditCardStatement.findUnique({ where: { id: stmt2Id } });
+    assert.ok(stmt2Db?.obligationId);
+    const ob2Id = stmt2Db.obligationId!;
+
+    // Verify Statement 2 obligation created with ONCE recurrence and active
+    const ob2 = await db.obligation.findUnique({ where: { id: ob2Id } });
+    assert.ok(ob2);
+    assert.equal(ob2.recurrenceType, 'ONCE');
+    assert.equal(ob2.recurrenceInterval, 1);
+    assert.equal(ob2.isActive, true);
+    assert.equal(ob2.isArchived, false);
+    assert.equal(new Decimal(ob2.amount!).toString(), '35000');
+
+    // 4. Pay Statement 1 in full (₹20,000)
+    const payStmt1 = await creditCardService.recordCreditCardPayment(schedUserId, {
+      statementId: stmt1Id,
+      fromAccountId: schedBank.id,
+      amount: 20000,
+      note: 'Payoff Stmt 1',
+    }, db);
+    assert.equal(payStmt1.statementStatus, 'PAID');
+    assert.equal(payStmt1.fullyPaid, true);
+
+    // Verify Statement 1 obligation is atomically deactivated
+    const ob1AfterPay = await db.obligation.findUnique({ where: { id: ob1Id } });
+    assert.equal(ob1AfterPay?.isActive, false, 'Statement 1 obligation must be deactivated (isActive: false)');
+    assert.equal(ob1AfterPay?.isArchived, true, 'Statement 1 obligation must be archived (isArchived: true)');
+    assert.equal(ob1AfterPay?.amount, null);
+    assert.equal(ob1AfterPay?.nextDueAt.toISOString(), '2026-02-10T12:00:00.000Z');
+
+    // Verify pre-existing delivery for Statement 1 was acknowledged/cancelled
+    const deliv1AfterPay = await db.reminderDelivery.findUnique({ where: { id: deliv1.id } });
+    assert.equal(deliv1AfterPay?.status, 'ACKNOWLEDGED', 'Pending delivery for paid Statement 1 must be acknowledged');
+
+    // Verify Statement 2 obligation remains active and untouched
+    const ob2AfterPay1 = await db.obligation.findUnique({ where: { id: ob2Id } });
+    assert.equal(ob2AfterPay1?.isActive, true, 'Statement 2 obligation must remain active');
+    assert.equal(ob2AfterPay1?.isArchived, false);
+    assert.equal(new Decimal(ob2AfterPay1!.amount!).toString(), '35000');
+
+    // 5. Run scheduler tick when Statement 2 reminder is due (2026-03-10T12:00:00.000Z)
+    const mockBot = {
+      sentMessages: [] as Array<{ chatId: string; text: string; options?: any }>,
+      api: {
+        sendMessage: async (chatId: string, text: string, options?: any) => {
+          mockBot.sentMessages.push({ chatId, text, options });
+          return { message_id: 3000 + mockBot.sentMessages.length };
+        },
+      },
+    };
+
+    const tickNow = new Date('2026-03-10T12:00:00.000Z');
+    await processSchedulerTick({
+      prismaClient: db,
+      botClient: mockBot,
+      now: tickNow,
+    });
+
+    // CRUCIAL FINDING P1 #2 VERIFICATIONS:
+    // a) Statement 1 (paid) generated NO messages and NO new reminder deliveries
+    const userMessages = mockBot.sentMessages.filter(m => m.chatId === schedUser.telegramId);
+    assert.ok(userMessages.length > 0, 'Scheduler should have sent at least one message for active obligations');
+    const hasStmt1Message = userMessages.some(m => m.text.includes('2026-01'));
+    assert.equal(hasStmt1Message, false, 'Paid Statement 1 must NEVER generate Telegram reminder messages');
+
+    // b) Statement 2 (active) received reminders
+    const hasStmt2Message = userMessages.some(m => m.text.includes('2026-02') || m.text.includes('35,000') || m.text.includes('35000'));
+    assert.ok(hasStmt2Message, 'Active Statement 2 must receive Telegram reminder');
+
+    // c) Check DB deliveries: Statement 1 has 0 PENDING or SENT deliveries
+    const stmt1Deliveries = await db.reminderDelivery.findMany({
+      where: { obligationId: ob1Id, status: { in: ['PENDING', 'SENT'] } }
+    });
+    assert.equal(stmt1Deliveries.length, 0, 'Statement 1 must have NO PENDING or SENT reminder deliveries');
+
+    // d) Statement 2 has SENT reminder delivery
+    const stmt2Deliveries = await db.reminderDelivery.findMany({
+      where: { obligationId: ob2Id, status: 'SENT' }
+    });
+    assert.ok(stmt2Deliveries.length > 0, 'Statement 2 must have at least one SENT reminder delivery');
+
+    // 6. Verify Revert: Reverting Statement 1 payment reactivates its obligation
+    const revertStmt1 = await creditCardService.revertCreditCardPayment(schedUserId, {
+      paymentId: payStmt1.paymentId,
+    }, db);
+    assert.equal(revertStmt1.success, true);
+    assert.equal(revertStmt1.restoredStatus, 'OPEN');
+
+    const ob1AfterRevert = await db.obligation.findUnique({ where: { id: ob1Id } });
+    assert.equal(ob1AfterRevert?.isActive, true, 'Reverting payment must reactivate obligation (isActive: true)');
+    assert.equal(ob1AfterRevert?.isArchived, false, 'Reverting payment must unarchive obligation (isArchived: false)');
+    assert.equal(new Decimal(ob1AfterRevert!.amount!).toString(), '20000', 'Obligation amount must be restored');
+    assert.equal(ob1AfterRevert?.nextDueAt.toISOString(), '2026-02-10T12:00:00.000Z');
   });
 });

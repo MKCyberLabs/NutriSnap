@@ -143,7 +143,7 @@ export async function createCreditCardStatement(
         amount: statementAmount,
         dueAt: dueDate,
         nextDueAt: dueDate,
-        recurrenceType: 'MONTHLY',
+        recurrenceType: 'ONCE',
         recurrenceInterval: 1,
         reminderOffsetsMin: [0, 1440, 4320], // 0d, 1d, 3d
         isActive: true,
@@ -374,28 +374,22 @@ export async function recordCreditCardPayment(
           }
         });
 
-        // Advance obligation nextDueAt to next month
-        const rule: RecurrenceRule = {
-          type: 'MONTHLY',
-          interval: 1,
-          timezone: tz,
-        };
-        const nextDue = getNextOccurrence(rule, ob.dueAt, statement.dueDate);
-
+        // Atomically deactivate the obligation for this statement cycle
         await tx.obligation.update({
           where: { id: ob.id },
           data: {
-            amount: null, // Clear until next statement
-            nextDueAt: nextDue || statement.dueDate,
+            amount: null,
+            nextDueAt: statement.dueDate,
+            isActive: false,
+            isArchived: true,
             lastCompletedAt: paidAtDate,
           }
         });
 
-        // Acknowledge pending deliveries for this occurrence
+        // Acknowledge or cancel all pending reminder deliveries for this obligation
         await tx.reminderDelivery.updateMany({
           where: {
             obligationId: ob.id,
-            occurrenceKey,
             status: { in: ['PENDING', 'SENT', 'SNOOZED', 'FAILED'] }
           },
           data: {
@@ -563,10 +557,11 @@ export async function revertCreditCardPayment(
             amount: restoredPending,
             dueAt: statement.dueDate,
             nextDueAt: statement.dueDate,
-            recurrenceType: 'MONTHLY',
+            recurrenceType: 'ONCE',
             recurrenceInterval: 1,
             reminderOffsetsMin: [0, 1440, 4320],
             isActive: true,
+            isArchived: false,
           }
         });
 
@@ -591,13 +586,14 @@ export async function revertCreditCardPayment(
           }
         });
 
-        // Restore nextDueAt and amount
+        // Restore nextDueAt and amount and reactivate obligation
         await tx.obligation.update({
           where: { id: ob.id },
           data: {
             amount: restoredPending,
             nextDueAt: statement.dueDate,
             isActive: true,
+            isArchived: false,
           }
         });
 
@@ -605,7 +601,6 @@ export async function revertCreditCardPayment(
         await tx.reminderDelivery.updateMany({
           where: {
             obligationId: ob.id,
-            occurrenceKey,
             status: 'ACKNOWLEDGED',
             scheduledFor: { gt: new Date() },
           },
