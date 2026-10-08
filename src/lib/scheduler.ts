@@ -274,6 +274,10 @@ export async function processSchedulerTick(
 
         // SOL-R001-008: Exclusively claim delivery attempt before invoking sendMessage
         const claimOperation = async (tx: any) => {
+          if (typeof tx.$queryRaw === 'function') {
+            await tx.$queryRaw`SELECT id FROM "Obligation" WHERE id = ${ob.id} FOR UPDATE`;
+          }
+
           let del = await tx.reminderDelivery.findFirst({
             where: {
               obligationId: ob.id,
