@@ -819,6 +819,79 @@ test('V2-360: Repair B - Loan Null-Schedule, Hijack Prevention, Recurrence Day, 
     assert.equal(advLoanAfter?.nextEmiDate?.toISOString(), '2026-06-15T10:00:00.000Z');
     assert.equal(advObAfter?.nextDueAt?.toISOString(), '2026-06-15T10:00:00.000Z');
 
+    // -------------------------------------------------------------------------
+    // 5. Editing closed loans must NOT reactivate archived/disabled EMI obligations or stale reminder deliveries
+    // -------------------------------------------------------------------------
+    const closedLoanRes = await loanService.createLoan(testUser.id, {
+      name: 'Soon Closed Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '20000.00',
+      emiAmount: '2000.00',
+      nextEmiDate: '2026-11-20T10:00:00.000Z',
+      paymentAccountId: bankId,
+    }, db);
+    assert.equal(closedLoanRes.success, true);
+    const closedLoanId = closedLoanRes.loan.id;
+    const closedObId = closedLoanRes.loan.obligationId!;
+
+    // Add a reminder and pending delivery
+    const closedRem = await db.reminder.create({
+      data: {
+        userId: testUser.id,
+        obligationId: closedObId,
+        type: 'BILL',
+        title: 'Soon Closed EMI Reminder',
+        time: '10:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+    await db.reminderDelivery.create({
+      data: {
+        userId: testUser.id,
+        obligationId: closedObId,
+        reminderId: closedRem.id,
+        occurrenceKey: '2026-11-20T10:00',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-20T10:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // Explicitly close the loan
+    const closeRes = await loanService.closeLoan(testUser.id, closedLoanId, db);
+    assert.equal(closeRes.success, true);
+
+    const obAfterClose = await db.obligation.findUnique({ where: { id: closedObId } });
+    assert.equal(obAfterClose?.isActive, false);
+    assert.equal(obAfterClose?.isArchived, true);
+
+    // Now edit the closed loan: change name, notes, emiAmount, nextEmiDate
+    const updateClosedRes = await loanService.updateLoan(testUser.id, closedLoanId, {
+      name: 'Renamed Closed Loan',
+      notes: 'Updated archive notes',
+      emiAmount: '3000.00',
+      nextEmiDate: '2026-12-25T10:00:00.000Z',
+    }, db);
+    assert.equal(updateClosedRes.success, true);
+    assert.equal(updateClosedRes.loan.name, 'Renamed Closed Loan');
+    assert.equal(updateClosedRes.loan.status, 'CLOSED');
+
+    // Regression check: obligation MUST remain inactive and archived
+    const obAfterClosedEdit = await db.obligation.findUnique({ where: { id: closedObId } });
+    assert.equal(obAfterClosedEdit?.isActive, false, 'Obligation must not be reactivated');
+    assert.equal(obAfterClosedEdit?.isArchived, true, 'Obligation must remain archived');
+
+    // Regression check: no pending or snoozed reminder deliveries should exist
+    const deliveriesAfterClosedEdit = await db.reminderDelivery.findMany({
+      where: {
+        obligationId: closedObId,
+        status: { in: ['PENDING', 'SNOOZED'] }
+      }
+    });
+    assert.equal(deliveriesAfterClosedEdit.length, 0, 'No stale deliveries should be scheduled');
+
   } finally {
     await db.$disconnect();
   }

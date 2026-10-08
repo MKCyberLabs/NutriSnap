@@ -618,4 +618,172 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(occAfter.id, occBefore.id);
     assert.equal(occAfter.status, 'COMPLETED');
   });
+
+  await t.test('V2-653e: Overlapping credit card statement cycles preserve separate obligations, due dates, partial payments, and full completion', async () => {
+    // Setup dedicated credit card
+    const cardMulti = await db.financialAccount.create({
+      data: {
+        userId: userAId,
+        name: 'Axis Atlas Card',
+        type: 'CREDIT_CARD',
+        openingBalance: new Decimal(0),
+        creditLimit: new Decimal(200000),
+        statementDay: 15,
+        paymentDueDay: 5,
+        defaultPaymentAccountId: bankA.id,
+        isActive: true,
+      }
+    });
+
+    // 1. Create Statement 1: ₹20,000 due 2026-11-05
+    const stmt1Res = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardMulti.id,
+      periodKey: '2026-10',
+      statementDate: '2026-10-15T12:00:00.000Z',
+      dueDate: '2026-11-05T12:00:00.000Z',
+      statementAmount: 20000,
+      minimumDue: 1000,
+    }, db);
+    assert.equal(stmt1Res.success, true);
+    assert.equal(stmt1Res.statement.status, 'OPEN');
+    const stmt1Id = stmt1Res.statement.id;
+
+    const stmt1InDb = await db.creditCardStatement.findUnique({ where: { id: stmt1Id } });
+    assert.ok(stmt1InDb?.obligationId);
+    const ob1Id = stmt1InDb.obligationId!;
+
+    const ob1 = await db.obligation.findUnique({ where: { id: ob1Id } });
+    assert.ok(ob1);
+    assert.equal(new Decimal(ob1.amount!).toString(), '20000');
+    assert.equal(ob1.dueAt.toISOString(), '2026-11-05T12:00:00.000Z');
+
+    // Add reminder delivery for Statement 1
+    const rem1 = await db.reminder.create({
+      data: {
+        userId: userAId,
+        obligationId: ob1Id,
+        type: 'BILL',
+        title: 'Stmt 1 Reminder',
+        time: '12:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+    await db.reminderDelivery.create({
+      data: {
+        userId: userAId,
+        obligationId: ob1Id,
+        reminderId: rem1.id,
+        occurrenceKey: '2026-11-05',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-05T12:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // 2. While Statement 1 is OPEN, create overlapping Statement 2: ₹35,000 due 2026-12-05
+    const stmt2Res = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardMulti.id,
+      periodKey: '2026-11',
+      statementDate: '2026-11-15T12:00:00.000Z',
+      dueDate: '2026-12-05T12:00:00.000Z',
+      statementAmount: 35000,
+      minimumDue: 1750,
+    }, db);
+    assert.equal(stmt2Res.success, true);
+    assert.equal(stmt2Res.statement.status, 'OPEN');
+    const stmt2Id = stmt2Res.statement.id;
+
+    const stmt2InDb = await db.creditCardStatement.findUnique({ where: { id: stmt2Id } });
+    assert.ok(stmt2InDb?.obligationId);
+    const ob2Id = stmt2InDb.obligationId!;
+
+    // Must NOT share the same obligation
+    assert.notEqual(ob2Id, ob1Id, 'Overlapping statement cycle must receive its own obligation');
+
+    const ob2 = await db.obligation.findUnique({ where: { id: ob2Id } });
+    assert.ok(ob2);
+    assert.equal(new Decimal(ob2.amount!).toString(), '35000');
+    assert.equal(ob2.dueAt.toISOString(), '2026-12-05T12:00:00.000Z');
+
+    // Overlapping protection check: Statement 1 obligation must be completely unaffected!
+    const ob1AfterStmt2 = await db.obligation.findUnique({ where: { id: ob1Id } });
+    assert.equal(new Decimal(ob1AfterStmt2!.amount!).toString(), '20000', 'Statement 1 amount must not be overwritten');
+    assert.equal(ob1AfterStmt2!.dueAt.toISOString(), '2026-11-05T12:00:00.000Z', 'Statement 1 due date must not be overwritten');
+
+    const rem1Deliv = await db.reminderDelivery.findFirst({
+      where: { obligationId: ob1Id, occurrenceKey: '2026-11-05' }
+    });
+    assert.equal(rem1Deliv?.status, 'PENDING', 'Statement 1 delivery claim must remain pending');
+
+    // 3. Partial payment of ₹5,000 on Statement 1
+    const partPay1 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmt1Id,
+      fromAccountId: bankA.id,
+      amount: 5000,
+      note: 'Atlas Stmt 1 Part 1',
+    }, db);
+    assert.equal(partPay1.statementStatus, 'PARTIAL');
+    assert.equal(new Decimal(partPay1.pendingBalance).toString(), '15000');
+
+    // Statement 1 obligation updated to ₹15,000
+    const ob1AfterPartPay = await db.obligation.findUnique({ where: { id: ob1Id } });
+    assert.equal(new Decimal(ob1AfterPartPay!.amount!).toString(), '15000');
+
+    // Statement 2 obligation remains untouched at ₹35,000
+    const ob2AfterPartPay = await db.obligation.findUnique({ where: { id: ob2Id } });
+    assert.equal(new Decimal(ob2AfterPartPay!.amount!).toString(), '35000', 'Statement 2 amount must not change on Stmt 1 payment');
+    assert.equal(ob2AfterPartPay!.dueAt.toISOString(), '2026-12-05T12:00:00.000Z');
+
+    // 4. Full payment of remaining ₹15,000 on Statement 1
+    const fullPay1 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmt1Id,
+      fromAccountId: bankA.id,
+      amount: 15000,
+      note: 'Atlas Stmt 1 Part 2',
+    }, db);
+    assert.equal(fullPay1.statementStatus, 'PAID');
+    assert.equal(fullPay1.fullyPaid, true);
+
+    // Statement 1 obligation cleared/completed
+    const ob1AfterFullPay = await db.obligation.findUnique({ where: { id: ob1Id } });
+    assert.equal(ob1AfterFullPay?.amount, null);
+
+    // Statement 2 obligation remains completely active with ₹35,000
+    const ob2AfterFullPay = await db.obligation.findUnique({ where: { id: ob2Id } });
+    assert.equal(new Decimal(ob2AfterFullPay!.amount!).toString(), '35000', 'Statement 2 amount must remain intact after Stmt 1 full pay');
+    assert.equal(ob2AfterFullPay!.dueAt.toISOString(), '2026-12-05T12:00:00.000Z');
+    assert.equal(ob2AfterFullPay!.isActive, true);
+
+    // 5. Partial payment of ₹10,000 on Statement 2
+    const partPay2 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmt2Id,
+      fromAccountId: bankA.id,
+      amount: 10000,
+      note: 'Atlas Stmt 2 Part 1',
+    }, db);
+    assert.equal(partPay2.statementStatus, 'PARTIAL');
+    assert.equal(new Decimal(partPay2.pendingBalance).toString(), '25000');
+
+    const ob2AfterPart2 = await db.obligation.findUnique({ where: { id: ob2Id } });
+    assert.equal(new Decimal(ob2AfterPart2!.amount!).toString(), '25000');
+
+    // 6. Full payment of remaining ₹25,000 on Statement 2
+    const fullPay2 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmt2Id,
+      fromAccountId: bankA.id,
+      amount: 25000,
+      note: 'Atlas Stmt 2 Part 2',
+    }, db);
+    assert.equal(fullPay2.statementStatus, 'PAID');
+    assert.equal(fullPay2.fullyPaid, true);
+
+    const ob2AfterFull2 = await db.obligation.findUnique({ where: { id: ob2Id } });
+    assert.equal(ob2AfterFull2?.amount, null);
+
+    // Both statements fully paid -> activeStatement is null
+    const cardDetails = await creditCardService.getCreditCardDetails(userAId, cardMulti.id, db);
+    assert.equal(cardDetails.activeStatement, null);
+    assert.equal(cardDetails.allStatements.length, 2);
+  });
 });

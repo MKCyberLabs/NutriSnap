@@ -121,20 +121,44 @@ export async function createCreditCardStatement(
   }
 
   const executeInTransaction = async (tx: any) => {
-    let obligation = await tx.obligation.findFirst({
+    // Find candidate unarchived obligations for this credit card account
+    const candidateObs = await tx.obligation.findMany({
       where: {
         userId,
         accountId: account.id,
         kind: 'CREDIT_CARD',
         isArchived: false,
+      },
+      include: {
+        creditCardStatements: {
+          where: {
+            status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] }
+          }
+        }
       }
     });
 
-    if (!obligation) {
+    // An obligation is free to reuse only if it is NOT actively servicing another open/partial statement
+    const freeOb = candidateObs.find((o: any) => o.creditCardStatements.length === 0);
+
+    let obligation: any;
+    if (freeOb) {
+      obligation = await tx.obligation.update({
+        where: { id: freeOb.id },
+        data: {
+          title: `${account.name} Bill (${parsed.periodKey})`,
+          amount: statementAmount,
+          dueAt: dueDate,
+          nextDueAt: dueDate,
+          isActive: true,
+          isArchived: false,
+        }
+      });
+    } else {
       obligation = await tx.obligation.create({
         data: {
           userId,
-          title: `${account.name} Bill`,
+          title: `${account.name} Bill (${parsed.periodKey})`,
           kind: 'CREDIT_CARD',
           accountId: account.id,
           amount: statementAmount,
@@ -143,16 +167,6 @@ export async function createCreditCardStatement(
           recurrenceType: 'MONTHLY',
           recurrenceInterval: 1,
           reminderOffsetsMin: [0, 1440, 4320], // 0d, 1d, 3d
-          isActive: true,
-        }
-      });
-    } else {
-      obligation = await tx.obligation.update({
-        where: { id: obligation.id },
-        data: {
-          amount: statementAmount,
-          dueAt: dueDate,
-          nextDueAt: dueDate,
           isActive: true,
         }
       });
@@ -634,9 +648,13 @@ export async function getCreditCardDetails(
   const creditLimit = account.creditLimit;
   const availableCredit = creditLimit ? creditLimit.minus(ledgerBalance) : null;
 
-  // Active statement is the first open/partial statement; when all statements are paid, activeStatement is null
+  // Active statement is the earliest open/partial/overdue statement (due soonest);
+  // when all statements are paid, activeStatement is null
   const statements = account.creditCardStatements;
-  const activeStatement = statements.find((s: any) => s.status !== 'PAID') || null;
+  const unpaidStatements = statements
+    .filter((s: any) => s.status !== 'PAID')
+    .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  const activeStatement = unpaidStatements[0] || null;
 
   let activeStatementSummary = null;
   if (activeStatement) {

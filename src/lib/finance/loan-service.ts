@@ -838,8 +838,45 @@ export async function updateLoan(
       effectiveEmiAmount.isZero() ||
       (effectiveNextDue === null && !newDueDay);
 
+    const isLoanClosed = loan.status === 'CLOSED';
+
     if (existingOb) {
-      if (isScheduleCleared) {
+      if (isLoanClosed) {
+        // Closed loan edit must NEVER reactivate obligation or schedule stale deliveries
+        await tx.obligation.update({
+          where: { id: existingOb.id },
+          data: {
+            isActive: false,
+            isArchived: true,
+            ...(parsed.name || parsed.lender ? { title: `EMI: ${effectiveName} (${effectiveLender})` } : {}),
+            ...(parsed.paymentAccountId !== undefined ? { accountId: effectiveAccountId || null } : {}),
+          }
+        });
+        await tx.reminderDelivery.deleteMany({
+          where: {
+            obligationId: existingOb.id,
+            status: { in: ['PENDING', 'SNOOZED'] }
+          }
+        });
+        const loanReminders = await tx.reminder.findMany({
+          where: {
+            userId,
+            OR: [
+              { domain: 'FINANCE', type: 'LOAN_EMI', category: loanId },
+              { obligationId: existingOb.id }
+            ]
+          }
+        });
+        for (const rem of loanReminders) {
+          await tx.reminder.update({
+            where: { id: rem.id },
+            data: { isActive: false }
+          });
+          await tx.reminderDelivery.deleteMany({
+            where: { reminderId: rem.id, status: { in: ['PENDING', 'SNOOZED'] } }
+          });
+        }
+      } else if (isScheduleCleared) {
         await tx.obligation.update({
           where: { id: existingOb.id },
           data: { isActive: false }
@@ -883,7 +920,7 @@ export async function updateLoan(
           });
         }
       }
-    } else if (!isScheduleCleared && effectiveEmiAmount && effectiveNextDue && loan.status === 'ACTIVE') {
+    } else if (!isScheduleCleared && !isLoanClosed && effectiveEmiAmount && effectiveNextDue && loan.status === 'ACTIVE') {
       // Finding #3: If no obligation linked yet, create brand new obligation - NEVER lookup by title/kind
       const createdOb = await tx.obligation.create({
         data: {
