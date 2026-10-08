@@ -130,29 +130,35 @@ export function DebtForm({
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           {/* Direction Segmented Control */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-[#F7FAF8] rounded-xl border border-[#E5ECE8]">
+          <div
+            role="group"
+            aria-label="Debt Direction"
+            className="grid grid-cols-2 gap-2 p-1 bg-[#F7FAF8] rounded-xl border border-[#E5ECE8]"
+          >
             <button
               type="button"
+              aria-pressed={direction === 'RECEIVABLE'}
               onClick={() => setDirection('RECEIVABLE')}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] focus-visible:ring-offset-2 ${
                 direction === 'RECEIVABLE'
                   ? 'bg-white text-[#16A34A] shadow-xs border border-[#E5ECE8]'
                   : 'text-[#667085] hover:text-[#111827]'
               }`}
             >
-              <ArrowDownLeft className="h-3.5 w-3.5" />
+              <ArrowDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
               <span>I Lent (Owed to Me)</span>
             </button>
             <button
               type="button"
+              aria-pressed={direction === 'PAYABLE'}
               onClick={() => setDirection('PAYABLE')}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] focus-visible:ring-offset-2 ${
                 direction === 'PAYABLE'
                   ? 'bg-white text-[#D97706] shadow-xs border border-[#E5ECE8]'
                   : 'text-[#667085] hover:text-[#111827]'
               }`}
             >
-              <ArrowUpRight className="h-3.5 w-3.5" />
+              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               <span>I Borrowed (I Owe)</span>
             </button>
           </div>
