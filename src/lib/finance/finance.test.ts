@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Prisma } from '../../../prisma/generated/client';
+import { Prisma, PrismaClient } from '../../../prisma/generated/client';
 const Decimal = Prisma.Decimal;
+import * as financeService from './finance-service';
+import * as loanService from './loan-service';
 import {
   isValidAccountType,
   isValidTransactionType,
@@ -373,4 +375,145 @@ test('NSV01-0431: Transaction category validation and normalization', () => {
   assert.equal(normalizeTransactionCategory('  recharge  '), 'Recharge');
   assert.equal(normalizeTransactionCategory('utilities'), 'Utilities');
   assert.equal(normalizeTransactionCategory('unknown_xyz'), 'Other');
+});
+
+const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
+
+test('V2-R001-P1-05: Loan-obligation sync protection and Bills editor bypass prevention', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr-sync-${timestamp}`,
+        email: `sync-${timestamp}@test.local`,
+        name: 'Sync Test User',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bankAcc = await financeService.createAccount(user.id, {
+      name: 'Salary Account',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+
+    // 1. Create a loan with linked obligation
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Personal Loan HDFC',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '120000.00',
+      emiAmount: '10000.00',
+      dueDay: 5,
+      nextEmiDate: '2026-05-05T00:00:00.000Z',
+      createLinkedObligation: true,
+      paymentAccountId: bankAcc.account.id,
+    }, db);
+
+    const loanId = loanRes.loan.id;
+    const linkedObligationId = loanRes.loan.obligationId;
+    assert.ok(linkedObligationId, 'Linked obligation must exist for loan');
+
+    // Verify getObligations exposes loanId and linkedLoanName
+    const obligations = await financeService.getObligations(user.id, db);
+    const linkedObItem = obligations.find(o => o.id === linkedObligationId);
+    assert.ok(linkedObItem, 'Linked obligation must be returned by getObligations');
+    assert.equal(linkedObItem.loanId, loanId);
+    assert.equal(linkedObItem.linkedLoanName, 'Personal Loan HDFC');
+
+    // 2. Calling updateObligation with modified amount on linked obligation throws Error
+    await assert.rejects(
+      async () => {
+        await financeService.updateObligation(user.id, linkedObligationId, {
+          amount: '12000.00',
+        }, db);
+      },
+      {
+        name: 'Error',
+        message: 'Linked loan obligations must be updated through the Loan manager to maintain schedule consistency',
+      }
+    );
+
+    // 3. Calling updateObligation with modified dueAt on linked obligation throws Error
+    await assert.rejects(
+      async () => {
+        await financeService.updateObligation(user.id, linkedObligationId, {
+          dueAt: '2026-06-05T00:00:00.000Z',
+        }, db);
+      },
+      {
+        name: 'Error',
+        message: 'Linked loan obligations must be updated through the Loan manager to maintain schedule consistency',
+      }
+    );
+
+    // 4. Calling updateObligation with modified nextDueAt / recurrence on linked obligation throws Error
+    await assert.rejects(
+      async () => {
+        await financeService.updateObligation(user.id, linkedObligationId, {
+          nextDueAt: '2026-06-05T00:00:00.000Z',
+        }, db);
+      },
+      {
+        name: 'Error',
+        message: 'Linked loan obligations must be updated through the Loan manager to maintain schedule consistency',
+      }
+    );
+
+    // 5. Calling updateObligation on unlinked bill obligation succeeds and updates schedule normally
+    const billRes = await financeService.createObligation(user.id, {
+      title: 'Electricity Bill',
+      kind: 'BILL',
+      amount: '1500.00',
+      dueAt: '2026-05-10T00:00:00.000Z',
+      recurrenceType: 'MONTHLY',
+    }, db);
+    const unlinkedObligationId = billRes.obligation.id;
+
+    const updatedBill = await financeService.updateObligation(user.id, unlinkedObligationId, {
+      amount: '1850.00',
+      dueAt: '2026-05-15T00:00:00.000Z',
+    }, db);
+
+    assert.equal(updatedBill.success, true);
+    assert.equal(updatedBill.obligation.amount, '1850');
+    assert.equal(new Date(updatedBill.obligation.dueAt).toISOString(), new Date('2026-05-15T00:00:00.000Z').toISOString());
+
+    // 6. Calling updateObligation with only title/notes on linked obligation does not tamper with schedule
+    const obBefore = await db.obligation.findUnique({
+      where: { id: linkedObligationId },
+    });
+    assert.ok(obBefore);
+
+    const updatedLinked = await financeService.updateObligation(user.id, linkedObligationId, {
+      title: 'Personal Loan HDFC (Renamed)',
+      notes: 'Auto-debit from salary account',
+    }, db);
+
+    assert.equal(updatedLinked.success, true);
+    assert.equal(updatedLinked.obligation.title, 'Personal Loan HDFC (Renamed)');
+
+    const obAfter = await db.obligation.findUnique({
+      where: { id: linkedObligationId },
+    });
+    assert.ok(obAfter);
+
+    // Verify non-schedule fields updated
+    assert.equal(obAfter.title, 'Personal Loan HDFC (Renamed)');
+    assert.equal(obAfter.notes, 'Auto-debit from salary account');
+
+    // Verify schedule and amount fields are completely untouched
+    assert.equal(obAfter.amount?.toString(), obBefore.amount?.toString());
+    assert.equal(obAfter.dueAt.getTime(), obBefore.dueAt.getTime());
+    assert.equal(obAfter.nextDueAt.getTime(), obBefore.nextDueAt.getTime());
+    assert.equal(obAfter.recurrenceType, obBefore.recurrenceType);
+    assert.equal(obAfter.recurrenceInterval, obBefore.recurrenceInterval);
+  } finally {
+    await db.$disconnect();
+  }
 });

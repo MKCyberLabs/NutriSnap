@@ -926,6 +926,9 @@ export interface ObligationItem {
   notes: string | null;
   lastCompletedAt: string | null;
   nextDueAt: string;
+  loanId: string | null;
+  linkedLoanName: string | null;
+  loan?: { id: string; name: string } | null;
 }
 
 /**
@@ -942,6 +945,7 @@ export async function getObligations(
     orderBy: { nextDueAt: 'asc' },
     include: {
       account: { select: { id: true, name: true } },
+      loan: { select: { id: true, name: true, emiAmount: true, nextEmiDate: true, dueDay: true } },
       occurrences: {
         orderBy: { dueDate: 'desc' },
         take: 5,
@@ -963,6 +967,9 @@ export async function getObligations(
     notes: ob.notes,
     lastCompletedAt: ob.lastCompletedAt ? ob.lastCompletedAt.toISOString() : null,
     nextDueAt: ob.nextDueAt.toISOString(),
+    loanId: ob.loan?.id || null,
+    linkedLoanName: ob.loan?.name || null,
+    loan: ob.loan ? { id: ob.loan.id, name: ob.loan.name } : null,
   }));
 }
 
@@ -1053,11 +1060,25 @@ export async function updateObligation(
       recurrenceType: true,
       recurrenceInterval: true,
       nextDueAt: true,
+      loan: { select: { id: true, name: true } },
     }
   });
 
   if (!obligation || obligation.userId !== userId) {
     throw new Error('Obligation not found or unauthorized');
+  }
+
+  if (
+    obligation.loan &&
+    (parsed.amount !== undefined ||
+      parsed.dueAt !== undefined ||
+      parsed.nextDueAt !== undefined ||
+      parsed.recurrenceType !== undefined ||
+      parsed.recurrenceInterval !== undefined)
+  ) {
+    throw new Error(
+      'Linked loan obligations must be updated through the Loan manager to maintain schedule consistency'
+    );
   }
 
   const updateData: any = {};
