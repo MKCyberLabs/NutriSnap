@@ -76,6 +76,9 @@ export const recordCreditCardPaymentSchema = z.object({
 
 /**
  * Creates a monthly credit card statement and links/syncs the card obligation reminder.
+ * Enforces durable 1:1 statement/obligation identity across all statement cycles.
+ * Historical obligations from previous or paid cycles must NEVER be reused.
+ * Serializes statement creation per account to prevent concurrent duplicate cycle creation.
  */
 export async function createCreditCardStatement(
   userId: string,
@@ -106,71 +109,46 @@ export async function createCreditCardStatement(
   const statementDate = new Date(parsed.statementDate);
   const dueDate = new Date(parsed.dueDate);
 
-  // Check unique period
-  const existing = await db.creditCardStatement.findUnique({
-    where: {
-      accountId_periodKey: {
-        accountId: parsed.accountId,
-        periodKey: parsed.periodKey,
-      }
-    }
-  });
-
-  if (existing) {
-    throw new Error(`Statement for period ${parsed.periodKey} already exists for this card`);
-  }
-
   const executeInTransaction = async (tx: any) => {
-    // Find candidate unarchived obligations for this credit card account
-    const candidateObs = await tx.obligation.findMany({
+    // 1. Serialize statement creation per credit card account using row-level lock
+    if (typeof tx.$executeRaw === 'function') {
+      await tx.$executeRaw`SELECT id FROM "FinancialAccount" WHERE id = ${account.id} FOR UPDATE`;
+    }
+
+    // 2. Check if statement already exists for this card and periodKey (idempotent deduplication)
+    const existing = await tx.creditCardStatement.findUnique({
       where: {
-        userId,
-        accountId: account.id,
-        kind: 'CREDIT_CARD',
-        isArchived: false,
-      },
-      include: {
-        creditCardStatements: {
-          where: {
-            status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] }
-          }
+        accountId_periodKey: {
+          accountId: parsed.accountId,
+          periodKey: parsed.periodKey,
         }
       }
     });
 
-    // An obligation is free to reuse only if it is NOT actively servicing another open/partial statement
-    const freeOb = candidateObs.find((o: any) => o.creditCardStatements.length === 0);
-
-    let obligation: any;
-    if (freeOb) {
-      obligation = await tx.obligation.update({
-        where: { id: freeOb.id },
-        data: {
-          title: `${account.name} Bill (${parsed.periodKey})`,
-          amount: statementAmount,
-          dueAt: dueDate,
-          nextDueAt: dueDate,
-          isActive: true,
-          isArchived: false,
-        }
-      });
-    } else {
-      obligation = await tx.obligation.create({
-        data: {
-          userId,
-          title: `${account.name} Bill (${parsed.periodKey})`,
-          kind: 'CREDIT_CARD',
-          accountId: account.id,
-          amount: statementAmount,
-          dueAt: dueDate,
-          nextDueAt: dueDate,
-          recurrenceType: 'MONTHLY',
-          recurrenceInterval: 1,
-          reminderOffsetsMin: [0, 1440, 4320], // 0d, 1d, 3d
-          isActive: true,
-        }
-      });
+    if (existing) {
+      return {
+        statement: existing,
+        alreadyExists: true,
+      };
     }
+
+    // 3. Create a dedicated 1:1 obligation for this statement cycle.
+    // Crucial: Historical obligations from previous/paid cycles must NEVER be reused.
+    const obligation = await tx.obligation.create({
+      data: {
+        userId,
+        title: `${account.name} Bill (${parsed.periodKey})`,
+        kind: 'CREDIT_CARD',
+        accountId: account.id,
+        amount: statementAmount,
+        dueAt: dueDate,
+        nextDueAt: dueDate,
+        recurrenceType: 'MONTHLY',
+        recurrenceInterval: 1,
+        reminderOffsetsMin: [0, 1440, 4320], // 0d, 1d, 3d
+        isActive: true,
+      }
+    });
 
     const statement = await tx.creditCardStatement.create({
       data: {
@@ -187,24 +165,53 @@ export async function createCreditCardStatement(
       }
     });
 
-    return statement;
+    return {
+      statement,
+      alreadyExists: false,
+    };
   };
 
-  const result = typeof db.$transaction === 'function'
-    ? await db.$transaction(executeInTransaction)
-    : await executeInTransaction(db);
+  let result: any;
+  try {
+    result = typeof db.$transaction === 'function'
+      ? await db.$transaction(executeInTransaction)
+      : await executeInTransaction(db);
+  } catch (err: any) {
+    if (err?.code === 'P2002' || err?.message?.includes('Unique constraint failed')) {
+      const existing = await db.creditCardStatement.findUnique({
+        where: {
+          accountId_periodKey: {
+            accountId: parsed.accountId,
+            periodKey: parsed.periodKey,
+          }
+        }
+      });
+      if (existing) {
+        result = {
+          statement: existing,
+          alreadyExists: true,
+        };
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
 
+  const s = result.statement;
   return {
     success: true,
+    alreadyExists: Boolean(result.alreadyExists),
     statement: {
-      id: result.id,
-      accountId: result.accountId,
-      periodKey: result.periodKey,
-      statementDate: result.statementDate.toISOString(),
-      dueDate: result.dueDate.toISOString(),
-      statementAmount: result.statementAmount.toString(),
-      minimumDue: result.minimumDue ? result.minimumDue.toString() : null,
-      status: result.status,
+      id: s.id,
+      accountId: s.accountId,
+      periodKey: s.periodKey,
+      statementDate: (s.statementDate instanceof Date ? s.statementDate : new Date(s.statementDate)).toISOString(),
+      dueDate: (s.dueDate instanceof Date ? s.dueDate : new Date(s.dueDate)).toISOString(),
+      statementAmount: s.statementAmount.toString(),
+      minimumDue: s.minimumDue ? s.minimumDue.toString() : null,
+      status: s.status,
     }
   };
 }
@@ -460,6 +467,7 @@ export async function revertCreditCardPayment(
       include: {
         statement: {
           include: {
+            account: true,
             obligation: true,
             payments: true,
           }
@@ -475,6 +483,7 @@ export async function revertCreditCardPayment(
       include: {
         statement: {
           include: {
+            account: true,
             obligation: true,
             payments: true,
           }
@@ -531,31 +540,81 @@ export async function revertCreditCardPayment(
 
     // 4. Restore Obligation state if it was marked PAID
     if (statement.obligation) {
-      const ob = statement.obligation;
-      const user = await tx.user.findUnique({
-        where: { id: userId },
-        select: { timezone: true }
-      });
-      const tz = user?.timezone || 'UTC';
-      const occurrenceKey = getOccurrenceKey(statement.dueDate, tz);
+      let ob = statement.obligation;
 
-      // If occurrence was completed, delete or remove completion
-      await tx.obligationOccurrence.deleteMany({
+      // Defense-in-depth isolation check:
+      // If this obligation was ever shared with another statement cycle in historical data,
+      // disentangle this statement by giving it a dedicated obligation rather than
+      // overwriting the newer cycle's amount, due date, or reminder state.
+      const otherStatementsSharing = await tx.creditCardStatement.findMany({
         where: {
           obligationId: ob.id,
-          occurrenceKey,
+          id: { not: statement.id },
         }
       });
 
-      // Restore nextDueAt and amount
-      await tx.obligation.update({
-        where: { id: ob.id },
-        data: {
-          amount: restoredPending,
-          nextDueAt: statement.dueDate,
-          isActive: true,
-        }
-      });
+      if (otherStatementsSharing.length > 0) {
+        const newOb = await tx.obligation.create({
+          data: {
+            userId,
+            title: `${statement.account?.name || 'Credit Card'} Bill (${statement.periodKey})`,
+            kind: 'CREDIT_CARD',
+            accountId: statement.accountId,
+            amount: restoredPending,
+            dueAt: statement.dueDate,
+            nextDueAt: statement.dueDate,
+            recurrenceType: 'MONTHLY',
+            recurrenceInterval: 1,
+            reminderOffsetsMin: [0, 1440, 4320],
+            isActive: true,
+          }
+        });
+
+        await tx.creditCardStatement.update({
+          where: { id: statement.id },
+          data: { obligationId: newOb.id }
+        });
+        ob = newOb;
+      } else {
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { timezone: true }
+        });
+        const tz = user?.timezone || 'UTC';
+        const occurrenceKey = getOccurrenceKey(statement.dueDate, tz);
+
+        // If occurrence was completed, delete or remove completion
+        await tx.obligationOccurrence.deleteMany({
+          where: {
+            obligationId: ob.id,
+            occurrenceKey,
+          }
+        });
+
+        // Restore nextDueAt and amount
+        await tx.obligation.update({
+          where: { id: ob.id },
+          data: {
+            amount: restoredPending,
+            nextDueAt: statement.dueDate,
+            isActive: true,
+          }
+        });
+
+        // Restore any acknowledged reminder deliveries that are scheduled in the future
+        await tx.reminderDelivery.updateMany({
+          where: {
+            obligationId: ob.id,
+            occurrenceKey,
+            status: 'ACKNOWLEDGED',
+            scheduledFor: { gt: new Date() },
+          },
+          data: {
+            status: 'PENDING',
+            acknowledgedAt: null,
+          }
+        });
+      }
     }
 
     return {

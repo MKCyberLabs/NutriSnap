@@ -786,4 +786,302 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(cardDetails.activeStatement, null);
     assert.equal(cardDetails.allStatements.length, 2);
   });
+
+  await t.test('V2-653f: Credit Card multi-cycle lifecycle: dedicated obligations across Jan/Feb/Mar, old cycle reversal isolation, repayment histories, and concurrent creation idempotency', async () => {
+    // Setup dedicated credit card for multi-cycle isolation test
+    const cardCycles = await db.financialAccount.create({
+      data: {
+        userId: userAId,
+        name: 'Standard Chartered Platinum',
+        type: 'CREDIT_CARD',
+        openingBalance: new Decimal(0),
+        creditLimit: new Decimal(300000),
+        statementDay: 20,
+        paymentDueDay: 10,
+        defaultPaymentAccountId: bankA.id,
+        isActive: true,
+      }
+    });
+
+    // 1. Cycle 1: January statement (₹20,000 due 2026-02-10)
+    const stmtJanRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardCycles.id,
+      periodKey: '2026-01',
+      statementDate: '2026-01-20T12:00:00.000Z',
+      dueDate: '2026-02-10T12:00:00.000Z',
+      statementAmount: 20000,
+      minimumDue: 1000,
+    }, db);
+    assert.equal(stmtJanRes.success, true);
+    assert.equal(stmtJanRes.statement.status, 'OPEN');
+    const stmtJanId = stmtJanRes.statement.id;
+
+    const stmtJanDb = await db.creditCardStatement.findUnique({ where: { id: stmtJanId } });
+    assert.ok(stmtJanDb?.obligationId);
+    const obJanId = stmtJanDb.obligationId!;
+
+    const obJan = await db.obligation.findUnique({ where: { id: obJanId } });
+    assert.ok(obJan);
+    assert.equal(new Decimal(obJan.amount!).toString(), '20000');
+    assert.equal(obJan.dueAt.toISOString(), '2026-02-10T12:00:00.000Z');
+
+    // Partial payment on Jan: ₹5,000
+    const payJanPart = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtJanId,
+      fromAccountId: bankA.id,
+      amount: 5000,
+      note: 'Jan CC Part 1',
+    }, db);
+    assert.equal(payJanPart.statementStatus, 'PARTIAL');
+    assert.equal(new Decimal(payJanPart.pendingBalance).toString(), '15000');
+
+    // Full payoff of remaining ₹15,000 on Jan
+    const payJanFull = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtJanId,
+      fromAccountId: bankA.id,
+      amount: 15000,
+      note: 'Jan CC Part 2 Full',
+    }, db);
+    assert.equal(payJanFull.statementStatus, 'PAID');
+    assert.equal(payJanFull.fullyPaid, true);
+
+    const obJanAfterPay = await db.obligation.findUnique({ where: { id: obJanId } });
+    assert.equal(obJanAfterPay?.amount, null);
+
+    // 2. Cycle 2: February statement (₹35,000 due 2026-03-10) created after Jan is fully paid
+    const stmtFebRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardCycles.id,
+      periodKey: '2026-02',
+      statementDate: '2026-02-20T12:00:00.000Z',
+      dueDate: '2026-03-10T12:00:00.000Z',
+      statementAmount: 35000,
+      minimumDue: 1750,
+    }, db);
+    assert.equal(stmtFebRes.success, true);
+    assert.equal(stmtFebRes.statement.status, 'OPEN');
+    const stmtFebId = stmtFebRes.statement.id;
+
+    const stmtFebDb = await db.creditCardStatement.findUnique({ where: { id: stmtFebId } });
+    assert.ok(stmtFebDb?.obligationId);
+    const obFebId = stmtFebDb.obligationId!;
+
+    // MUST NOT reuse Jan's obligation even though Jan statement is fully paid!
+    assert.notEqual(obFebId, obJanId, 'February cycle must receive its own dedicated obligation, not reuse Jan');
+
+    const obFeb = await db.obligation.findUnique({ where: { id: obFebId } });
+    assert.ok(obFeb);
+    assert.equal(new Decimal(obFeb.amount!).toString(), '35000');
+    assert.equal(obFeb.dueAt.toISOString(), '2026-03-10T12:00:00.000Z');
+    assert.equal(obFeb.isActive, true);
+
+    // 3. Cycle 3: March statement (₹45,000 due 2026-04-10)
+    const stmtMarRes = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardCycles.id,
+      periodKey: '2026-03',
+      statementDate: '2026-03-20T12:00:00.000Z',
+      dueDate: '2026-04-10T12:00:00.000Z',
+      statementAmount: 45000,
+      minimumDue: 2250,
+    }, db);
+    assert.equal(stmtMarRes.success, true);
+    const stmtMarId = stmtMarRes.statement.id;
+
+    const stmtMarDb = await db.creditCardStatement.findUnique({ where: { id: stmtMarId } });
+    assert.ok(stmtMarDb?.obligationId);
+    const obMarId = stmtMarDb.obligationId!;
+
+    // Distinct obligations across all 3 cycles
+    assert.notEqual(obMarId, obFebId, 'March obligation must differ from February');
+    assert.notEqual(obMarId, obJanId, 'March obligation must differ from January');
+
+    const totalObs = await db.obligation.findMany({ where: { accountId: cardCycles.id } });
+    assert.equal(totalObs.length, 3, 'Exactly 3 separate obligations exist for the 3 statement cycles');
+
+    // Attach reminder and delivery claim to Feb obligation
+    const remFeb = await db.reminder.create({
+      data: {
+        userId: userAId,
+        obligationId: obFebId,
+        type: 'BILL',
+        title: 'Feb SCB CC Reminder',
+        time: '12:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+    await db.reminderDelivery.create({
+      data: {
+        userId: userAId,
+        obligationId: obFebId,
+        reminderId: remFeb.id,
+        occurrenceKey: '2026-03-10',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-03-10T12:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // 4. Old Cycle Reversal Isolation:
+    // Revert Jan's full payoff payment (₹15,000) while Feb and Mar exist and are active
+    const revertJan1 = await creditCardService.revertCreditCardPayment(userAId, {
+      paymentId: payJanFull.paymentId,
+    }, db);
+    assert.equal(revertJan1.success, true);
+    assert.equal(revertJan1.restoredStatus, 'PARTIAL');
+    assert.equal(new Decimal(revertJan1.pendingBalance).toString(), '15000');
+
+    // Verify Jan obligation restored to ₹15,000
+    const obJanAfterRevert1 = await db.obligation.findUnique({ where: { id: obJanId } });
+    assert.equal(new Decimal(obJanAfterRevert1!.amount!).toString(), '15000');
+    assert.equal(obJanAfterRevert1!.nextDueAt.toISOString(), '2026-02-10T12:00:00.000Z');
+
+    // CRUCIAL FINDING P1 #1 ISOLATION CHECKS:
+    // Feb obligation must be COMPLETELY UNTOUCHED!
+    const obFebAfterJanRevert = await db.obligation.findUnique({ where: { id: obFebId } });
+    assert.equal(
+      new Decimal(obFebAfterJanRevert!.amount!).toString(),
+      '35000',
+      'Feb obligation amount must remain ₹35,000 and NOT be overwritten by Jan reversal'
+    );
+    assert.equal(
+      obFebAfterJanRevert!.dueAt.toISOString(),
+      '2026-03-10T12:00:00.000Z',
+      'Feb obligation due date must remain March 10'
+    );
+    assert.equal(
+      obFebAfterJanRevert!.nextDueAt.toISOString(),
+      '2026-03-10T12:00:00.000Z',
+      'Feb obligation nextDueAt must remain March 10'
+    );
+    assert.equal(obFebAfterJanRevert!.isActive, true);
+
+    // Feb reminder delivery status must remain PENDING
+    const febDeliv = await db.reminderDelivery.findFirst({
+      where: { obligationId: obFebId, occurrenceKey: '2026-03-10' }
+    });
+    assert.equal(febDeliv?.status, 'PENDING', 'Feb reminder delivery claim must remain PENDING');
+
+    // Mar obligation must also remain completely untouched at ₹45,000
+    const obMarAfterJanRevert = await db.obligation.findUnique({ where: { id: obMarId } });
+    assert.equal(new Decimal(obMarAfterJanRevert!.amount!).toString(), '45000');
+    assert.equal(obMarAfterJanRevert!.dueAt.toISOString(), '2026-04-10T12:00:00.000Z');
+
+    // Revert Jan's first partial payment (₹5,000) as well -> Jan statement becomes OPEN with ₹20,000
+    const revertJan2 = await creditCardService.revertCreditCardPayment(userAId, {
+      paymentId: payJanPart.paymentId,
+    }, db);
+    assert.equal(revertJan2.success, true);
+    assert.equal(revertJan2.restoredStatus, 'OPEN');
+    assert.equal(new Decimal(revertJan2.pendingBalance).toString(), '20000');
+
+    const obJanAfterRevert2 = await db.obligation.findUnique({ where: { id: obJanId } });
+    assert.equal(new Decimal(obJanAfterRevert2!.amount!).toString(), '20000');
+
+    // Feb and Mar obligations still intact
+    const obFebStillIntact = await db.obligation.findUnique({ where: { id: obFebId } });
+    assert.equal(new Decimal(obFebStillIntact!.amount!).toString(), '35000');
+
+    // 5. Repayment histories, partial payments, and full payoff
+    // Re-pay Jan fully with a single payment of ₹20,000
+    const repayJan = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtJanId,
+      fromAccountId: bankA.id,
+      amount: 20000,
+      note: 'Jan Repayment in full',
+    }, db);
+    assert.equal(repayJan.statementStatus, 'PAID');
+    assert.equal(repayJan.fullyPaid, true);
+
+    // Pay Feb in two steps (₹15,000 partial, then ₹20,000 remainder)
+    const payFeb1 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtFebId,
+      fromAccountId: bankA.id,
+      amount: 15000,
+    }, db);
+    assert.equal(payFeb1.statementStatus, 'PARTIAL');
+    assert.equal(new Decimal(payFeb1.pendingBalance).toString(), '20000');
+
+    const payFeb2 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtFebId,
+      fromAccountId: bankA.id,
+      amount: 20000,
+    }, db);
+    assert.equal(payFeb2.statementStatus, 'PAID');
+    assert.equal(payFeb2.fullyPaid, true);
+
+    // Pay Mar in two steps (₹20,000 partial, then ₹25,000 remainder)
+    const payMar1 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtMarId,
+      fromAccountId: bankA.id,
+      amount: 20000,
+    }, db);
+    assert.equal(payMar1.statementStatus, 'PARTIAL');
+    assert.equal(new Decimal(payMar1.pendingBalance).toString(), '25000');
+
+    const payMar2 = await creditCardService.recordCreditCardPayment(userAId, {
+      statementId: stmtMarId,
+      fromAccountId: bankA.id,
+      amount: 25000,
+    }, db);
+    assert.equal(payMar2.statementStatus, 'PAID');
+    assert.equal(payMar2.fullyPaid, true);
+
+    // Verify card details reflects all paid
+    const detailsAfterAllPaid = await creditCardService.getCreditCardDetails(userAId, cardCycles.id, db);
+    assert.equal(detailsAfterAllPaid.activeStatement, null);
+    assert.equal(detailsAfterAllPaid.allStatements.length, 3);
+    for (const st of detailsAfterAllPaid.allStatements) {
+      assert.equal(st.status, 'PAID');
+    }
+
+    // 6. Concurrent cycle creation idempotency:
+    // Concurrently attempt to create Statement 4 (April 2026: periodKey '2026-04')
+    const [stmtApr1, stmtApr2] = await Promise.all([
+      creditCardService.createCreditCardStatement(userAId, {
+        accountId: cardCycles.id,
+        periodKey: '2026-04',
+        statementDate: '2026-04-20T12:00:00.000Z',
+        dueDate: '2026-05-10T12:00:00.000Z',
+        statementAmount: 50000,
+        minimumDue: 2500,
+      }, db),
+      creditCardService.createCreditCardStatement(userAId, {
+        accountId: cardCycles.id,
+        periodKey: '2026-04',
+        statementDate: '2026-04-20T12:00:00.000Z',
+        dueDate: '2026-05-10T12:00:00.000Z',
+        statementAmount: 50000,
+        minimumDue: 2500,
+      }, db),
+    ]);
+
+    assert.equal(stmtApr1.success, true);
+    assert.equal(stmtApr2.success, true);
+    assert.equal(stmtApr1.statement.id, stmtApr2.statement.id, 'Both concurrent calls must yield the identical statement');
+    assert.equal(stmtApr1.statement.periodKey, '2026-04');
+
+    // In DB: exactly 1 statement created for period 2026-04
+    const countAprStmts = await db.creditCardStatement.count({
+      where: { accountId: cardCycles.id, periodKey: '2026-04' }
+    });
+    assert.equal(countAprStmts, 1, 'Exactly one statement record exists for period 2026-04');
+
+    // In DB: exactly 1 obligation created for period 2026-04
+    const countAprObs = await db.obligation.count({
+      where: { accountId: cardCycles.id, title: { contains: '2026-04' } }
+    });
+    assert.equal(countAprObs, 1, 'Exactly one obligation created for period 2026-04');
+
+    // Sequential repeat call is also idempotent
+    const stmtAprRepeat = await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardCycles.id,
+      periodKey: '2026-04',
+      statementDate: '2026-04-20T12:00:00.000Z',
+      dueDate: '2026-05-10T12:00:00.000Z',
+      statementAmount: 50000,
+    }, db);
+    assert.equal(stmtAprRepeat.success, true);
+    assert.equal(stmtAprRepeat.statement.id, stmtApr1.statement.id);
+    assert.equal(stmtAprRepeat.alreadyExists, true);
+  });
 });
