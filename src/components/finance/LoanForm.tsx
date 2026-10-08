@@ -178,16 +178,32 @@ export function LoanForm({
           payload.emiAmount = null;
         }
 
+        const initialDueDay = loan?.dueDay ?? (loan as any)?.emiDueDay ?? null;
+        let newDueDayVal: number | null = null;
         if (dueDay && parseInt(dueDay, 10) >= 1 && parseInt(dueDay, 10) <= 31) {
-          payload.dueDay = parseInt(dueDay, 10);
-        } else {
-          payload.dueDay = null;
+          newDueDayVal = parseInt(dueDay, 10);
         }
+        payload.dueDay = newDueDayVal;
 
-        if (nextEmiDate) {
-          payload.nextEmiDate = new Date(nextEmiDate).toISOString();
+        const initialNextEmiDateStr = loan?.nextEmiDate
+          ? (typeof loan.nextEmiDate === 'string' ? loan.nextEmiDate.substring(0, 10) : new Date(loan.nextEmiDate).toISOString().substring(0, 10))
+          : '';
+        const currentNextEmiDateStr = nextEmiDate ? nextEmiDate.trim() : '';
+
+        const isDueDayEdited = newDueDayVal !== initialDueDay;
+        const isNextEmiDateEdited = currentNextEmiDateStr !== initialNextEmiDateStr;
+
+        // If dueDay is edited, do not submit stale unchanged nextEmiDate
+        if (isDueDayEdited) {
+          if (isNextEmiDateEdited) {
+            payload.nextEmiDate = currentNextEmiDateStr ? new Date(currentNextEmiDateStr).toISOString() : null;
+          }
         } else {
-          payload.nextEmiDate = null;
+          if (currentNextEmiDateStr) {
+            payload.nextEmiDate = new Date(currentNextEmiDateStr).toISOString();
+          } else {
+            payload.nextEmiDate = null;
+          }
         }
 
         const cleanRate = interestRatePercent.trim();

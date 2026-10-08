@@ -15,6 +15,7 @@ import {
   Decimal
 } from '@/lib/finance/finance';
 import { getNextOccurrence, getOccurrenceKey, RecurrenceRule } from '@/lib/recurrence/recurrence';
+import { TZDate } from '@date-fns/tz';
 import { recordEmiPayment, revertEmiPayment } from './loan-service';
 
 export const createAccountSchema = z.object({
@@ -1374,9 +1375,14 @@ export async function markObligationPaid(
   const expectedKey = getOccurrenceKey(obligation.nextDueAt, tz);
   const isCurrentOccurrence = occurrenceKey === expectedKey || occurrenceKey === expectedKey.substring(0, 10);
 
+  const targetDay = obligation.recurrenceType === 'MONTHLY'
+    ? (obligation.loan?.dueDay ?? new TZDate(obligation.dueAt, tz).getDate())
+    : undefined;
+
   const rule: RecurrenceRule = {
     type: obligation.recurrenceType as any,
     interval: obligation.recurrenceInterval,
+    targetDayOfMonth: targetDay,
     timezone: tz,
   };
 
@@ -1387,6 +1393,7 @@ export async function markObligationPaid(
   // 5. Execute atomically
   const executeInTransaction = async (tx: any) => {
     let createdTxId: string | null = null;
+    let emiRes: any = null;
 
     // Record occurrence completion
     const occurrence = await tx.obligationOccurrence.create({
@@ -1408,7 +1415,7 @@ export async function markObligationPaid(
         throw new Error('Payment account required for linked loan EMI');
       }
 
-      const emiRes = await recordEmiPayment(userId, {
+      emiRes = await recordEmiPayment(userId, {
         loanId: obligation.loan.id,
         amount: obligation.amount || obligation.loan.emiAmount || '0',
         accountId: targetAccountId,
@@ -1457,7 +1464,11 @@ export async function markObligationPaid(
     }
 
     // Advance obligation nextDueAt ONLY if this occurrence matches the current active due date
-    if (isCurrentOccurrence) {
+    if (obligation.loan) {
+      // Linked loan EMI: the synchronized next due date, status, and reminder cleanup
+      // have already been handled atomically by recordEmiPayment.
+      // Do NOT overwrite with an unanchored calculation!
+    } else if (isCurrentOccurrence) {
       await tx.obligation.update({
         where: { id: obligation.id },
         data: {
@@ -1489,10 +1500,23 @@ export async function markObligationPaid(
       }
     });
 
+    let finalNextDueAtStr: string;
+    if (obligation.loan) {
+      if (emiRes?.nextEmiDate) {
+        finalNextDueAtStr = emiRes.nextEmiDate instanceof Date
+          ? emiRes.nextEmiDate.toISOString()
+          : new Date(emiRes.nextEmiDate).toISOString();
+      } else {
+        finalNextDueAtStr = obligation.nextDueAt.toISOString();
+      }
+    } else {
+      finalNextDueAtStr = (isCurrentOccurrence && nextDue ? nextDue : obligation.nextDueAt).toISOString();
+    }
+
     return {
       occurrenceId: occurrence.id,
       transactionId: createdTxId,
-      nextDueAt: (isCurrentOccurrence && nextDue ? nextDue : obligation.nextDueAt).toISOString(),
+      nextDueAt: finalNextDueAtStr,
     };
   };
 
