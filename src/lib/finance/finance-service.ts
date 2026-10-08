@@ -1572,11 +1572,15 @@ export async function markObligationPaid(
   // SOL-R001-004: Linked loan obligation guard - verify occurrence against loan state before advancing schedule
   if (obligation.loan) {
     const isLoanClosed = obligation.loan.status === 'CLOSED' || !obligation.loan.nextEmiDate;
+    const loanDateStr = obligation.loan.nextEmiDate ? getOccurrenceKey(obligation.loan.nextEmiDate, tz).substring(0, 10) : '';
+    const occDateStr = occurrenceKey.length >= 10 ? occurrenceKey.substring(0, 10) : '';
     const isLoanOvertaken = Boolean(
       obligation.loan.nextEmiDate &&
-      occurrenceScheduledDate.getTime() < new Date(obligation.loan.nextEmiDate).getTime()
+      loanDateStr &&
+      occDateStr &&
+      occDateStr < loanDateStr
     );
-    if (!isCurrentOccurrence || isLoanClosed || isLoanOvertaken) {
+    if ((!isCurrentOccurrence && isLoanOvertaken) || isLoanClosed) {
       return {
         success: true,
         alreadyCompleted: true,
@@ -1728,7 +1732,15 @@ export async function markObligationPaid(
       }
 
       // Check if callback was overtaken by another payment under lock
-      if (occurrenceScheduledDate.getTime() < new Date(currentLoan.nextEmiDate).getTime()) {
+      const currentLoanDateStr = currentLoan.nextEmiDate ? getOccurrenceKey(currentLoan.nextEmiDate, tz).substring(0, 10) : '';
+      const occDateStr = occurrenceKey.length >= 10 ? occurrenceKey.substring(0, 10) : '';
+      const isOvertakenUnderLock = Boolean(
+        currentLoan.nextEmiDate &&
+        currentLoanDateStr &&
+        occDateStr &&
+        occDateStr < currentLoanDateStr
+      );
+      if (isOvertakenUnderLock) {
         return {
           alreadyCompleted: true,
           alreadyProcessed: true,
