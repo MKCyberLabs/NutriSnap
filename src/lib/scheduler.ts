@@ -299,12 +299,12 @@ export async function processSchedulerTick(
           }
 
           // No delivery exists yet: find or create unique reminder for this obligation
-          let reminder = ob.reminders?.[0] || await tx.reminder.findFirst({
+          let reminder = ob.reminders?.[0] || (typeof tx.reminder?.findFirst === 'function' ? await tx.reminder.findFirst({
             where: { obligationId: ob.id },
             select: { id: true },
-          });
+          }) : null);
 
-          if (!reminder) {
+          if (!reminder && typeof tx.reminder?.create === 'function') {
             reminder = await tx.reminder.create({
               data: {
                 userId: ob.userId,
