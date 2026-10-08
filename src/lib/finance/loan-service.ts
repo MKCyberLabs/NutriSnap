@@ -1078,7 +1078,13 @@ export async function updateLoan(
     if (parsed.paymentAccountId !== undefined) updateData.paymentAccountId = parsed.paymentAccountId;
     if (parsed.productName !== undefined) updateData.productName = parsed.productName;
     if (parsed.merchant !== undefined) updateData.merchant = parsed.merchant;
-    if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+    if (parsed.notes !== undefined) {
+      if (currentLoan.notes?.includes('[noLinkedObligation]') && parsed.createLinkedObligation !== true) {
+        updateData.notes = parsed.notes ? (parsed.notes.includes('[noLinkedObligation]') ? parsed.notes : `${parsed.notes} [noLinkedObligation]`) : '[noLinkedObligation]';
+      } else {
+        updateData.notes = parsed.notes;
+      }
+    }
 
     if (parsed.interestRatePercent !== undefined) {
       updateData.interestRatePercent = parsed.interestRatePercent !== null
