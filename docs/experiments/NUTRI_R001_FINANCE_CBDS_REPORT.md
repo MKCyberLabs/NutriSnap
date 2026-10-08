@@ -161,3 +161,61 @@ Per the orchestration contract, automatic cycles were bounded to one additional 
   - Zero sensitive financial credentials stored or requested.
   - No database writes to `nutrisnap_prod` or production instances; all tests executed on isolated test container `nutrisnap_test_db`.
   - Zero destructive git commands (`git reset --hard` on production, force push, or merge to `main`).
+
+---
+
+## 9. Campaign Round 3 Integration & Release-Candidate Verification
+
+**Final Integrated Commit SHA:** `ec09229143ae602647a8010685af9476c4dbf28c`  
+**Integration Baseline:** `f39cd020c0248eac9d2190607747f4313eb3e82f`  
+**Branch:** `orchestration/finance-crud-reminders-r001`  
+**Status:** `READY_FOR_FINAL_INDEPENDENT_REVIEW — AWAITING OWNER AUTHORIZATION`  
+
+### Worker Deliverables & cbds Records
+
+| Worker / Agent | Dispatch ID | Task ID | Report ID | Commit SHA | Files Changed |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Worker A (`agy-manickam`)** | `dsp_m4e5kcxz25q5g` | `tsk_m4e5k3jfcntca` | `rpt_m4e7n2gg58r93` | `08e805a1d84c52dcd28a74754570eef853e33dff` | `credit-card-service.ts`, `finance-service.ts`, `scheduler.ts`, `bills/page.tsx`, `DebtForm.tsx`, `payment-lifecycle.test.ts` |
+| **Worker B (`agy-rohit`)** | `dsp_m4e5kr2zsz213` | `tsk_m4e5k842eezts` | `rpt_m4e6mhmnz4tk6` | `5b3a719deb5f967853d8abe2d4c2a4de4e6a5d00` | `LoanForm.tsx`, `loan-service.ts`, `loan.test.ts` |
+
+### Integration Commits
+1. `c06ca25`: Cherry-picked Worker B repairs (`5b3a719`).
+2. `415e925`: Cherry-picked Worker A repairs (`08e805a`).
+3. `6eefdf2`: Bounded integration fix in `finance-service.ts` for linked loan overtaken guard comparing user-timezone calendar dates.
+4. `ec09229`: Bounded integration fix in `loan-service.ts` preserving `[noLinkedObligation]` opt-out tag during note edits.
+
+### 16 Defect Verifications (Dispositions)
+
+| Ticket ID | Severity | Status | Scope / Invariant Verified | Regression Suite & Assertion |
+| :--- | :--- | :--- | :--- | :--- |
+| `SOL-R001-002` | P1 | `IMPLEMENTED_TESTED` | Statement row-lock serialization for reversals | `payment-lifecycle.test.ts:1625` (zero payments, OPEN, pending 100) |
+| `SOL-R001-004` | P1 | `IMPLEMENTED_TESTED` | Stale EMI callback overtaken guard under loan lock | `payment-lifecycle.test.ts:1694` & `loan.test.ts:245` |
+| `SOL-R001-007` | P1 | `IMPLEMENTED_TESTED` | Cross-timezone occurrence alias normalization | `payment-lifecycle.test.ts:1667` (idempotent historical match) |
+| `SOL-R001-008` | P1 | `IMPLEMENTED_TESTED` | Atomic delivery claims across debts & unlinked loans | `scheduler-tick.test.ts:380` & `payment-lifecycle.test.ts:1610` |
+| `SOL-R001-011` | P2 | `IMPLEMENTED_TESTED` | Local calendar date formatting in LoanForm | `loan.test.ts:2485` (`formatCalendarDate` eliminates UTC shift) |
+| `SOL-R001-015` | P2 | `IMPLEMENTED_TESTED` | Debt ledger transaction handling in card details | `payment-lifecycle.test.ts:1620` (`calculateCreditCardUsage`) |
+| `SOL-R002-001` | P1 | `IMPLEMENTED_TESTED` | Obligation Undo targets specific card payment | `payment-lifecycle.test.ts:1635` (reverses specific payment only) |
+| `SOL-R002-002` | P1 | `IMPLEMENTED_TESTED` | Overprincipal clamp and exact Undo round-trip | `loan.test.ts:2230` (exact round-trip without phantom principal) |
+| `SOL-R002-003` | P1 | `IMPLEMENTED_TESTED` | Archival status revalidated under loan lock | `loan.test.ts:2280` (rejects mutation on archived loan) |
+| `SOL-R002-004` | P1 | `IMPLEMENTED_TESTED` | Scheduler lease timeout crash recovery (5m) | `payment-lifecycle.test.ts:1746` (reclaims abandoned SENDING) |
+| `SOL-R002-005` | P1 | `IMPLEMENTED_TESTED` | Conditional send completion preserves Snooze/Paid | `payment-lifecycle.test.ts:1746` (preserves concurrent status) |
+| `SOL-R002-006` | P2 | `IMPLEMENTED_TESTED` | Direct EMI reversal restores scheduled due date | `loan.test.ts:2370` (restores scheduled instant, not payment date) |
+| `SOL-R002-007` | P2 | `IMPLEMENTED_TESTED` | Bills UI routing to Credit Card statement flow | `payment-lifecycle.test.ts:1795` (`isCreditCardStatement` read model) |
+| `SOL-R002-008` | P2 | `IMPLEMENTED_TESTED` | DebtForm calendar date preservation at local noon | `payment-lifecycle.test.ts:1820` (prevents UTC midnight day shift) |
+| `SOL-R002-009` | P1 | `IMPLEMENTED_TESTED` | Monetary scale validation (scale <= 2) rejects sub-cents | `loan.test.ts:2330` (rejects 0.005 before DB persistence) |
+| `SOL-R002-010` | P2 | `IMPLEMENTED_TESTED` | Loan reminder opt-out preserved on metadata edit | `loan.test.ts:2430` (`[noLinkedObligation]` tag preservation) |
+
+### Note Tag Metadata Robustness & Residual Risks
+- `[actualPrincipalReduced:X]`: Formatted as decimal string; fallback restores payment `principalPaid` if tag absent (backward compatibility with legacy records).
+- `[scheduledDueAt:ISO]`: ISO timestamp string; fallback restores `payment.occurredAt` if tag absent.
+- `[noLinkedObligation]`: Explicit marker on loan notes; preserved across rename and note edits unless caller explicitly passes `createLinkedObligation: true`.
+- *Residual Risk Assessment:* Low. In future schema migrations, native columns (`actualPrincipalReduced Decimal(14,2)`, `scheduledDueAt DateTime`, `enableReminders Boolean`) can replace note tag parsing. For v0.2, schema stability is preserved without destructive database migrations.
+
+### Gate Evidence
+- Full local gate: `scripts/verify-v02-local.sh` passed cleanly (saved to `.cbds/evidence/round6-test-evidence.txt`).
+- Automated tests: 300+ / 300+ passed (121 life-hub, 68 finance, 55 reminders, 22 security, 16 food, 7 ui, 6 today, 5 analysis-contract).
+- Production build: Next.js 14 clean build (25/25 routes).
+- TypeScript: `tsc --noEmit` clean with 0 errors.
+- Loop State: Registered via `review-loop-gate.py integrate` as `stage: review_ready`, `review_count: 2` (of 5).
+- Estimated Additional Sol Review Calls Needed: Exactly 1 independent review call on SHA `ec09229143ae602647a8010685af9476c4dbf28c` to verify fixes and deliver final approval.
+
