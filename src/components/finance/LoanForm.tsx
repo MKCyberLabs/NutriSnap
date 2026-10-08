@@ -193,16 +193,18 @@ export function LoanForm({
         const isDueDayEdited = newDueDayVal !== initialDueDay;
         const isNextEmiDateEdited = currentNextEmiDateStr !== initialNextEmiDateStr;
 
-        // If dueDay is edited, do not submit stale unchanged nextEmiDate
+        // Finding 1 & 5: If nextEmiDate was edited, submit new ISO or null.
+        // If dueDay was edited and nextEmiDate was unchanged, omit nextEmiDate so server calculates from dueDay.
+        // If nextEmiDate was unchanged, do NOT resubmit as 00:00Z midnight; preserve initialData.nextEmiDate exact ISO string.
         if (isDueDayEdited) {
           if (isNextEmiDateEdited) {
             payload.nextEmiDate = currentNextEmiDateStr ? new Date(currentNextEmiDateStr).toISOString() : null;
           }
         } else {
-          if (currentNextEmiDateStr) {
-            payload.nextEmiDate = new Date(currentNextEmiDateStr).toISOString();
-          } else {
-            payload.nextEmiDate = null;
+          if (isNextEmiDateEdited) {
+            payload.nextEmiDate = currentNextEmiDateStr ? new Date(currentNextEmiDateStr).toISOString() : null;
+          } else if (loan?.nextEmiDate) {
+            payload.nextEmiDate = typeof loan.nextEmiDate === 'string' ? loan.nextEmiDate : new Date(loan.nextEmiDate).toISOString();
           }
         }
 

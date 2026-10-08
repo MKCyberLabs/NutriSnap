@@ -1091,17 +1091,19 @@ export async function updateObligation(
   let targetRecurrenceType = obligation.recurrenceType;
   let targetRecurrenceInterval = obligation.recurrenceInterval;
 
-  if (parsed.dueAt !== undefined) {
-    targetDueAt = new Date(parsed.dueAt);
+  // Finding 4: Do NOT overwrite dueAt on edit unless anchor was explicitly changed
+  const anchorExplicitlyChanged = parsed.dueAt !== undefined && new Date(parsed.dueAt).getTime() !== obligation.dueAt.getTime();
+  if (anchorExplicitlyChanged) {
+    targetDueAt = new Date(parsed.dueAt!);
     updateData.dueAt = targetDueAt;
     scheduleChanged = true;
   }
-  if (parsed.recurrenceType !== undefined) {
+  if (parsed.recurrenceType !== undefined && parsed.recurrenceType !== obligation.recurrenceType) {
     targetRecurrenceType = parsed.recurrenceType;
     updateData.recurrenceType = parsed.recurrenceType;
     scheduleChanged = true;
   }
-  if (parsed.recurrenceInterval !== undefined) {
+  if (parsed.recurrenceInterval !== undefined && parsed.recurrenceInterval !== obligation.recurrenceInterval) {
     targetRecurrenceInterval = parsed.recurrenceInterval;
     updateData.recurrenceInterval = parsed.recurrenceInterval;
     scheduleChanged = true;

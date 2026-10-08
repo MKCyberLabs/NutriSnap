@@ -81,7 +81,8 @@ export function ObligationForm({
       setTitle(obligation.title || '');
       setKind(obligation.kind || 'BILL');
       setAmount(obligation.amount ? String(obligation.amount) : '');
-      setDueAt(formatDateForInput(obligation.nextDueAt || obligation.dueAt));
+      // Finding 4: Preserve initialData.dueAt as the anchor date (do NOT overwrite dueAt with nextDueAt)
+      setDueAt(formatDateForInput(obligation.dueAt));
       setRecurrence(obligation.recurrenceType || 'MONTHLY');
       setInterval(obligation.recurrenceInterval ? String(obligation.recurrenceInterval) : '84');
       setAccountId(obligation.accountId || obligation.account?.id || 'none');
@@ -116,8 +117,20 @@ export function ObligationForm({
         recurrenceInterval: recurrence === 'EVERY_N_DAYS' ? parseInt(interval, 10) || 1 : undefined,
       };
 
-      if (dueAt) {
-        payload.dueAt = new Date(dueAt).toISOString();
+      const initialDueAtStr = formatDateForInput(obligation?.dueAt);
+      const isDueAtEdited = dueAt !== initialDueAtStr;
+
+      if (isEdit) {
+        if (isDueAtEdited && dueAt) {
+          payload.dueAt = new Date(dueAt).toISOString();
+        } else if (obligation?.dueAt) {
+          // Finding 4: Preserve initialData.dueAt as the anchor date
+          payload.dueAt = typeof obligation.dueAt === 'string' ? obligation.dueAt : new Date(obligation.dueAt).toISOString();
+        }
+      } else {
+        if (dueAt) {
+          payload.dueAt = new Date(dueAt).toISOString();
+        }
       }
 
       if (!isEdit) {
@@ -243,7 +256,7 @@ export function ObligationForm({
           {/* First Due Date */}
           <div className="space-y-1.5">
             <Label htmlFor="ob-date" className="text-xs font-semibold text-[#344054]">
-              Due Date / Next Billing
+              {isEdit ? 'First Due Date / Anchor' : 'Due Date / Next Billing'}
             </Label>
             <Input
               id="ob-date"

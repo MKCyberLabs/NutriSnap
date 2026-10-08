@@ -1236,3 +1236,290 @@ test('V2-370: Repair 2-B - Loan Concurrency, Recurrence & Reminder State (Findin
     await db.$disconnect();
   }
 });
+
+test('V2-380: Repair 3-B - Loan dates, closure lock, bill anchor, schedule clearing (Findings P1 #1, #3, #4, #5)', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr-r3b-${timestamp}`,
+        email: `r3b-${timestamp}@test.local`,
+        name: 'User Repair 3-B',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bankAcc = await financeService.createAccount(user.id, {
+      name: 'Checking Account',
+      type: 'BANK',
+      openingBalance: '500000.00',
+    }, db);
+    const bankId = bankAcc.account.id;
+
+    // -------------------------------------------------------------------------
+    // 1. Finding 1 (P1): LoanForm timestamp & pause/snooze preservation
+    // Comparing calendar dates in user's timezone preserves paused state & snoozed claims
+    // -------------------------------------------------------------------------
+    const f1LoanRes = await loanService.createLoan(user.id, {
+      name: 'Timezone Compare Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '50000.00',
+      emiAmount: '5000.00',
+      // In Asia/Kolkata (UTC+5:30), 2026-11-15T12:00:00.000Z is 2026-11-15 17:30
+      nextEmiDate: '2026-11-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bankId,
+    }, db);
+    assert.equal(f1LoanRes.success, true);
+    const f1LoanId = f1LoanRes.loan.id;
+    const f1ObId = f1LoanRes.loan.obligationId!;
+
+    // Explicitly pause the obligation
+    await db.obligation.update({
+      where: { id: f1ObId },
+      data: { isActive: false }
+    });
+
+    // Create a reminder and SNOOZED delivery claim
+    const f1Rem = await db.reminder.create({
+      data: {
+        userId: user.id,
+        obligationId: f1ObId,
+        type: 'BILL',
+        title: 'F1 Reminder',
+        time: '10:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+    const snoozedClaim = await db.reminderDelivery.create({
+      data: {
+        userId: user.id,
+        obligationId: f1ObId,
+        reminderId: f1Rem.id,
+        occurrenceKey: '2026-11-15T10:00',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-15T10:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'SNOOZED',
+        snoozedUntil: new Date('2026-11-15T18:00:00.000Z'),
+      }
+    });
+
+    // Update with 00:00Z midnight time-of-day normalization on the SAME calendar date (Nov 15) in Asia/Kolkata (05:30 AM)
+    const f1UpdateRes = await loanService.updateLoan(user.id, f1LoanId, {
+      name: 'Renamed Timezone Compare Loan',
+      notes: 'Testing time-of-day normalization preservation',
+      dueDay: 15,
+      nextEmiDate: '2026-11-15T00:00:00.000Z',
+    }, db);
+    assert.equal(f1UpdateRes.success, true);
+
+    // Paused obligation state (isActive: false) must be preserved
+    const obAfterF1 = await db.obligation.findUnique({ where: { id: f1ObId } });
+    assert.equal(obAfterF1?.isActive, false, 'Paused obligation must NOT be reactivated on same calendar date');
+
+    // SNOOZED delivery claim must NOT be purged
+    const claimAfterF1 = await db.reminderDelivery.findUnique({ where: { id: snoozedClaim.id } });
+    assert.ok(claimAfterF1, 'SNOOZED delivery claim must be preserved on same calendar date');
+    assert.equal(claimAfterF1?.status, 'SNOOZED');
+
+    // -------------------------------------------------------------------------
+    // 2. Finding 3 (P1): Loan closure concurrency re-read lock
+    // Inside tx, closeLoan and archiveLoan re-read the loan to catch concurrently linked obligations
+    // -------------------------------------------------------------------------
+    // Create loan without obligation
+    const f3LoanRes = await loanService.createLoan(user.id, {
+      name: 'Closure Lock Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'SBI',
+      openingOutstanding: '30000.00',
+    }, db);
+    const f3LoanId = f3LoanRes.loan.id;
+
+    // Simulate concurrent obligation link right before closeLoan executes
+    const concurrentOb = await db.obligation.create({
+      data: {
+        userId: user.id,
+        title: 'Concurrent EMI Obligation',
+        kind: 'EMI',
+        amount: new Prisma.Decimal(3000),
+        dueAt: new Date('2026-11-20T10:00:00.000Z'),
+        nextDueAt: new Date('2026-11-20T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+    await db.loan.update({
+      where: { id: f3LoanId },
+      data: { obligationId: concurrentOb.id }
+    });
+
+    // Close the loan
+    const closeRes = await loanService.closeLoan(user.id, f3LoanId, db);
+    assert.equal(closeRes.success, true);
+
+    const f3LoanAfterClose = await db.loan.findUnique({ where: { id: f3LoanId } });
+    assert.equal(f3LoanAfterClose?.status, 'CLOSED');
+
+    // The concurrently linked obligation must have been re-read and cleaned up (deactivated & archived)
+    const obAfterClose = await db.obligation.findUnique({ where: { id: concurrentOb.id } });
+    assert.equal(obAfterClose?.isActive, false, 'Concurrently linked obligation must be deactivated on closeLoan');
+    assert.equal(obAfterClose?.isArchived, true, 'Concurrently linked obligation must be archived on closeLoan');
+
+    // Similarly test archiveLoan with concurrency re-read lock
+    const f3ArchiveLoanRes = await loanService.createLoan(user.id, {
+      name: 'Archive Lock Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'Axis Bank',
+      openingOutstanding: '20000.00',
+    }, db);
+    const f3ArchiveLoanId = f3ArchiveLoanRes.loan.id;
+
+    const concurrentArchiveOb = await db.obligation.create({
+      data: {
+        userId: user.id,
+        title: 'Concurrent Archive EMI Obligation',
+        kind: 'EMI',
+        amount: new Prisma.Decimal(2000),
+        dueAt: new Date('2026-11-25T10:00:00.000Z'),
+        nextDueAt: new Date('2026-11-25T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+    await db.loan.update({
+      where: { id: f3ArchiveLoanId },
+      data: { obligationId: concurrentArchiveOb.id }
+    });
+
+    const archiveRes = await loanService.archiveLoan(user.id, f3ArchiveLoanId, db);
+    assert.equal(archiveRes.success, true);
+
+    const obAfterArchive = await db.obligation.findUnique({ where: { id: concurrentArchiveOb.id } });
+    assert.equal(obAfterArchive?.isActive, false, 'Concurrently linked obligation must be deactivated on archiveLoan');
+    assert.equal(obAfterArchive?.isArchived, true, 'Concurrently linked obligation must be archived on archiveLoan');
+
+    // -------------------------------------------------------------------------
+    // 3. Finding 4 (P1): Bill/Obligation anchor preservation
+    // In updateObligation: do NOT overwrite dueAt with nextDueAt unless anchor was explicitly changed
+    // -------------------------------------------------------------------------
+    const anchorDate = new Date('2026-01-05T10:00:00.000Z');
+    const recurringNextDueDate = new Date('2026-10-05T10:00:00.000Z');
+    const anchorOb = await db.obligation.create({
+      data: {
+        userId: user.id,
+        title: 'Anchor Preservation Bill',
+        kind: 'BILL',
+        amount: new Prisma.Decimal(999),
+        dueAt: anchorDate,
+        nextDueAt: recurringNextDueDate,
+        recurrenceType: 'MONTHLY',
+        recurrenceInterval: 1,
+        isActive: true,
+      }
+    });
+
+    // 3a. Metadata edit (updating title and notes): dueAt must remain the initial anchor
+    const updateTitleRes = await financeService.updateObligation(user.id, anchorOb.id, {
+      title: 'Anchor Preservation Bill (Updated Title)',
+      notes: 'Preserve anchor test',
+    }, db);
+    assert.equal(updateTitleRes.success, true);
+
+    const obAfterTitleEdit = await db.obligation.findUnique({ where: { id: anchorOb.id } });
+    assert.equal(obAfterTitleEdit?.dueAt.toISOString(), anchorDate.toISOString(), 'dueAt anchor must be preserved on metadata edit');
+    assert.equal(obAfterTitleEdit?.nextDueAt.toISOString(), recurringNextDueDate.toISOString(), 'nextDueAt must remain untouched');
+
+    // 3b. Editing nextDueAt directly: dueAt must NOT be overwritten with nextDueAt
+    const newNextDue = new Date('2026-11-05T10:00:00.000Z');
+    const updateNextDueRes = await financeService.updateObligation(user.id, anchorOb.id, {
+      nextDueAt: newNextDue.toISOString(),
+    }, db);
+    assert.equal(updateNextDueRes.success, true);
+
+    const obAfterNextDueEdit = await db.obligation.findUnique({ where: { id: anchorOb.id } });
+    assert.equal(obAfterNextDueEdit?.dueAt.toISOString(), anchorDate.toISOString(), 'dueAt anchor must NOT be overwritten when nextDueAt is updated');
+    assert.equal(obAfterNextDueEdit?.nextDueAt.toISOString(), newNextDue.toISOString());
+
+    // 3c. Explicitly changing dueAt anchor: dueAt updates to new anchor
+    const explicitNewAnchor = new Date('2026-02-01T10:00:00.000Z');
+    const updateAnchorRes = await financeService.updateObligation(user.id, anchorOb.id, {
+      dueAt: explicitNewAnchor.toISOString(),
+    }, db);
+    assert.equal(updateAnchorRes.success, true);
+
+    const obAfterExplicitAnchor = await db.obligation.findUnique({ where: { id: anchorOb.id } });
+    assert.equal(obAfterExplicitAnchor?.dueAt.toISOString(), explicitNewAnchor.toISOString(), 'dueAt must update when explicitly changed');
+
+    // -------------------------------------------------------------------------
+    // 4. Finding 5 (P1): Explicit schedule clear with dueDay change
+    // If parsed.nextEmiDate === null, do NOT recalculate replacement date when dueDay changes;
+    // honor explicit null and atomically deactivate the schedule/obligation
+    // -------------------------------------------------------------------------
+    const f5LoanRes = await loanService.createLoan(user.id, {
+      name: 'Schedule Clear Loan',
+      loanType: 'PERSONAL',
+      lender: 'Kotak Bank',
+      openingOutstanding: '45000.00',
+      emiAmount: '3500.00',
+      nextEmiDate: '2026-11-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bankId,
+    }, db);
+    assert.equal(f5LoanRes.success, true);
+    const f5LoanId = f5LoanRes.loan.id;
+    const f5ObId = f5LoanRes.loan.obligationId!;
+
+    // Create a pending delivery for this obligation
+    const f5Rem = await db.reminder.create({
+      data: {
+        userId: user.id,
+        obligationId: f5ObId,
+        type: 'BILL',
+        title: 'F5 Bill Reminder',
+        time: '12:00',
+        recurrenceType: 'MONTHLY',
+      }
+    });
+    const f5Delivery = await db.reminderDelivery.create({
+      data: {
+        userId: user.id,
+        obligationId: f5ObId,
+        reminderId: f5Rem.id,
+        occurrenceKey: '2026-11-15T12:00',
+        offsetMinutes: 0,
+        scheduledFor: new Date('2026-11-15T12:00:00.000Z'),
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // Explicit schedule clear while changing dueDay (dueDay 15 -> 20, nextEmiDate: null)
+    const clearScheduleRes = await loanService.updateLoan(user.id, f5LoanId, {
+      dueDay: 20,
+      nextEmiDate: null,
+    }, db);
+    assert.equal(clearScheduleRes.success, true);
+    assert.equal(clearScheduleRes.loan.dueDay, 20);
+    assert.equal(clearScheduleRes.loan.nextEmiDate, null, 'nextEmiDate must be null when explicitly requested');
+
+    const loanAfterClear = await db.loan.findUnique({ where: { id: f5LoanId } });
+    assert.equal(loanAfterClear?.dueDay, 20);
+    assert.equal(loanAfterClear?.nextEmiDate, null, 'Loan nextEmiDate must NOT be recalculated when nextEmiDate is explicitly null');
+
+    const obAfterClear = await db.obligation.findUnique({ where: { id: f5ObId } });
+    assert.equal(obAfterClear?.isActive, false, 'Linked obligation must be deactivated when schedule is cleared');
+
+    const deliveryAfterClear = await db.reminderDelivery.findUnique({ where: { id: f5Delivery.id } });
+    assert.equal(deliveryAfterClear, null, 'Pending reminder delivery claims must be purged on schedule clear');
+
+  } finally {
+    await db.$disconnect();
+  }
+});

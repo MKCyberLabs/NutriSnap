@@ -10,6 +10,16 @@ import { TZDate } from '@date-fns/tz';
 const defaultPrisma = prisma;
 type PrismaClientLike = any;
 
+export function isSameCalendarDate(d1: Date, d2: Date, tz: string): boolean {
+  const tz1 = new TZDate(d1, tz);
+  const tz2 = new TZDate(d2, tz);
+  return (
+    tz1.getFullYear() === tz2.getFullYear() &&
+    tz1.getMonth() === tz2.getMonth() &&
+    tz1.getDate() === tz2.getDate()
+  );
+}
+
 /**
  * Centralized helper for deactivating/archiving linked obligation and cancelling pending reminder claims.
  * Invoked on all loan closure paths: closeLoan, archiveLoan, reconcileOutstanding(0), and recordEmiPayment (isClosed).
@@ -523,10 +533,34 @@ export async function recordEmiPayment(
     : `EMI Payment: ${loan.name}${noteTag}`;
 
   const executeInTransaction = async (tx: any) => {
+    // Finding 3: Re-read and lock loan inside tx to avoid missing concurrently linked obligations
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loan.id} FOR UPDATE`;
+    }
+
+    const currentLoan = await tx.loan.findUnique({
+      where: { id: loan.id },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        status: true,
+        obligationId: true,
+        outstandingPrincipal: true,
+        nextEmiDate: true,
+        dueDay: true,
+        emiGeneratesExpense: true,
+      }
+    });
+
+    if (!currentLoan || currentLoan.userId !== userId) {
+      throw new Error('Loan not found or unauthorized');
+    }
+
     let createdTxId: string | null = null;
 
     // Optional Expense transaction creation (governed by loan.emiGeneratesExpense)
-    if (loan.emiGeneratesExpense) {
+    if (currentLoan.emiGeneratesExpense) {
       const expenseTx = await tx.financialTransaction.create({
         data: {
           userId,
@@ -545,7 +579,7 @@ export async function recordEmiPayment(
     const payment = await tx.loanPayment.create({
       data: {
         userId,
-        loanId: loan.id,
+        loanId: currentLoan.id,
         amount: amountDecimal,
         principalPaid: principalDecimal,
         interestPaid: interestDecimal,
@@ -559,56 +593,56 @@ export async function recordEmiPayment(
     });
 
     // Update loan outstanding ONLY when principalPaid is known and > 0 (V2-T047, V2-T048)
-    let newOutstanding = loan.outstandingPrincipal;
+    let newOutstanding = currentLoan.outstandingPrincipal;
     let isClosed = false;
 
     if (principalDecimal && principalDecimal.greaterThan(0)) {
-      newOutstanding = loan.outstandingPrincipal.minus(principalDecimal);
+      newOutstanding = currentLoan.outstandingPrincipal.minus(principalDecimal);
       if (newOutstanding.lessThan(0)) newOutstanding = new Decimal(0);
       isClosed = newOutstanding.isZero();
     }
 
     // Advance next EMI date if loan has one, preserving target day of month in user's timezone
-    let nextEmi: Date | null = loan.nextEmiDate;
-    const targetDay = loan.dueDay ?? (loan.nextEmiDate ? new TZDate(loan.nextEmiDate, userTimezone).getDate() : null);
-    if (loan.nextEmiDate && targetDay !== null) {
+    let nextEmi: Date | null = currentLoan.nextEmiDate;
+    const targetDay = currentLoan.dueDay ?? (currentLoan.nextEmiDate ? new TZDate(currentLoan.nextEmiDate, userTimezone).getDate() : null);
+    if (currentLoan.nextEmiDate && targetDay !== null) {
       const rule: RecurrenceRule = {
         type: 'MONTHLY',
         interval: 1,
         targetDayOfMonth: targetDay,
         timezone: userTimezone,
       };
-      nextEmi = getNextOccurrence(rule, loan.nextEmiDate, new Date(loan.nextEmiDate.getTime() + 1000));
+      nextEmi = getNextOccurrence(rule, currentLoan.nextEmiDate, new Date(currentLoan.nextEmiDate.getTime() + 1000));
     }
 
     await tx.loan.update({
-      where: { id: loan.id },
+      where: { id: currentLoan.id },
       data: {
         outstandingPrincipal: newOutstanding,
         nextEmiDate: nextEmi,
         dueDay: targetDay,
-        status: isClosed ? 'CLOSED' : loan.status,
+        status: isClosed ? 'CLOSED' : currentLoan.status,
       }
     });
 
     if (isClosed) {
-      // Finding #5: Centralized closure cleanup on zero balance
-      await cleanupLoanRemindersAndObligation(tx, userId, loan.id, loan.obligationId);
-    } else if (loan.obligationId && nextEmi) {
+      // Finding #5 & Finding 3: Centralized closure cleanup using locked obligationId
+      await cleanupLoanRemindersAndObligation(tx, userId, currentLoan.id, currentLoan.obligationId);
+    } else if (currentLoan.obligationId && nextEmi) {
       // Finding #4: Advance nextEmiDate and synchronize linked obligation's nextDueAt
       await tx.obligation.update({
-        where: { id: loan.obligationId },
+        where: { id: currentLoan.obligationId },
         data: {
           nextDueAt: nextEmi,
           lastCompletedAt: occurredAtDate,
         }
       });
 
-      if (loan.nextEmiDate) {
-        const occurrenceKey = getOccurrenceKey(loan.nextEmiDate, userTimezone);
+      if (currentLoan.nextEmiDate) {
+        const occurrenceKey = getOccurrenceKey(currentLoan.nextEmiDate, userTimezone);
         await tx.reminderDelivery.updateMany({
           where: {
-            obligationId: loan.obligationId,
+            obligationId: currentLoan.obligationId,
             occurrenceKey,
             status: { in: ['PENDING', 'SENT', 'SNOOZED', 'FAILED'] }
           },
@@ -675,18 +709,32 @@ export async function reconcileOutstanding(
   const isClosed = outstandingDecimal.isZero();
 
   const executeInTransaction = async (tx: any) => {
+    // Finding 3: Re-read and lock loan inside tx to avoid missing concurrently linked obligations
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loanId} FOR UPDATE`;
+    }
+
+    const currentLoan = await tx.loan.findUnique({
+      where: { id: loanId },
+      select: { id: true, userId: true, status: true, obligationId: true }
+    });
+
+    if (!currentLoan || currentLoan.userId !== userId) {
+      throw new Error('Loan not found or unauthorized');
+    }
+
     const updated = await tx.loan.update({
       where: { id: loanId },
       data: {
         outstandingPrincipal: outstandingDecimal,
-        status: isClosed ? 'CLOSED' : (loan.status === 'CLOSED' ? 'ACTIVE' : loan.status),
+        status: isClosed ? 'CLOSED' : (currentLoan.status === 'CLOSED' ? 'ACTIVE' : currentLoan.status),
         notes: note || undefined,
       }
     });
 
     if (isClosed) {
-      // Finding #5: Centralized closure cleanup on zero balance via reconcile
-      await cleanupLoanRemindersAndObligation(tx, userId, loanId, loan.obligationId);
+      // Finding #5 & Finding 3: Centralized closure cleanup using locked obligationId
+      await cleanupLoanRemindersAndObligation(tx, userId, loanId, currentLoan.obligationId);
     }
 
     return updated;
@@ -819,8 +867,13 @@ export async function updateLoan(
     let effectiveNextDue: Date | null = currentLoan.nextEmiDate;
     const nextEmiDateProvided = parsed.nextEmiDate !== undefined;
 
-    // DueDay precedence: If dueDay changes, calculate new nextEmiDate and take precedence over stale submitted nextEmiDate
-    if (dueDayChanged && typeof parsed.dueDay === 'number') {
+    // Finding 5: Explicit schedule clear with dueDay change:
+    // If parsed.nextEmiDate === null, user explicitly requested schedule clearing.
+    // Do NOT recalculate a replacement date when dueDay changes; honor explicit null.
+    if (parsed.nextEmiDate === null) {
+      effectiveNextDue = null;
+      updateData.nextEmiDate = null;
+    } else if (dueDayChanged && typeof parsed.dueDay === 'number') {
       const targetDay = parsed.dueDay;
       const now = new Date();
       const nowInTz = new TZDate(now, userTimezone);
@@ -865,11 +918,24 @@ export async function updateLoan(
       updateData.nextEmiDate = effectiveNextDue;
     }
 
-    const nextDueActuallyChanged = (
-      (effectiveNextDue === null && currentLoan.nextEmiDate !== null) ||
-      (effectiveNextDue !== null && currentLoan.nextEmiDate === null) ||
-      (effectiveNextDue !== null && currentLoan.nextEmiDate !== null && effectiveNextDue.getTime() !== currentLoan.nextEmiDate.getTime())
-    );
+    // Finding 1: Compare calendar dates in user's timezone rather than raw UTC timestamps
+    // so time-of-day normalization doesn't falsely mark schedule as changed.
+    let nextDueActuallyChanged = false;
+    if (effectiveNextDue === null && currentLoan.nextEmiDate !== null) {
+      nextDueActuallyChanged = true;
+    } else if (effectiveNextDue !== null && currentLoan.nextEmiDate === null) {
+      nextDueActuallyChanged = true;
+    } else if (effectiveNextDue !== null && currentLoan.nextEmiDate !== null) {
+      if (!isSameCalendarDate(effectiveNextDue, currentLoan.nextEmiDate, userTimezone)) {
+        nextDueActuallyChanged = true;
+      } else {
+        // Same calendar date in user's timezone: preserve current exact timestamp
+        effectiveNextDue = currentLoan.nextEmiDate;
+        if (updateData.nextEmiDate !== undefined) {
+          updateData.nextEmiDate = currentLoan.nextEmiDate;
+        }
+      }
+    }
     const scheduleActuallyChanged = nextDueActuallyChanged || dueDayChanged;
 
     const effectiveName = parsed.name || currentLoan.name;
@@ -1068,12 +1134,26 @@ export async function closeLoan(
   }
 
   const executeInTransaction = async (tx: any) => {
+    // Finding 3: Re-read and lock loan inside tx to avoid missing concurrently linked obligations
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loanId} FOR UPDATE`;
+    }
+
+    const currentLoan = await tx.loan.findUnique({
+      where: { id: loanId },
+      select: { id: true, userId: true, obligationId: true }
+    });
+
+    if (!currentLoan || currentLoan.userId !== userId) {
+      throw new Error('Loan not found or unauthorized');
+    }
+
     await tx.loan.update({
       where: { id: loanId },
       data: { status: 'CLOSED' }
     });
 
-    await cleanupLoanRemindersAndObligation(tx, userId, loanId, loan.obligationId);
+    await cleanupLoanRemindersAndObligation(tx, userId, loanId, currentLoan.obligationId);
   };
 
   if (typeof db.$transaction === 'function') {
@@ -1105,12 +1185,26 @@ export async function archiveLoan(
   }
 
   const executeInTransaction = async (tx: any) => {
+    // Finding 3: Re-read and lock loan inside tx to avoid missing concurrently linked obligations
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loanId} FOR UPDATE`;
+    }
+
+    const currentLoan = await tx.loan.findUnique({
+      where: { id: loanId },
+      select: { id: true, userId: true, obligationId: true }
+    });
+
+    if (!currentLoan || currentLoan.userId !== userId) {
+      throw new Error('Loan not found or unauthorized');
+    }
+
     await tx.loan.update({
       where: { id: loanId },
       data: { status: 'ARCHIVED' }
     });
 
-    await cleanupLoanRemindersAndObligation(tx, userId, loanId, loan.obligationId);
+    await cleanupLoanRemindersAndObligation(tx, userId, loanId, currentLoan.obligationId);
   };
 
   if (typeof db.$transaction === 'function') {
