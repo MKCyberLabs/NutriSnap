@@ -1835,3 +1835,314 @@ test('V2-390: Repair 4 - P1 Tickets R001-P1-01..04', async () => {
     await db.$disconnect();
   }
 });
+
+test('V2-R001-ROUND2-B: Loan occurrence validation, reversal locking, reopen sync, calendar dates (SOL-R001-001, 003, 009, 011, 013)', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const userA = await db.user.create({
+      data: {
+        id: `usr-r2b-a-${timestamp}`,
+        email: `r2ba-${timestamp}@test.local`,
+        name: 'User R2B Alpha',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const userB = await db.user.create({
+      data: {
+        id: `usr-r2b-b-${timestamp}`,
+        email: `r2bb-${timestamp}@test.local`,
+        name: 'User R2B Beta',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const userNy = await db.user.create({
+      data: {
+        id: `usr-r2b-ny-${timestamp}`,
+        email: `r2bny-${timestamp}@test.local`,
+        name: 'User R2B New York',
+        password: 'password123',
+        timezone: 'America/New_York',
+      }
+    });
+
+    const bankA = await financeService.createAccount(userA.id, {
+      name: 'User A Bank',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankAId = bankA.account.id;
+
+    const bankB = await financeService.createAccount(userB.id, {
+      name: 'User B Bank',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+    const bankBId = bankB.account.id;
+
+    // =========================================================================
+    // 1. SOL-R001-013: createLinkedObligation: false creates loan without linked obligation
+    // =========================================================================
+    const unlinkedLoanRes = await loanService.createLoan(userA.id, {
+      name: 'Unlinked Car Loan',
+      loanType: 'VEHICLE',
+      lender: 'SBI',
+      openingOutstanding: '300000.00',
+      emiAmount: '12000.00',
+      nextEmiDate: '2026-11-20T12:00:00.000Z',
+      paymentAccountId: bankAId,
+      createLinkedObligation: false,
+    }, db);
+    assert.equal(unlinkedLoanRes.success, true);
+    assert.equal(unlinkedLoanRes.loan.obligationId, null);
+
+    const checkNoOb = await db.obligation.findFirst({
+      where: {
+        userId: userA.id,
+        title: { contains: 'Unlinked Car Loan' },
+      }
+    });
+    assert.equal(checkNoOb, null, 'No obligation should be created when createLinkedObligation is false');
+
+    // =========================================================================
+    // 2. SOL-R001-001: foreign/unrelated obligationOccurrenceId rejected without disclosing IDs or creating payment
+    // =========================================================================
+    const loanARes = await loanService.createLoan(userA.id, {
+      name: 'Alpha Home Loan',
+      loanType: 'HOME',
+      lender: 'HDFC Bank',
+      openingOutstanding: '500000.00',
+      emiAmount: '20000.00',
+      nextEmiDate: '2026-11-10T12:00:00.000Z',
+      paymentAccountId: bankAId,
+      createLinkedObligation: true,
+    }, db);
+    assert.equal(loanARes.success, true);
+    const loanAId = loanARes.loan.id;
+    const loanAObId = loanARes.loan.obligationId!;
+    assert.ok(loanAObId);
+
+    // Create an obligation and occurrence for User B
+    const obB = await db.obligation.create({
+      data: {
+        userId: userB.id,
+        title: 'User B Rent',
+        kind: 'RENT',
+        amount: new Prisma.Decimal('15000.00'),
+        dueAt: new Date('2026-11-01T12:00:00.000Z'),
+        nextDueAt: new Date('2026-11-01T12:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+    const occB = await db.obligationOccurrence.create({
+      data: {
+        userId: userB.id,
+        obligationId: obB.id,
+        occurrenceKey: '2026-11-01',
+        dueDate: new Date('2026-11-01T12:00:00.000Z'),
+        status: 'COMPLETED',
+      }
+    });
+
+    // Create an existing loan payment attached to occB under User B
+    const loanBRes = await loanService.createLoan(userB.id, {
+      name: 'Beta Loan',
+      loanType: 'PERSONAL',
+      lender: 'Kotak',
+      openingOutstanding: '100000.00',
+      paymentAccountId: bankBId,
+      createLinkedObligation: false,
+    }, db);
+    await db.loanPayment.create({
+      data: {
+        userId: userB.id,
+        loanId: loanBRes.loan.id,
+        amount: new Prisma.Decimal('15000.00'),
+        occurredAt: new Date('2026-11-01T12:00:00.000Z'),
+        accountId: bankBId,
+        obligationOccurrenceId: occB.id,
+      }
+    });
+
+    // Case 2a: User A tries to record EMI payment referencing User B's occurrence
+    // Must reject without disclosing existing paymentId or transactionId
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(userA.id, {
+          loanId: loanAId,
+          amount: '20000.00',
+          accountId: bankAId,
+          obligationOccurrenceId: occB.id,
+        }, db);
+      },
+      /Obligation occurrence not found or unauthorized/
+    );
+
+    // Case 2b: Create an unrelated obligation for User A (not linked to this loan)
+    const unrelatedObA = await db.obligation.create({
+      data: {
+        userId: userA.id,
+        title: 'Electricity Bill',
+        kind: 'BILL',
+        amount: new Prisma.Decimal('2500.00'),
+        dueAt: new Date('2026-11-05T12:00:00.000Z'),
+        nextDueAt: new Date('2026-11-05T12:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+    const unrelatedOccA = await db.obligationOccurrence.create({
+      data: {
+        userId: userA.id,
+        obligationId: unrelatedObA.id,
+        occurrenceKey: '2026-11-05',
+        dueDate: new Date('2026-11-05T12:00:00.000Z'),
+        status: 'COMPLETED',
+      }
+    });
+
+    // User A tries to record EMI payment referencing the unrelated occurrence
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(userA.id, {
+          loanId: loanAId,
+          amount: '20000.00',
+          accountId: bankAId,
+          obligationOccurrenceId: unrelatedOccA.id,
+        }, db);
+      },
+      /Obligation occurrence not found or unauthorized/
+    );
+
+    // Verify no payment was created for loanAId
+    const loanAPayments = await db.loanPayment.findMany({ where: { loanId: loanAId } });
+    assert.equal(loanAPayments.length, 0);
+
+    // =========================================================================
+    // 3. SOL-R001-003: Concurrent EMI reversals (Promise.all) restore all principal components accurately
+    // =========================================================================
+    const revLoanRes = await loanService.createLoan(userA.id, {
+      name: 'Reversal Concurrency Loan',
+      loanType: 'PERSONAL',
+      lender: 'Axis Bank',
+      openingOutstanding: '100000.00',
+      emiAmount: '10000.00',
+      nextEmiDate: '2026-11-15T12:00:00.000Z',
+      paymentAccountId: bankAId,
+      createLinkedObligation: false,
+    }, db);
+    const revLoanId = revLoanRes.loan.id;
+
+    // Record two distinct EMI payments with principal reductions
+    const pay1 = await loanService.recordEmiPayment(userA.id, {
+      loanId: revLoanId,
+      amount: '10000.00',
+      principalPaid: '6000.00',
+      interestPaid: '4000.00',
+      accountId: bankAId,
+    }, db);
+    assert.equal(pay1.success, true);
+    assert.equal(pay1.remainingPrincipal, '94000');
+
+    const pay2 = await loanService.recordEmiPayment(userA.id, {
+      loanId: revLoanId,
+      amount: '10000.00',
+      principalPaid: '4000.00',
+      interestPaid: '6000.00',
+      accountId: bankAId,
+    }, db);
+    assert.equal(pay2.success, true);
+    assert.equal(pay2.remainingPrincipal, '90000');
+
+    // Run concurrent reversals
+    const [rev1, rev2] = await Promise.all([
+      loanService.revertEmiPayment(userA.id, { loanPaymentId: pay1.paymentId }, db),
+      loanService.revertEmiPayment(userA.id, { loanPaymentId: pay2.paymentId }, db),
+    ]);
+    assert.equal(rev1.success, true);
+    assert.equal(rev2.success, true);
+
+    // Fetch the final loan state from DB
+    const finalRevLoan = await db.loan.findUnique({ where: { id: revLoanId } });
+    assert.equal(
+      finalRevLoan?.outstandingPrincipal.toString(),
+      '100000',
+      'Both principal components (6000 + 4000) must be restored under row lock, bringing 90000 back to 100000'
+    );
+
+    // =========================================================================
+    // 4. SOL-R001-009: Reopening after payoff synchronizes Obligation.nextDueAt with Loan.nextEmiDate
+    // =========================================================================
+    const syncLoanRes = await loanService.createLoan(userA.id, {
+      name: 'Sync Reopen Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '30000.00',
+      emiAmount: '3000.00',
+      nextEmiDate: '2026-11-25T12:00:00.000Z',
+      dueDay: 25,
+      paymentAccountId: bankAId,
+      createLinkedObligation: true,
+    }, db);
+    const syncLoanId = syncLoanRes.loan.id;
+    const syncObId = syncLoanRes.loan.obligationId!;
+    assert.ok(syncObId);
+
+    // Close the loan via payoff
+    const closeRes = await loanService.reconcileOutstanding(userA.id, syncLoanId, 0, 'Paid in full', db);
+    assert.equal(closeRes.success, true);
+    assert.equal(closeRes.status, 'CLOSED');
+
+    const obAfterClose = await db.obligation.findUnique({ where: { id: syncObId } });
+    assert.equal(obAfterClose?.isActive, false);
+    assert.equal(obAfterClose?.isArchived, true);
+
+    // Update loan nextEmiDate to future date and new EMI amount
+    const futureDate = '2026-12-25T12:00:00.000Z';
+    await loanService.updateLoan(userA.id, syncLoanId, {
+      nextEmiDate: futureDate,
+      emiAmount: '3500.00',
+    }, db);
+
+    // Reopen the loan via reconcileOutstanding
+    const reopenRes = await loanService.reconcileOutstanding(userA.id, syncLoanId, '15000.00', 'Correction reopen', db);
+    assert.equal(reopenRes.success, true);
+    assert.equal(reopenRes.status, 'ACTIVE');
+
+    const obAfterReopen = await db.obligation.findUnique({ where: { id: syncObId } });
+    assert.equal(obAfterReopen?.isActive, true);
+    assert.equal(obAfterReopen?.isArchived, false);
+    assert.equal(obAfterReopen?.amount?.toString(), '3500', 'Obligation amount must synchronize with loan emiAmount');
+    assert.equal(obAfterReopen?.accountId, bankAId, 'Obligation accountId must synchronize with loan paymentAccountId');
+    assert.equal(
+      obAfterReopen?.nextDueAt.toISOString(),
+      futureDate,
+      'Obligation nextDueAt must synchronize with loan nextEmiDate on reopen'
+    );
+
+    // =========================================================================
+    // 5. SOL-R001-011: Calendar date parsing in user's timezone preserves calendar day
+    // =========================================================================
+    const nyLoanRes = await loanService.createLoan(userNy.id, {
+      name: 'NY Calendar Loan',
+      loanType: 'PERSONAL',
+      lender: 'Chase',
+      openingOutstanding: '10000.00',
+      nextEmiDate: '2026-11-15',
+      createLinkedObligation: false,
+    }, db);
+    assert.equal(nyLoanRes.success, true);
+    assert.equal(nyLoanRes.loan.dueDay, 15, 'dueDay in America/New_York must be 15, not shifted backwards to 14');
+
+  } finally {
+    await db.$disconnect();
+  }
+});

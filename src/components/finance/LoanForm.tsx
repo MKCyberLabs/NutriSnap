@@ -106,8 +106,12 @@ export function LoanForm({
       setNotes(loan.notes || '');
       if (loan.nextEmiDate) {
         try {
-          const d = typeof loan.nextEmiDate === 'string' ? new Date(loan.nextEmiDate) : loan.nextEmiDate;
-          setNextEmiDate(d.toISOString().substring(0, 10));
+          if (typeof loan.nextEmiDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(loan.nextEmiDate.trim())) {
+            setNextEmiDate(loan.nextEmiDate.trim());
+          } else {
+            const d = typeof loan.nextEmiDate === 'string' ? new Date(loan.nextEmiDate) : loan.nextEmiDate;
+            setNextEmiDate(d.toISOString().substring(0, 10));
+          }
         } catch {
           setNextEmiDate('');
         }
@@ -186,7 +190,9 @@ export function LoanForm({
         payload.dueDay = newDueDayVal;
 
         const initialNextEmiDateStr = loan?.nextEmiDate
-          ? (typeof loan.nextEmiDate === 'string' ? loan.nextEmiDate.substring(0, 10) : new Date(loan.nextEmiDate).toISOString().substring(0, 10))
+          ? (typeof loan.nextEmiDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(loan.nextEmiDate.trim())
+              ? loan.nextEmiDate.trim()
+              : (typeof loan.nextEmiDate === 'string' ? loan.nextEmiDate.substring(0, 10) : new Date(loan.nextEmiDate).toISOString().substring(0, 10)))
           : '';
         const currentNextEmiDateStr = nextEmiDate ? nextEmiDate.trim() : '';
 
@@ -199,11 +205,11 @@ export function LoanForm({
           payload.nextEmiDate = null;
         } else if (isDueDayEdited) {
           if (isNextEmiDateEdited) {
-            payload.nextEmiDate = currentNextEmiDateStr ? new Date(currentNextEmiDateStr).toISOString() : null;
+            payload.nextEmiDate = currentNextEmiDateStr ? currentNextEmiDateStr : null;
           }
         } else {
           if (isNextEmiDateEdited) {
-            payload.nextEmiDate = currentNextEmiDateStr ? new Date(currentNextEmiDateStr).toISOString() : null;
+            payload.nextEmiDate = currentNextEmiDateStr ? currentNextEmiDateStr : null;
           } else if (loan?.nextEmiDate) {
             payload.nextEmiDate = typeof loan.nextEmiDate === 'string' ? loan.nextEmiDate : new Date(loan.nextEmiDate).toISOString();
           }
@@ -256,7 +262,7 @@ export function LoanForm({
           payload.dueDay = parseInt(dueDay, 10);
         }
         if (nextEmiDate) {
-          payload.nextEmiDate = new Date(nextEmiDate).toISOString();
+          payload.nextEmiDate = nextEmiDate.trim();
         }
         const cleanRate = interestRatePercent.trim();
         if (cleanRate && !isNaN(Number(cleanRate)) && Number(cleanRate) >= 0) {

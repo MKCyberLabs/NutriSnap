@@ -20,6 +20,17 @@ export function isSameCalendarDate(d1: Date, d2: Date, tz: string): boolean {
   );
 }
 
+export function parseCalendarDateOrIso(dateInput: string | Date | null | undefined, timezone: string): Date | null {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) return dateInput;
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+    const [y, m, d] = dateInput.trim().split('-').map(Number);
+    const tzDate = new TZDate(y, m - 1, d, 12, 0, 0, 0, timezone);
+    return new Date(tzDate.getTime());
+  }
+  return new Date(dateInput);
+}
+
 /**
  * Centralized helper for deactivating/archiving linked obligation and cancelling pending reminder claims.
  * Invoked on all loan closure paths: closeLoan, archiveLoan, reconcileOutstanding(0), and recordEmiPayment (isClosed).
@@ -117,7 +128,7 @@ export const createLoanSchema = z.object({
   productName: z.string().trim().max(100).optional().nullable(),
   merchant: z.string().trim().max(100).optional().nullable(),
   notes: z.string().trim().max(255).optional().nullable(),
-  createLinkedObligation: z.boolean().default(false),
+  createLinkedObligation: z.boolean().default(true),
 });
 
 export const recordEmiPaymentSchema = z.object({
@@ -175,9 +186,9 @@ export async function createLoan(
   const userTimezone = user?.timezone || 'Asia/Kolkata';
 
   const trackedFromAtDate = parsed.trackedFromAt ? new Date(parsed.trackedFromAt) : new Date();
-  const nextEmiDateVal = parsed.nextEmiDate ? new Date(parsed.nextEmiDate) : null;
-  const startDateVal = parsed.startDate ? new Date(parsed.startDate) : null;
-  const expectedEndDateVal = parsed.expectedEndDate ? new Date(parsed.expectedEndDate) : null;
+  const nextEmiDateVal = parsed.nextEmiDate ? parseCalendarDateOrIso(parsed.nextEmiDate, userTimezone) : null;
+  const startDateVal = parsed.startDate ? parseCalendarDateOrIso(parsed.startDate, userTimezone) : null;
+  const expectedEndDateVal = parsed.expectedEndDate ? parseCalendarDateOrIso(parsed.expectedEndDate, userTimezone) : null;
 
   // Calculate effectiveNextEmiDate if dueDay is provided without explicit nextEmiDate
   let effectiveNextEmiDate = nextEmiDateVal;
@@ -204,7 +215,7 @@ export async function createLoan(
   const executeInTransaction = async (tx: any) => {
     let linkedObligationId: string | null = null;
 
-    if (emiAmountDecimal && effectiveNextEmiDate) {
+    if (parsed.createLinkedObligation !== false && emiAmountDecimal && effectiveNextEmiDate) {
       // Finding #3: Strictly create new obligation. Never lookup by title/kind filter to prevent hijacking manual obligations.
       const ob = await tx.obligation.create({
         data: {
@@ -270,6 +281,8 @@ export async function createLoan(
       lender: loan.lender,
       outstandingPrincipal: loan.outstandingPrincipal.toString(),
       emiAmount: loan.emiAmount ? loan.emiAmount.toString() : null,
+      dueDay: loan.dueDay,
+      nextEmiDate: loan.nextEmiDate ? loan.nextEmiDate.toISOString() : null,
       status: loan.status,
       obligationId: loan.obligationId,
     }
@@ -489,8 +502,20 @@ export async function recordEmiPayment(
 
   // Idempotency check 1: by obligationOccurrenceId (V2-T046, V2-T046b)
   if (parsed.obligationOccurrenceId) {
-    const existing = await db.loanPayment.findUnique({
-      where: { obligationOccurrenceId: parsed.obligationOccurrenceId },
+    const occurrence = await db.obligationOccurrence.findUnique({
+      where: { id: parsed.obligationOccurrenceId },
+      select: { id: true, userId: true, obligationId: true }
+    });
+    if (!occurrence || occurrence.userId !== userId || !loan.obligationId || occurrence.obligationId !== loan.obligationId) {
+      throw new Error('Obligation occurrence not found or unauthorized');
+    }
+
+    const existing = await db.loanPayment.findFirst({
+      where: {
+        obligationOccurrenceId: parsed.obligationOccurrenceId,
+        loanId: loan.id,
+        userId,
+      },
       include: { transaction: true }
     });
     if (existing) {
@@ -585,6 +610,14 @@ export async function recordEmiPayment(
     let existingPayment: any = null;
 
     if (parsed.obligationOccurrenceId) {
+      const occurrence = await tx.obligationOccurrence.findUnique({
+        where: { id: parsed.obligationOccurrenceId },
+        select: { id: true, userId: true, obligationId: true }
+      });
+      if (!occurrence || occurrence.userId !== userId || !currentLoan.obligationId || occurrence.obligationId !== currentLoan.obligationId) {
+        throw new Error('Obligation occurrence not found or unauthorized');
+      }
+
       existingPayment = await tx.loanPayment.findFirst({
         where: {
           obligationOccurrenceId: parsed.obligationOccurrenceId,
@@ -804,6 +837,7 @@ export async function reconcileOutstanding(
         obligationId: true,
         nextEmiDate: true,
         emiAmount: true,
+        paymentAccountId: true,
       }
     });
 
@@ -833,9 +867,21 @@ export async function reconcileOutstanding(
         );
 
         if (hasActiveSchedule) {
+          const obligationUpdate: Record<string, any> = {
+            isActive: true,
+            isArchived: false,
+            amount: currentLoan.emiAmount,
+            accountId: currentLoan.paymentAccountId ?? null,
+          };
+
+          if (currentLoan.nextEmiDate) {
+            obligationUpdate.nextDueAt = currentLoan.nextEmiDate;
+            obligationUpdate.dueAt = currentLoan.nextEmiDate;
+          }
+
           await tx.obligation.update({
             where: { id: currentLoan.obligationId },
-            data: { isActive: true, isArchived: false }
+            data: obligationUpdate,
           });
 
           const loanReminders = await tx.reminder.findMany({
@@ -1001,11 +1047,11 @@ export async function updateLoan(
       updateData.nextEmiDate = null;
     } else if (
       parsed.nextEmiDate !== undefined &&
-      (!currentLoan.nextEmiDate || !isSameCalendarDate(new Date(parsed.nextEmiDate), currentLoan.nextEmiDate, userTimezone))
+      (!currentLoan.nextEmiDate || !isSameCalendarDate(parseCalendarDateOrIso(parsed.nextEmiDate, userTimezone)!, currentLoan.nextEmiDate, userTimezone))
     ) {
       // 2) Else if parsed.nextEmiDate !== undefined AND (either !currentLoan.nextEmiDate or !isSameCalendarDate(...)):
       // Explicit new date submitted takes precedence over automatic calculation
-      effectiveNextDue = new Date(parsed.nextEmiDate);
+      effectiveNextDue = parseCalendarDateOrIso(parsed.nextEmiDate, userTimezone);
       updateData.nextEmiDate = effectiveNextDue;
     } else if (dueDayChanged && typeof parsed.dueDay === 'number') {
       // 3) Else if dueDayChanged && typeof parsed.dueDay === 'number':
@@ -1035,7 +1081,7 @@ export async function updateLoan(
       if (currentLoan.nextEmiDate) {
         effectiveNextDue = currentLoan.nextEmiDate;
       } else {
-        effectiveNextDue = new Date(parsed.nextEmiDate);
+        effectiveNextDue = parseCalendarDateOrIso(parsed.nextEmiDate, userTimezone);
         updateData.nextEmiDate = effectiveNextDue;
       }
     }
@@ -1395,35 +1441,71 @@ export async function revertEmiPayment(
   }
 
   const loan = payment.loan;
+  const loanId = loan.id;
 
   const executeInTransaction = async (tx: any) => {
+    // Row lock loan inside tx to serialize concurrent updates
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loanId} FOR UPDATE`;
+    }
+
+    const currentLoan = await tx.loan.findUnique({
+      where: { id: loanId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        outstandingPrincipal: true,
+        obligationId: true,
+        nextEmiDate: true,
+      }
+    });
+
+    if (!currentLoan || currentLoan.userId !== userId) {
+      throw new Error('Loan not found or unauthorized');
+    }
+
+    const currentPayment = await tx.loanPayment.findUnique({
+      where: { id: payment.id }
+    });
+
+    if (!currentPayment) {
+      return {
+        alreadyReversed: true,
+        paymentId: payment.id,
+        restoredOutstanding: currentLoan.outstandingPrincipal,
+        restoredNextEmiDate: currentLoan.nextEmiDate,
+        restoredStatus: currentLoan.status,
+      };
+    }
+
     // 1. Delete linked FinancialTransaction if one was created
-    if (payment.transactionId) {
+    if (currentPayment.transactionId) {
       await tx.financialTransaction.delete({
-        where: { id: payment.transactionId }
+        where: { id: currentPayment.transactionId }
       });
     }
 
     // 2. Delete the LoanPayment
     await tx.loanPayment.delete({
-      where: { id: payment.id }
+      where: { id: currentPayment.id }
     });
 
     // 3. Add back principalPaid to outstandingPrincipal if principalPaid was recorded
-    let restoredOutstanding = loan.outstandingPrincipal;
-    if (payment.principalPaid && payment.principalPaid.greaterThan(0)) {
-      restoredOutstanding = loan.outstandingPrincipal.plus(payment.principalPaid);
+    let restoredOutstanding = currentLoan.outstandingPrincipal;
+    if (currentPayment.principalPaid && currentPayment.principalPaid.greaterThan(0)) {
+      restoredOutstanding = currentLoan.outstandingPrincipal.plus(currentPayment.principalPaid);
     }
 
     // 4. Restore nextEmiDate
     const restoredNextEmiDate = input.revertToDate
       ? new Date(input.revertToDate)
-      : payment.occurredAt;
+      : currentPayment.occurredAt;
 
-    const restoredStatus = loan.status === 'CLOSED' ? 'ACTIVE' : loan.status;
+    const restoredStatus = currentLoan.status === 'CLOSED' ? 'ACTIVE' : currentLoan.status;
 
     await tx.loan.update({
-      where: { id: loan.id },
+      where: { id: currentLoan.id },
       data: {
         outstandingPrincipal: restoredOutstanding,
         nextEmiDate: restoredNextEmiDate,
@@ -1431,9 +1513,9 @@ export async function revertEmiPayment(
       }
     });
 
-    if (loan.obligationId) {
+    if (currentLoan.obligationId) {
       await tx.obligation.update({
-        where: { id: loan.obligationId },
+        where: { id: currentLoan.obligationId },
         data: {
           nextDueAt: restoredNextEmiDate,
           isActive: true,
@@ -1443,7 +1525,8 @@ export async function revertEmiPayment(
     }
 
     return {
-      paymentId: payment.id,
+      alreadyReversed: false,
+      paymentId: currentPayment.id,
       restoredOutstanding,
       restoredNextEmiDate,
       restoredStatus,
@@ -1456,7 +1539,7 @@ export async function revertEmiPayment(
 
   return {
     success: true,
-    alreadyReversed: false,
+    alreadyReversed: Boolean(result.alreadyReversed),
     revertedPaymentId: result.paymentId,
     restoredOutstanding: result.restoredOutstanding.toString(),
     restoredNextEmiDate: result.restoredNextEmiDate ? result.restoredNextEmiDate.toISOString() : null,
