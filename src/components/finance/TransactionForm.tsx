@@ -131,7 +131,7 @@ export function TransactionForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) {
+    if (!amount.trim() || isNaN(Number(amount.trim())) || Number(amount.trim()) <= 0) {
       toast({
         title: 'Invalid amount',
         description: 'Please enter a valid positive amount.',
@@ -167,7 +167,7 @@ export function TransactionForm({
       let payload: any;
       if (isEdit) {
         payload = {
-          amount: parseFloat(amount).toFixed(2),
+          amount: amount.trim(),
           category: txType === 'TRANSFER' ? 'Transfer' : category,
           accountId,
           note: note.trim() || undefined,
@@ -179,7 +179,7 @@ export function TransactionForm({
       } else {
         payload = {
           type: txType,
-          amount: parseFloat(amount).toFixed(2),
+          amount: amount.trim(),
           category: txType === 'TRANSFER' ? 'Transfer' : category,
           accountId,
           note: note.trim() || undefined,

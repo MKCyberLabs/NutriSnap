@@ -144,7 +144,22 @@ export function AccountForm({
       return;
     }
 
+    if (!isEdit && openingBalance.trim()) {
+      const num = Number(openingBalance.trim());
+      if (isNaN(num) || num < 0) {
+        toast({ title: 'Invalid opening balance', description: 'Opening balance cannot be negative or invalid.', variant: 'destructive' });
+        return;
+      }
+    }
+
     if (type === 'CREDIT_CARD') {
+      if (creditLimit.trim()) {
+        const num = Number(creditLimit.trim());
+        if (isNaN(num) || num < 0) {
+          toast({ title: 'Invalid credit limit', description: 'Credit limit cannot be negative or invalid.', variant: 'destructive' });
+          return;
+        }
+      }
       if (statementDay) {
         const sDay = parseInt(statementDay, 10);
         if (isNaN(sDay) || sDay < 1 || sDay > 31) {
@@ -171,7 +186,7 @@ export function AccountForm({
         };
 
         if (type === 'CREDIT_CARD') {
-          payload.creditLimit = creditLimit ? parseFloat(creditLimit).toFixed(2) : null;
+          payload.creditLimit = creditLimit.trim() ? creditLimit.trim() : null;
           payload.statementDay = statementDay ? parseInt(statementDay, 10) : null;
           payload.paymentDueDay = paymentDueDay ? parseInt(paymentDueDay, 10) : null;
           payload.defaultPaymentAccountId = defaultPaymentAccountId || null;
@@ -181,11 +196,11 @@ export function AccountForm({
           name: name.trim(),
           type,
           institution: institution.trim() || undefined,
-          openingBalance: (parseFloat(openingBalance) || 0).toFixed(2),
+          openingBalance: openingBalance.trim() ? openingBalance.trim() : '0',
         };
 
         if (type === 'CREDIT_CARD') {
-          if (creditLimit) payload.creditLimit = parseFloat(creditLimit).toFixed(2);
+          if (creditLimit.trim()) payload.creditLimit = creditLimit.trim();
           if (statementDay) payload.statementDay = parseInt(statementDay, 10);
           if (paymentDueDay) payload.paymentDueDay = parseInt(paymentDueDay, 10);
           if (defaultPaymentAccountId) payload.defaultPaymentAccountId = defaultPaymentAccountId;

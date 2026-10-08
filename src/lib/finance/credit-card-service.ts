@@ -578,7 +578,7 @@ export async function getCreditCardDetails(
   const account = await db.financialAccount.findUnique({
     where: { id: accountId },
     include: {
-      defaultPaymentAccount: { select: { id: true, name: true } },
+      defaultPaymentAccount: { select: { id: true, name: true, userId: true } },
       creditCardStatements: {
         orderBy: { dueDate: 'desc' },
         include: {
@@ -667,6 +667,11 @@ export async function getCreditCardDetails(
     };
   }
 
+  const defaultPaymentAccount =
+    account.defaultPaymentAccount && account.defaultPaymentAccount.userId === userId
+      ? { id: account.defaultPaymentAccount.id, name: account.defaultPaymentAccount.name }
+      : null;
+
   return {
     accountId: account.id,
     name: account.name,
@@ -676,7 +681,7 @@ export async function getCreditCardDetails(
     availableCredit: availableCredit ? availableCredit.toString() : null,
     statementDay: account.statementDay,
     paymentDueDay: account.paymentDueDay,
-    defaultPaymentAccount: account.defaultPaymentAccount,
+    defaultPaymentAccount,
     activeStatement: activeStatementSummary,
     allStatements: statements.map((s: any) => ({
       id: s.id,

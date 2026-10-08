@@ -154,6 +154,21 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
   if (!userId) throw new Error('Unauthorized: missing userId');
   const parsed = createAccountSchema.parse(data);
 
+  const defaultPaymentAccountId =
+    parsed.defaultPaymentAccountId && parsed.defaultPaymentAccountId.trim() !== ''
+      ? parsed.defaultPaymentAccountId.trim()
+      : null;
+
+  if (defaultPaymentAccountId) {
+    const defAcc = await db.financialAccount.findUnique({
+      where: { id: defaultPaymentAccountId },
+      select: { userId: true, type: true }
+    });
+    if (!defAcc || defAcc.userId !== userId || !['BANK', 'CASH', 'WALLET'].includes(defAcc.type)) {
+      throw new Error('Default payment account not found or unauthorized');
+    }
+  }
+
   const openingBalanceDecimal = parsed.openingBalance
     ? new Decimal(parsed.openingBalance.toString())
     : new Decimal(0);
@@ -172,7 +187,7 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
       creditLimit: creditLimitDecimal,
       statementDay: parsed.statementDay ?? null,
       paymentDueDay: parsed.paymentDueDay ?? null,
-      defaultPaymentAccountId: parsed.defaultPaymentAccountId ?? null,
+      defaultPaymentAccountId,
       isActive: true,
     }
   });
@@ -186,6 +201,7 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
       openingBalance: account.openingBalance.toString(),
       statementDay: account.statementDay,
       paymentDueDay: account.paymentDueDay,
+      defaultPaymentAccountId: account.defaultPaymentAccountId,
     }
   };
 }
@@ -221,7 +237,24 @@ export async function updateAccount(
   }
   if (parsed.statementDay !== undefined) updateData.statementDay = parsed.statementDay;
   if (parsed.paymentDueDay !== undefined) updateData.paymentDueDay = parsed.paymentDueDay;
-  if (parsed.defaultPaymentAccountId !== undefined) updateData.defaultPaymentAccountId = parsed.defaultPaymentAccountId;
+  if (parsed.defaultPaymentAccountId !== undefined) {
+    if (parsed.defaultPaymentAccountId !== null && parsed.defaultPaymentAccountId.trim() !== '') {
+      const defId = parsed.defaultPaymentAccountId.trim();
+      if (defId === accountId) {
+        throw new Error('Default payment account not found or unauthorized');
+      }
+      const defAcc = await db.financialAccount.findUnique({
+        where: { id: defId },
+        select: { userId: true, type: true }
+      });
+      if (!defAcc || defAcc.userId !== userId || !['BANK', 'CASH', 'WALLET'].includes(defAcc.type)) {
+        throw new Error('Default payment account not found or unauthorized');
+      }
+      updateData.defaultPaymentAccountId = defId;
+    } else {
+      updateData.defaultPaymentAccountId = null;
+    }
+  }
   if (parsed.isActive !== undefined) updateData.isActive = parsed.isActive;
 
   // V2-1002 / V2-Q002: openingBalance editable ONLY when account has zero posted transactions

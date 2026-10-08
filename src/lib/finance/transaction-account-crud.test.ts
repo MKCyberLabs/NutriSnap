@@ -359,6 +359,162 @@ test('V2-CRUD: Transaction & Account CRUD, Transfer Invariants, and CC Presentat
     // Fully paid statement must not be activeStatement
     assert.equal(ccDetails.activeStatement, null);
 
+    // -------------------------------------------------------------------------
+    // 9. defaultPaymentAccountId authorization & type validation + read defense
+    // -------------------------------------------------------------------------
+    // Create a Bank account belonging to userB
+    const userBBank = await financeService.createAccount(userB.id, {
+      name: 'User B Checking',
+      type: 'BANK',
+      openingBalance: '1000.00',
+    }, db);
+
+    // Create a secondary CREDIT_CARD belonging to userA
+    const userACard2 = await financeService.createAccount(userA.id, {
+      name: 'User A Secondary Card',
+      type: 'CREDIT_CARD',
+      openingBalance: '0.00',
+      creditLimit: '50000.00',
+    }, db);
+
+    // Negative: createAccount with foreign defaultPaymentAccountId
+    await assert.rejects(
+      async () => {
+        await financeService.createAccount(userA.id, {
+          name: 'Card with Foreign Default',
+          type: 'CREDIT_CARD',
+          defaultPaymentAccountId: userBBank.account.id,
+        }, db);
+      },
+      /Default payment account not found or unauthorized/
+    );
+
+    // Negative: createAccount with nonexistent defaultPaymentAccountId
+    await assert.rejects(
+      async () => {
+        await financeService.createAccount(userA.id, {
+          name: 'Card with Nonexistent Default',
+          type: 'CREDIT_CARD',
+          defaultPaymentAccountId: 'nonexistent-acc-id',
+        }, db);
+      },
+      /Default payment account not found or unauthorized/
+    );
+
+    // Negative: createAccount with CREDIT_CARD as defaultPaymentAccountId
+    await assert.rejects(
+      async () => {
+        await financeService.createAccount(userA.id, {
+          name: 'Card with CC Default',
+          type: 'CREDIT_CARD',
+          defaultPaymentAccountId: userACard2.account.id,
+        }, db);
+      },
+      /Default payment account not found or unauthorized/
+    );
+
+    // Negative: updateAccount with foreign defaultPaymentAccountId
+    await assert.rejects(
+      async () => {
+        await financeService.updateAccount(userA.id, ccAcc.id, {
+          defaultPaymentAccountId: userBBank.account.id,
+        }, db);
+      },
+      /Default payment account not found or unauthorized/
+    );
+
+    // Negative: updateAccount with nonexistent defaultPaymentAccountId
+    await assert.rejects(
+      async () => {
+        await financeService.updateAccount(userA.id, ccAcc.id, {
+          defaultPaymentAccountId: 'nonexistent-acc-id',
+        }, db);
+      },
+      /Default payment account not found or unauthorized/
+    );
+
+    // Negative: updateAccount referencing the card itself
+    await assert.rejects(
+      async () => {
+        await financeService.updateAccount(userA.id, ccAcc.id, {
+          defaultPaymentAccountId: ccAcc.id,
+        }, db);
+      },
+      /Default payment account not found or unauthorized/
+    );
+
+    // Negative: updateAccount referencing another credit card
+    await assert.rejects(
+      async () => {
+        await financeService.updateAccount(userA.id, ccAcc.id, {
+          defaultPaymentAccountId: userACard2.account.id,
+        }, db);
+      },
+      /Default payment account not found or unauthorized/
+    );
+
+    // Positive: updateAccount with valid userA BANK account
+    const validUpdateRes = await financeService.updateAccount(userA.id, ccAcc.id, {
+      defaultPaymentAccountId: bankId,
+    }, db);
+    assert.equal(validUpdateRes.success, true);
+    assert.equal(validUpdateRes.account.defaultPaymentAccountId, bankId);
+
+    const ccDetailsWithBank = await creditCardService.getCreditCardDetails(userA.id, ccAcc.id, db);
+    assert.equal(ccDetailsWithBank.defaultPaymentAccount?.id, bankId);
+    assert.equal(ccDetailsWithBank.defaultPaymentAccount?.name, 'Primary Checking');
+
+    // Read defense in getCreditCardDetails: foreign defaultPaymentAccount sanitizes to null
+    await db.financialAccount.update({
+      where: { id: ccAcc.id },
+      data: { defaultPaymentAccountId: userBBank.account.id }
+    });
+    const ccDetailsSanitized = await creditCardService.getCreditCardDetails(userA.id, ccAcc.id, db);
+    assert.equal(ccDetailsSanitized.defaultPaymentAccount, null);
+
+    // Restore valid default payment account
+    await db.financialAccount.update({
+      where: { id: ccAcc.id },
+      data: { defaultPaymentAccountId: bankId }
+    });
+
+    // -------------------------------------------------------------------------
+    // 10. Exact decimal string preservation (eliminate float distortion)
+    // -------------------------------------------------------------------------
+    // Transaction amount exact decimal preservation
+    const exactTxRes = await financeService.recordTransaction(userA.id, {
+      type: 'EXPENSE',
+      amount: '12345.67',
+      category: 'Shopping',
+      accountId: bankId,
+      occurredAt: new Date(),
+    }, db);
+    assert.equal(exactTxRes.success, true);
+    assert.equal(exactTxRes.transaction.amount, '12345.67');
+
+    const exactUpdateTxRes = await financeService.updateTransaction(userA.id, exactTxRes.transaction.id, {
+      amount: '98765.43',
+    }, db);
+    assert.equal(exactUpdateTxRes.success, true);
+    assert.equal(exactUpdateTxRes.transaction.amount, '98765.43');
+
+    // Account openingBalance & creditLimit exact decimal preservation
+    const exactAccRes = await financeService.createAccount(userA.id, {
+      name: 'Exact Precision Card',
+      type: 'CREDIT_CARD',
+      openingBalance: '1000.55',
+      creditLimit: '750000.75',
+      defaultPaymentAccountId: bankId,
+    }, db);
+    assert.equal(exactAccRes.success, true);
+    assert.equal(exactAccRes.account.openingBalance, '1000.55');
+    assert.equal(exactAccRes.account.defaultPaymentAccountId, bankId);
+
+    const updatedAccList = await financeService.getAccounts(userA.id, db);
+    const foundAcc = updatedAccList.find((a: any) => a.id === exactAccRes.account.id);
+    assert.equal(foundAcc.creditLimit, '750000.75');
+    assert.equal(foundAcc.openingBalance, '1000.55');
+
   } finally {
     await db.$disconnect();
   }
