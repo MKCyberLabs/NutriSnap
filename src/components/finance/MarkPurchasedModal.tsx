@@ -190,7 +190,7 @@ export function MarkPurchasedModal({
                 </Select>
                 <div className="text-[11px] text-[#667085] mt-1.5 flex items-center gap-1">
                   <Info className="h-3 w-3 text-[#3B82F6]" />
-                  <span>Deducts balance and adds to this month's expense totals.</span>
+                  <span>Deducts balance and adds to this month&apos;s expense totals.</span>
                 </div>
               </div>
             ) : (
