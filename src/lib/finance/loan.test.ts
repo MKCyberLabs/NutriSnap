@@ -5,6 +5,7 @@ import { TZDate } from '@date-fns/tz';
 import * as loanService from './loan-service';
 import * as financeService from './finance-service';
 import { calculateMonthlyTotals } from './finance';
+import { formatCalendarDate } from '../../components/finance/LoanForm';
 
 const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
 
@@ -2141,6 +2142,362 @@ test('V2-R001-ROUND2-B: Loan occurrence validation, reversal locking, reopen syn
     }, db);
     assert.equal(nyLoanRes.success, true);
     assert.equal(nyLoanRes.loan.dueDay, 15, 'dueDay in America/New_York must be 15, not shifted backwards to 14');
+
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('V2-R001-ROUND3-B: Loan overprincipal, archival lock, precision, reversal date, reminder opt-out, edit date (SOL-R002-002, 003, 006, 009, 010, SOL-R001-011)', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr-r3b-${timestamp}`,
+        email: `r3b-${timestamp}@test.local`,
+        name: 'User R3B Test',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bankAcc = await financeService.createAccount(user.id, {
+      name: 'R3B Primary Bank',
+      type: 'BANK',
+      openingBalance: '500000.00',
+    }, db);
+    const bankId = bankAcc.account.id;
+
+    // =========================================================================
+    // 1. SOL-R002-002: Principal overpayment and reversal round-trip outstanding exactly
+    // =========================================================================
+    const overLoanRes = await loanService.createLoan(user.id, {
+      name: 'Overpayment Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '1500.00',
+      emiAmount: '2000.00',
+      nextEmiDate: '2026-11-20T12:00:00.000Z',
+      dueDay: 20,
+      paymentAccountId: bankId,
+      createLinkedObligation: false,
+    }, db);
+    const overLoanId = overLoanRes.loan.id;
+    assert.equal(overLoanRes.loan.outstandingPrincipal.toString(), '1500');
+
+    // Pay more principal than outstanding (principalPaid = 2000 > outstanding = 1500)
+    const overPayRes = await loanService.recordEmiPayment(user.id, {
+      loanId: overLoanId,
+      amount: '2000.00',
+      principalPaid: '2000.00',
+      accountId: bankId,
+    }, db);
+    assert.equal(overPayRes.success, true);
+    assert.equal(overPayRes.closed, true);
+    assert.equal(overPayRes.remainingPrincipal, '0', 'Outstanding must clamp to 0 and not become negative');
+
+    const closedLoanDb = await db.loan.findUnique({ where: { id: overLoanId } });
+    assert.equal(closedLoanDb?.status, 'CLOSED');
+    assert.equal(closedLoanDb?.outstandingPrincipal.toString(), '0');
+
+    // Verify payment in DB recorded actual reduction
+    const paymentRecord = await db.loanPayment.findUnique({ where: { id: overPayRes.paymentId } });
+    assert.equal(paymentRecord?.principalPaid?.toString(), '1500', 'Payment record must store actual principal reduced (1500), not excess');
+
+    // Undo / Revert the payment
+    const overRevRes = await loanService.revertEmiPayment(user.id, {
+      loanPaymentId: overPayRes.paymentId,
+    }, db);
+    assert.equal(overRevRes.success, true);
+    assert.equal(overRevRes.restoredOutstanding, '1500', 'Reversal must restore exactly 1500, never creating extra principal');
+    assert.equal(overRevRes.restoredStatus, 'ACTIVE');
+
+    const restoredLoanDb = await db.loan.findUnique({ where: { id: overLoanId } });
+    assert.equal(restoredLoanDb?.outstandingPrincipal.toString(), '1500');
+    assert.equal(restoredLoanDb?.status, 'ACTIVE');
+
+    // =========================================================================
+    // 2. SOL-R002-003: Loan archival and closure revalidation under payment lock
+    // =========================================================================
+    const archLoanRes = await loanService.createLoan(user.id, {
+      name: 'Archival Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'SBI',
+      openingOutstanding: '20000.00',
+      createLinkedObligation: false,
+    }, db);
+    const archLoanId = archLoanRes.loan.id;
+
+    // Record an initial payment with idempotencyKey
+    const idempKey = `idemp-arch-${timestamp}`;
+    const initialPay = await loanService.recordEmiPayment(user.id, {
+      loanId: archLoanId,
+      amount: '2000.00',
+      principalPaid: '1500.00',
+      interestPaid: '500.00',
+      accountId: bankId,
+      idempotencyKey: idempKey,
+    }, db);
+    assert.equal(initialPay.success, true);
+
+    // Archive the loan
+    await loanService.archiveLoan(user.id, archLoanId, db);
+
+    // Identical idempotent retry must succeed with alreadyProcessed: true
+    const retryOnArchived = await loanService.recordEmiPayment(user.id, {
+      loanId: archLoanId,
+      amount: '2000.00',
+      principalPaid: '1500.00',
+      interestPaid: '500.00',
+      accountId: bankId,
+      idempotencyKey: idempKey,
+    }, db);
+    assert.equal(retryOnArchived.success, true);
+    assert.equal(retryOnArchived.alreadyProcessed, true);
+
+    // New mutation on archived loan must be rejected
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(user.id, {
+          loanId: archLoanId,
+          amount: '2000.00',
+          accountId: bankId,
+        }, db);
+      },
+      { message: 'Cannot record payment on an archived loan' }
+    );
+
+    // Now test closed loan
+    const closeTestLoan = await loanService.createLoan(user.id, {
+      name: 'Closure Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'ICICI',
+      openingOutstanding: '10000.00',
+      createLinkedObligation: false,
+    }, db);
+    const closeLoanId = closeTestLoan.loan.id;
+
+    const closeIdempKey = `idemp-close-${timestamp}`;
+    const closePay = await loanService.recordEmiPayment(user.id, {
+      loanId: closeLoanId,
+      amount: '1000.00',
+      principalPaid: '1000.00',
+      accountId: bankId,
+      idempotencyKey: closeIdempKey,
+    }, db);
+    assert.equal(closePay.success, true);
+
+    // Close the loan
+    await loanService.closeLoan(user.id, closeLoanId, db);
+
+    // Identical idempotent retry on closed loan succeeds
+    const retryOnClosed = await loanService.recordEmiPayment(user.id, {
+      loanId: closeLoanId,
+      amount: '1000.00',
+      principalPaid: '1000.00',
+      accountId: bankId,
+      idempotencyKey: closeIdempKey,
+    }, db);
+    assert.equal(retryOnClosed.success, true);
+    assert.equal(retryOnClosed.alreadyProcessed, true);
+
+    // New mutation on closed loan must be rejected
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(user.id, {
+          loanId: closeLoanId,
+          amount: '500.00',
+          accountId: bankId,
+        }, db);
+      },
+      { message: 'Cannot record payment on a closed loan' }
+    );
+
+    // =========================================================================
+    // 3. SOL-R002-009: EMI component precision validation (scale <= 2)
+    // =========================================================================
+    const precLoanRes = await loanService.createLoan(user.id, {
+      name: 'Precision Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'Kotak',
+      openingOutstanding: '50000.00',
+      createLinkedObligation: false,
+    }, db);
+    const precLoanId = precLoanRes.loan.id;
+
+    // Sub-cent principal (3 decimal places)
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(user.id, {
+          loanId: precLoanId,
+          amount: '100.00',
+          principalPaid: '50.005',
+          accountId: bankId,
+        }, db);
+      },
+      { message: 'Principal paid cannot have more than 2 decimal places' }
+    );
+
+    // Sub-cent interest (3 decimal places)
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(user.id, {
+          loanId: precLoanId,
+          amount: '100.00',
+          principalPaid: '50.00',
+          interestPaid: '25.123',
+          accountId: bankId,
+        }, db);
+      },
+      { message: 'Interest paid cannot have more than 2 decimal places' }
+    );
+
+    // Sub-cent fees (3 decimal places)
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(user.id, {
+          loanId: precLoanId,
+          amount: '100.00',
+          principalPaid: '50.00',
+          feesPaid: '10.999',
+          accountId: bankId,
+        }, db);
+      },
+      { message: 'Fees paid cannot have more than 2 decimal places' }
+    );
+
+    // Negative principal
+    await assert.rejects(
+      async () => {
+        await loanService.recordEmiPayment(user.id, {
+          loanId: precLoanId,
+          amount: '100.00',
+          principalPaid: -10,
+          accountId: bankId,
+        }, db);
+      },
+      { message: 'Principal paid cannot be negative' }
+    );
+
+    // Valid 2-decimal components succeed
+    const validPrecPay = await loanService.recordEmiPayment(user.id, {
+      loanId: precLoanId,
+      amount: '100.00',
+      principalPaid: '60.50',
+      interestPaid: '25.25',
+      feesPaid: '14.25',
+      accountId: bankId,
+    }, db);
+    assert.equal(validPrecPay.success, true);
+
+    // =========================================================================
+    // 4. SOL-R002-006: Direct EMI reversal restores scheduled date instead of payment date
+    // =========================================================================
+    const schedLoanRes = await loanService.createLoan(user.id, {
+      name: 'Reversal Date Loan',
+      loanType: 'PERSONAL',
+      lender: 'Axis Bank',
+      openingOutstanding: '40000.00',
+      emiAmount: '4000.00',
+      nextEmiDate: '2026-11-25T12:00:00.000Z',
+      dueDay: 25,
+      paymentAccountId: bankId,
+      createLinkedObligation: true,
+    }, db);
+    const schedLoanId = schedLoanRes.loan.id;
+    const schedObId = schedLoanRes.loan.obligationId!;
+
+    // User pays early on Nov 18
+    const earlyPayDate = '2026-11-18T08:30:00.000Z';
+    const earlyPayRes = await loanService.recordEmiPayment(user.id, {
+      loanId: schedLoanId,
+      amount: '4000.00',
+      principalPaid: '3000.00',
+      interestPaid: '1000.00',
+      accountId: bankId,
+      occurredAt: earlyPayDate,
+    }, db);
+    assert.equal(earlyPayRes.success, true);
+
+    // Loan schedule advanced to Dec 25
+    const advancedLoan = await db.loan.findUnique({ where: { id: schedLoanId } });
+    assert.equal(advancedLoan?.nextEmiDate?.toISOString(), '2026-12-25T12:00:00.000Z');
+
+    // Direct reversal without revertToDate
+    const revSchedRes = await loanService.revertEmiPayment(user.id, {
+      loanPaymentId: earlyPayRes.paymentId,
+    }, db);
+    assert.equal(revSchedRes.success, true);
+    assert.equal(
+      revSchedRes.restoredNextEmiDate,
+      '2026-11-25T12:00:00.000Z',
+      'Direct reversal must restore original scheduled EMI date (Nov 25), NOT payment date (Nov 18)'
+    );
+
+    const restoredSchedLoan = await db.loan.findUnique({ where: { id: schedLoanId } });
+    assert.equal(restoredSchedLoan?.nextEmiDate?.toISOString(), '2026-11-25T12:00:00.000Z');
+
+    const restoredSchedOb = await db.obligation.findUnique({ where: { id: schedObId } });
+    assert.equal(restoredSchedOb?.nextDueAt.toISOString(), '2026-11-25T12:00:00.000Z');
+
+    // =========================================================================
+    // 5. SOL-R002-010: Loan metadata edits lose creation-time reminder opt-out
+    // =========================================================================
+    const optOutLoanRes = await loanService.createLoan(user.id, {
+      name: 'Opt-Out Original Name',
+      loanType: 'PERSONAL',
+      lender: 'Bank of Baroda',
+      openingOutstanding: '60000.00',
+      emiAmount: '5000.00',
+      nextEmiDate: '2026-11-20T12:00:00.000Z',
+      dueDay: 20,
+      paymentAccountId: bankId,
+      createLinkedObligation: false, // Explicit opt-out at creation
+    }, db);
+    const optOutLoanId = optOutLoanRes.loan.id;
+    assert.equal(optOutLoanRes.loan.obligationId, null);
+
+    // Metadata update (rename + lender change)
+    const renameRes = await loanService.updateLoan(user.id, optOutLoanId, {
+      name: 'Opt-Out Renamed Loan',
+      lender: 'Bank of Baroda Main',
+      notes: 'Updated notes',
+    }, db);
+    assert.equal(renameRes.success, true);
+    assert.equal(renameRes.loan.obligationId, null, 'Metadata update must NOT create a linked obligation when opted out at creation');
+
+    const optOutLoanDb1 = await db.loan.findUnique({ where: { id: optOutLoanId } });
+    assert.equal(optOutLoanDb1?.obligationId, null);
+
+    // Another update (changing paymentAccountId)
+    const updateAccRes = await loanService.updateLoan(user.id, optOutLoanId, {
+      paymentAccountId: bankId,
+    }, db);
+    assert.equal(updateAccRes.loan.obligationId, null, 'Account edit must NOT create linked obligation');
+
+    // Now caller explicitly requests obligation creation
+    const explicitEnableRes = await loanService.updateLoan(user.id, optOutLoanId, {
+      createLinkedObligation: true,
+    }, db);
+    assert.ok(explicitEnableRes.loan.obligationId, 'Explicit createLinkedObligation: true must create linked obligation');
+
+    const optOutLoanDb2 = await db.loan.findUnique({ where: { id: optOutLoanId } });
+    assert.ok(optOutLoanDb2?.obligationId);
+
+    // =========================================================================
+    // 6. SOL-R001-011: formatCalendarDate in LoanForm produces local calendar dates
+    // =========================================================================
+    assert.equal(formatCalendarDate('2026-11-15'), '2026-11-15');
+    assert.equal(formatCalendarDate('  2026-12-01  '), '2026-12-01');
+    assert.equal(formatCalendarDate(null), '');
+    assert.equal(formatCalendarDate(undefined), '');
+
+    const localTestDate = new Date(2026, 10, 15); // Month is 0-indexed, so 10 = November
+    assert.equal(formatCalendarDate(localTestDate), '2026-11-15');
 
   } finally {
     await db.$disconnect();

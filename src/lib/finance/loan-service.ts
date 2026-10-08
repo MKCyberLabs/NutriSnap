@@ -105,6 +105,7 @@ export const updateLoanSchema = z.object({
   productName: z.string().trim().max(100).optional().nullable(),
   merchant: z.string().trim().max(100).optional().nullable(),
   notes: z.string().trim().max(255).optional().nullable(),
+  createLinkedObligation: z.boolean().optional(),
 });
 
 export const createLoanSchema = z.object({
@@ -236,6 +237,10 @@ export async function createLoan(
       linkedObligationId = ob.id;
     }
 
+    const notesWithOptOut = parsed.createLinkedObligation === false
+      ? (parsed.notes ? `${parsed.notes} [noLinkedObligation]` : '[noLinkedObligation]')
+      : (parsed.notes || null);
+
     const loan = await tx.loan.create({
       data: {
         userId,
@@ -261,7 +266,7 @@ export async function createLoan(
         merchant: parsed.merchant || null,
         obligationId: linkedObligationId,
         status: 'ACTIVE',
-        notes: parsed.notes || null,
+        notes: notesWithOptOut,
       }
     });
 
@@ -458,10 +463,6 @@ export async function recordEmiPayment(
     throw new Error('Loan not found or unauthorized');
   }
 
-  if (loan.status === 'ARCHIVED') {
-    throw new Error('Cannot record payment on an archived loan');
-  }
-
   // Account ownership check (V2-T052)
   const account = await db.financialAccount.findUnique({
     where: { id: parsed.accountId },
@@ -472,27 +473,63 @@ export async function recordEmiPayment(
     throw new Error('Account not found or unauthorized');
   }
 
-  // Component breakdown validation
+  // Component breakdown validation (SOL-R002-009)
   let principalDecimal: Decimal | null = null;
   let interestDecimal: Decimal | null = null;
   let feesDecimal: Decimal | null = null;
   let componentSum = new Decimal(0);
 
   if (parsed.principalPaid !== undefined && parsed.principalPaid !== null) {
-    principalDecimal = new Decimal(parsed.principalPaid.toString());
-    if (principalDecimal.lessThan(0)) throw new Error('Principal paid cannot be negative');
+    try {
+      principalDecimal = new Decimal(parsed.principalPaid.toString());
+    } catch {
+      throw new Error('Invalid principal amount');
+    }
+    if (principalDecimal.isNaN() || !principalDecimal.isFinite()) {
+      throw new Error('Principal paid must be a finite number');
+    }
+    if (principalDecimal.lessThan(0)) {
+      throw new Error('Principal paid cannot be negative');
+    }
+    if (principalDecimal.decimalPlaces() > 2) {
+      throw new Error('Principal paid cannot have more than 2 decimal places');
+    }
     componentSum = componentSum.plus(principalDecimal);
   }
 
   if (parsed.interestPaid !== undefined && parsed.interestPaid !== null) {
-    interestDecimal = new Decimal(parsed.interestPaid.toString());
-    if (interestDecimal.lessThan(0)) throw new Error('Interest paid cannot be negative');
+    try {
+      interestDecimal = new Decimal(parsed.interestPaid.toString());
+    } catch {
+      throw new Error('Invalid interest amount');
+    }
+    if (interestDecimal.isNaN() || !interestDecimal.isFinite()) {
+      throw new Error('Interest paid must be a finite number');
+    }
+    if (interestDecimal.lessThan(0)) {
+      throw new Error('Interest paid cannot be negative');
+    }
+    if (interestDecimal.decimalPlaces() > 2) {
+      throw new Error('Interest paid cannot have more than 2 decimal places');
+    }
     componentSum = componentSum.plus(interestDecimal);
   }
 
   if (parsed.feesPaid !== undefined && parsed.feesPaid !== null) {
-    feesDecimal = new Decimal(parsed.feesPaid.toString());
-    if (feesDecimal.lessThan(0)) throw new Error('Fees paid cannot be negative');
+    try {
+      feesDecimal = new Decimal(parsed.feesPaid.toString());
+    } catch {
+      throw new Error('Invalid fees amount');
+    }
+    if (feesDecimal.isNaN() || !feesDecimal.isFinite()) {
+      throw new Error('Fees paid must be a finite number');
+    }
+    if (feesDecimal.lessThan(0)) {
+      throw new Error('Fees paid cannot be negative');
+    }
+    if (feesDecimal.decimalPlaces() > 2) {
+      throw new Error('Fees paid cannot have more than 2 decimal places');
+    }
     componentSum = componentSum.plus(feesDecimal);
   }
 
@@ -560,6 +597,14 @@ export async function recordEmiPayment(
         closed: loan.status === 'CLOSED',
       };
     }
+  }
+
+  // Reject new mutations on archived or closed loans unless it was an idempotent retry
+  if (loan.status === 'ARCHIVED') {
+    throw new Error('Cannot record payment on an archived loan');
+  }
+  if (loan.status === 'CLOSED') {
+    throw new Error('Cannot record payment on a closed loan');
   }
 
   const user = await db.user.findUnique({
@@ -659,6 +704,42 @@ export async function recordEmiPayment(
       };
     }
 
+    // Under row lock: revalidate loan status (SOL-R002-003)
+    if (currentLoan.status === 'ARCHIVED') {
+      throw new Error('Cannot record payment on an archived loan');
+    }
+    if (currentLoan.status === 'CLOSED') {
+      throw new Error('Cannot record payment on a closed loan');
+    }
+
+    // Calculate principal reduction and check closure (SOL-R002-002)
+    let actualPrincipalPaid: Decimal | null = null;
+    let newOutstanding = currentLoan.outstandingPrincipal;
+    let isClosed = false;
+
+    if (principalDecimal && principalDecimal.greaterThan(0)) {
+      // Clamp principal reduction to currentLoan.outstandingPrincipal so outstanding never drops below 0
+      actualPrincipalPaid = principalDecimal.greaterThan(currentLoan.outstandingPrincipal)
+        ? currentLoan.outstandingPrincipal
+        : principalDecimal;
+      newOutstanding = currentLoan.outstandingPrincipal.minus(actualPrincipalPaid);
+      isClosed = newOutstanding.isZero();
+    }
+
+    let noteWithTags = paymentNote;
+    if (currentLoan.nextEmiDate) {
+      const schedTag = `[scheduledDate:${currentLoan.nextEmiDate.toISOString()}]`;
+      if (!noteWithTags.includes('[scheduledDate:')) {
+        noteWithTags = noteWithTags ? `${noteWithTags} ${schedTag}` : schedTag;
+      }
+    }
+    if (actualPrincipalPaid && actualPrincipalPaid.greaterThan(0)) {
+      const reductionTag = `[actualPrincipalReduction:${actualPrincipalPaid.toString()}]`;
+      if (!noteWithTags.includes('[actualPrincipalReduction:')) {
+        noteWithTags = noteWithTags ? `${noteWithTags} ${reductionTag}` : reductionTag;
+      }
+    }
+
     let createdTxId: string | null = null;
 
     // Optional Expense transaction creation (governed by loan.emiGeneratesExpense)
@@ -671,7 +752,7 @@ export async function recordEmiPayment(
           category: 'EMI',
           accountId: parsed.accountId,
           occurredAt: occurredAtDate,
-          note: paymentNote,
+          note: noteWithTags,
         }
       });
       createdTxId = expenseTx.id;
@@ -683,26 +764,16 @@ export async function recordEmiPayment(
         userId,
         loanId: currentLoan.id,
         amount: amountDecimal,
-        principalPaid: principalDecimal,
+        principalPaid: actualPrincipalPaid,
         interestPaid: interestDecimal,
         feesPaid: feesDecimal,
         occurredAt: occurredAtDate,
         accountId: parsed.accountId,
         transactionId: createdTxId,
         obligationOccurrenceId: parsed.obligationOccurrenceId || null,
-        note: paymentNote,
+        note: noteWithTags,
       }
     });
-
-    // Update loan outstanding ONLY when principalPaid is known and > 0 (V2-T047, V2-T048)
-    let newOutstanding = currentLoan.outstandingPrincipal;
-    let isClosed = false;
-
-    if (principalDecimal && principalDecimal.greaterThan(0)) {
-      newOutstanding = currentLoan.outstandingPrincipal.minus(principalDecimal);
-      if (newOutstanding.lessThan(0)) newOutstanding = new Decimal(0);
-      isClosed = newOutstanding.isZero();
-    }
 
     // Advance next EMI date if loan has one, preserving target day of month in user's timezone
     let nextEmi: Date | null = currentLoan.nextEmiDate;
@@ -764,6 +835,7 @@ export async function recordEmiPayment(
       newOutstanding,
       isClosed,
       nextEmiDate: nextEmi,
+      principalReduced: actualPrincipalPaid !== null && actualPrincipalPaid.greaterThan(0),
     };
   };
 
@@ -789,7 +861,7 @@ export async function recordEmiPayment(
     transactionId: result.createdTxId,
     remainingPrincipal: result.newOutstanding.toString(),
     closed: result.isClosed,
-    principalReduced: principalDecimal !== null && principalDecimal.greaterThan(0),
+    principalReduced: result.principalReduced,
     nextEmiDate: result.nextEmiDate,
   };
 }
@@ -1231,26 +1303,33 @@ export async function updateLoan(
           });
         }
       }
-    } else if (!isScheduleCleared && !isLoanClosed && effectiveEmiAmount && effectiveNextDue && currentLoan.status === 'ACTIVE') {
-      // If obligationId was set concurrently, we already caught it in existingOb check above.
-      // If still no obligation linked, create brand new obligation
-      const createdOb = await tx.obligation.create({
-        data: {
-          userId,
-          title: `EMI: ${effectiveName} (${effectiveLender})`,
-          kind: 'EMI',
-          amount: effectiveEmiAmount,
-          accountId: effectiveAccountId || null,
-          dueAt: effectiveNextDue,
-          recurrenceType: 'MONTHLY',
-          recurrenceInterval: 1,
-          reminderOffsetsMin: [2880, 1440, 0],
-          isActive: true,
-          nextDueAt: effectiveNextDue,
-          notes: `Linked to loan ${effectiveName}`,
+    } else {
+      const isCreationOptOut = Boolean(currentLoan.notes && currentLoan.notes.includes('[noLinkedObligation]'));
+      const shouldCreateObligation = parsed.createLinkedObligation === true
+        || (parsed.createLinkedObligation !== false && !isCreationOptOut && (scheduleActuallyChanged || emiAmountActuallyChanged));
+
+      if (shouldCreateObligation && !isScheduleCleared && !isLoanClosed && effectiveEmiAmount && effectiveNextDue && currentLoan.status === 'ACTIVE') {
+        const createdOb = await tx.obligation.create({
+          data: {
+            userId,
+            title: `EMI: ${effectiveName} (${effectiveLender})`,
+            kind: 'EMI',
+            amount: effectiveEmiAmount,
+            accountId: effectiveAccountId || null,
+            dueAt: effectiveNextDue,
+            recurrenceType: 'MONTHLY',
+            recurrenceInterval: 1,
+            reminderOffsetsMin: [2880, 1440, 0],
+            isActive: true,
+            nextDueAt: effectiveNextDue,
+            notes: `Linked to loan ${effectiveName}`,
+          }
+        });
+        updateData.obligationId = createdOb.id;
+        if (parsed.createLinkedObligation === true && isCreationOptOut) {
+          updateData.notes = (updateData.notes || currentLoan.notes || '').replace('[noLinkedObligation]', '').trim() || null;
         }
-      });
-      updateData.obligationId = createdOb.id;
+      }
     }
 
     const updatedLoan = await tx.loan.update({
@@ -1491,16 +1570,47 @@ export async function revertEmiPayment(
       where: { id: currentPayment.id }
     });
 
-    // 3. Add back principalPaid to outstandingPrincipal if principalPaid was recorded
-    let restoredOutstanding = currentLoan.outstandingPrincipal;
-    if (currentPayment.principalPaid && currentPayment.principalPaid.greaterThan(0)) {
-      restoredOutstanding = currentLoan.outstandingPrincipal.plus(currentPayment.principalPaid);
+    // 3. Add back principalPaid to outstandingPrincipal if principalPaid was recorded (SOL-R002-002)
+    let principalToRestore: Decimal | null = currentPayment.principalPaid;
+    if (currentPayment.note) {
+      const match = currentPayment.note.match(/\[actualPrincipalReduction:([^\]]+)\]/);
+      if (match && match[1]) {
+        try {
+          principalToRestore = new Decimal(match[1]);
+        } catch {}
+      }
     }
 
-    // 4. Restore nextEmiDate
+    let restoredOutstanding = currentLoan.outstandingPrincipal;
+    if (principalToRestore && principalToRestore.greaterThan(0)) {
+      restoredOutstanding = currentLoan.outstandingPrincipal.plus(principalToRestore);
+    }
+
+    // 4. Restore nextEmiDate (SOL-R002-006)
+    let scheduledDateFromPayment: Date | null = null;
+    if (currentPayment.note) {
+      const match = currentPayment.note.match(/\[scheduledDate:([^\]]+)\]/);
+      if (match && match[1]) {
+        const parsedDate = new Date(match[1]);
+        if (!isNaN(parsedDate.getTime())) {
+          scheduledDateFromPayment = parsedDate;
+        }
+      }
+    }
+
+    if (!scheduledDateFromPayment && currentPayment.obligationOccurrenceId) {
+      const occ = await tx.obligationOccurrence.findUnique({
+        where: { id: currentPayment.obligationOccurrenceId },
+        select: { dueAt: true }
+      });
+      if (occ?.dueAt) {
+        scheduledDateFromPayment = occ.dueAt;
+      }
+    }
+
     const restoredNextEmiDate = input.revertToDate
       ? new Date(input.revertToDate)
-      : currentPayment.occurredAt;
+      : (scheduledDateFromPayment || currentPayment.occurredAt);
 
     const restoredStatus = currentLoan.status === 'CLOSED' ? 'ACTIVE' : currentLoan.status;
 

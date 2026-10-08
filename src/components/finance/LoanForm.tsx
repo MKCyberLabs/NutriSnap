@@ -43,6 +43,23 @@ const LOAN_TYPES = [
   { value: 'OTHER', label: 'Other Loan' },
 ];
 
+export function formatCalendarDate(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '';
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+    return dateInput.trim();
+  }
+  try {
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  } catch {
+    return '';
+  }
+}
+
 export function LoanForm({
   accounts,
   onLoanCreated,
@@ -105,16 +122,7 @@ export function LoanForm({
       setMerchant(loan.merchant || '');
       setNotes(loan.notes || '');
       if (loan.nextEmiDate) {
-        try {
-          if (typeof loan.nextEmiDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(loan.nextEmiDate.trim())) {
-            setNextEmiDate(loan.nextEmiDate.trim());
-          } else {
-            const d = typeof loan.nextEmiDate === 'string' ? new Date(loan.nextEmiDate) : loan.nextEmiDate;
-            setNextEmiDate(d.toISOString().substring(0, 10));
-          }
-        } catch {
-          setNextEmiDate('');
-        }
+        setNextEmiDate(formatCalendarDate(loan.nextEmiDate));
       } else {
         setNextEmiDate('');
       }
@@ -189,11 +197,7 @@ export function LoanForm({
         }
         payload.dueDay = newDueDayVal;
 
-        const initialNextEmiDateStr = loan?.nextEmiDate
-          ? (typeof loan.nextEmiDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(loan.nextEmiDate.trim())
-              ? loan.nextEmiDate.trim()
-              : (typeof loan.nextEmiDate === 'string' ? loan.nextEmiDate.substring(0, 10) : new Date(loan.nextEmiDate).toISOString().substring(0, 10)))
-          : '';
+        const initialNextEmiDateStr = formatCalendarDate(loan?.nextEmiDate);
         const currentNextEmiDateStr = nextEmiDate ? nextEmiDate.trim() : '';
 
         const isDueDayEdited = newDueDayVal !== initialDueDay;
