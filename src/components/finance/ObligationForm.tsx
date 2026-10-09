@@ -82,7 +82,7 @@ export function ObligationForm({
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const userTz = obligation?.user?.timezone || obligation?.timezone || timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Kolkata');
+  const userTz = obligation?.user?.timezone || timezone || obligation?.timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Kolkata');
 
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<ObligationKind>('BILL');
@@ -98,7 +98,8 @@ export function ObligationForm({
       setKind(obligation.kind || 'BILL');
       setAmount(obligation.amount ? String(obligation.amount) : '');
       // Finding 4: Preserve initialData.dueAt as the anchor date (do NOT overwrite dueAt with nextDueAt)
-      setDueAt(formatDateForInput(obligation.dueAt, userTz));
+      // SOL-R002-008: Ensure formatDateForInput uses obligation?.user?.timezone || timezone
+      setDueAt(formatDateForInput(obligation.dueAt, obligation?.user?.timezone || timezone));
       setRecurrence(obligation.recurrenceType || 'MONTHLY');
       setInterval(obligation.recurrenceInterval ? String(obligation.recurrenceInterval) : '84');
       setAccountId(obligation.accountId || obligation.account?.id || 'none');
@@ -111,7 +112,7 @@ export function ObligationForm({
       setInterval('84');
       setAccountId('');
     }
-  }, [obligation, open, userTz]);
+  }, [obligation, open, userTz, timezone]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

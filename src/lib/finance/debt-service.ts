@@ -301,7 +301,8 @@ export async function recordDebtCollection(
     throw new Error('Collection can only be recorded on a RECEIVABLE debt');
   }
 
-  if (debt.status === 'ARCHIVED') {
+  // SOL-R004-006: Allow idempotent retries to proceed to row lock and check
+  if (debt.status === 'ARCHIVED' && !parsed.idempotencyKey) {
     throw new Error('Cannot record collection on an archived debt');
   }
 
@@ -357,7 +358,7 @@ export async function recordDebtCollection(
       }
     }
 
-    // SOL-R004-006: Under row lock, check if debt was archived concurrently
+    // SOL-R004-006: Under row lock, reject if debt was archived concurrently or retry was not found
     if (lockedDebt.status === 'ARCHIVED') {
       throw new Error('Cannot record collection on an archived debt');
     }
@@ -442,8 +443,9 @@ export async function recordDebtRepayment(
     throw new Error('Repayment can only be recorded on a PAYABLE debt');
   }
 
-  if (debt.status === 'ARCHIVED') {
-    throw new Error('Cannot record repayment on an archived debt');
+  // SOL-R004-006: Allow idempotent retries to proceed to row lock and check
+  if (debt.status === 'ARCHIVED' && !parsed.idempotencyKey) {
+    throw new Error('Cannot record payment on an archived debt');
   }
 
   // Account ownership check (V2-T029)
@@ -498,9 +500,9 @@ export async function recordDebtRepayment(
       }
     }
 
-    // SOL-R004-006: Under row lock, check if debt was archived concurrently
+    // SOL-R004-006: Under row lock, reject if debt was archived concurrently or retry was not found
     if (lockedDebt.status === 'ARCHIVED') {
-      throw new Error('Cannot record repayment on an archived debt');
+      throw new Error('Cannot record payment on an archived debt');
     }
 
     // Re-calculate outstanding balance under lock

@@ -516,17 +516,109 @@ test('V2-200: Personal Debt (Friends & Family) Test Suite (V2-T020..V2-T030)', a
       data: { status: 'ARCHIVED' }
     });
 
-    // Collection on archived debt must be rejected
+    // -------------------------------------------------------------------------
+    // SOL-R004-006: Allow Exact Idempotent Retries for Archived Debt
+    // -------------------------------------------------------------------------
+    const retryDebt = await debtService.createDebt(userA.id, {
+      direction: 'PAYABLE',
+      counterpartyName: 'Archival Retry Counterparty',
+      title: 'Archival Idempotent Retry Test',
+      originalAmount: '5000.00',
+      accountId: bankAId,
+    }, db);
+    const retryDebtId = retryDebt.debt.id;
+
+    // 1. Successful payment with idempotencyKey
+    const firstPay = await debtService.recordDebtRepayment(userA.id, {
+      debtId: retryDebtId,
+      amount: '1500.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-repay-retry-key-001',
+    }, db);
+    assert.equal(firstPay.alreadyProcessed, false);
+    assert.ok(firstPay.transactionId);
+
+    // 2. Archive the debt
+    await db.personalDebt.update({
+      where: { id: retryDebtId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    // 3. Exact idempotent retry on archived debt MUST succeed and return existing transaction
+    const retryPay = await debtService.recordDebtRepayment(userA.id, {
+      debtId: retryDebtId,
+      amount: '1500.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-repay-retry-key-001',
+    }, db);
+    assert.equal(retryPay.alreadyProcessed, true, 'Retry on archived debt returns alreadyProcessed: true');
+    assert.equal(retryPay.transactionId, firstPay.transactionId, 'Retry returns original transactionId');
+
+    // Verify no duplicate repayment transactions created
+    const repayTxs = await db.financialTransaction.count({
+      where: { personalDebtId: retryDebtId, type: 'DEBT_REPAY' }
+    });
+    assert.equal(repayTxs, 1, 'Exactly one repayment transaction exists after idempotent retry');
+
+    // 4. New payment with fresh idempotency key on archived debt must be rejected
+    await assert.rejects(
+      async () => {
+        await debtService.recordDebtRepayment(userA.id, {
+          debtId: retryDebtId,
+          amount: '1000.00',
+          accountId: bankAId,
+          idempotencyKey: 'arch-repay-new-uncommitted-key',
+        }, db);
+      },
+      /Cannot record payment on an archived debt/,
+      'New payment on archived debt with unused idempotency key is rejected'
+    );
+
+    // 5. Receivable collection idempotent retry test
+    const retryRecDebt = await debtService.createDebt(userA.id, {
+      direction: 'RECEIVABLE',
+      counterpartyName: 'Archival Rec Retry',
+      title: 'Archival Receivable Retry Test',
+      originalAmount: '4000.00',
+      accountId: bankAId,
+    }, db);
+    const retryRecId = retryRecDebt.debt.id;
+
+    const firstCollect = await debtService.recordDebtCollection(userA.id, {
+      debtId: retryRecId,
+      amount: '2000.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-collect-retry-key-001',
+    }, db);
+    assert.equal(firstCollect.alreadyProcessed, false);
+    assert.ok(firstCollect.transactionId);
+
+    await db.personalDebt.update({
+      where: { id: retryRecId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    const retryCollect = await debtService.recordDebtCollection(userA.id, {
+      debtId: retryRecId,
+      amount: '2000.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-collect-retry-key-001',
+    }, db);
+    assert.equal(retryCollect.alreadyProcessed, true, 'Collection retry on archived debt succeeds');
+    assert.equal(retryCollect.transactionId, firstCollect.transactionId);
+
+    // New collection on archived receivable must be rejected
     await assert.rejects(
       async () => {
         await debtService.recordDebtCollection(userA.id, {
-          debtId: archRecId,
-          amount: '1000.00',
+          debtId: retryRecId,
+          amount: '500.00',
           accountId: bankAId,
+          idempotencyKey: 'arch-collect-new-key',
         }, db);
       },
       /archived debt/i,
-      'Collection on archived debt is strictly rejected under lock'
+      'New collection on archived debt is rejected'
     );
   } finally {
     await db.$disconnect();

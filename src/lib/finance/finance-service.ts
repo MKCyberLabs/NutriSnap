@@ -919,6 +919,7 @@ export interface ObligationItem {
   kind: string;
   amount: string | null;
   account: { id: string; name: string } | null;
+  user?: { timezone: string } | null;
   dueAt: string;
   recurrenceType: string;
   recurrenceInterval: number | null;
@@ -955,6 +956,7 @@ export async function getObligations(
     where: { userId, isArchived: false },
     orderBy: { nextDueAt: 'asc' },
     include: {
+      user: { select: { timezone: true } },
       account: { select: { id: true, name: true } },
       loan: { select: { id: true, name: true, emiAmount: true, nextEmiDate: true, dueDay: true } },
       creditCardStatements: {
@@ -983,6 +985,7 @@ export async function getObligations(
       kind: ob.kind,
       amount: ob.amount ? ob.amount.toString() : null,
       account: ob.account,
+      user: ob.user ? { timezone: ob.user.timezone } : null,
       dueAt: ob.dueAt.toISOString(),
       recurrenceType: ob.recurrenceType,
       recurrenceInterval: ob.recurrenceInterval,
@@ -1006,6 +1009,77 @@ export async function getObligations(
       } : null,
     };
   });
+}
+
+/**
+ * Retrieves a single obligation by ID.
+ * Exposes user.timezone in read model (SOL-R002-008).
+ */
+export async function getObligationById(
+  userId: string,
+  obligationId: string,
+  db: PrismaClientLike = defaultPrisma
+): Promise<ObligationItem> {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  const ob = await db.obligation.findUnique({
+    where: { id: obligationId },
+    include: {
+      user: { select: { timezone: true } },
+      account: { select: { id: true, name: true } },
+      loan: { select: { id: true, name: true, emiAmount: true, nextEmiDate: true, dueDay: true } },
+      creditCardStatements: {
+        select: {
+          id: true,
+          periodKey: true,
+          status: true,
+          statementAmount: true,
+          dueDate: true,
+          accountId: true,
+          account: { select: { id: true, name: true } },
+        }
+      },
+      occurrences: {
+        orderBy: { dueDate: 'desc' },
+        take: 5,
+      }
+    }
+  });
+
+  if (!ob || ob.userId !== userId) {
+    throw new Error('Obligation not found or unauthorized');
+  }
+
+  const ccStmt = ob.creditCardStatements && ob.creditCardStatements.length > 0 ? ob.creditCardStatements[0] : null;
+  return {
+    id: ob.id,
+    title: ob.title,
+    kind: ob.kind,
+    amount: ob.amount ? ob.amount.toString() : null,
+    account: ob.account,
+    user: ob.user ? { timezone: ob.user.timezone } : null,
+    dueAt: ob.dueAt.toISOString(),
+    recurrenceType: ob.recurrenceType,
+    recurrenceInterval: ob.recurrenceInterval,
+    reminderOffsetsMin: ob.reminderOffsetsMin,
+    isActive: ob.isActive,
+    notes: ob.notes,
+    lastCompletedAt: ob.lastCompletedAt ? ob.lastCompletedAt.toISOString() : null,
+    nextDueAt: ob.nextDueAt.toISOString(),
+    loanId: ob.loan?.id || null,
+    linkedLoanName: ob.loan?.name || null,
+    loan: ob.loan ? { id: ob.loan.id, name: ob.loan.name } : null,
+    isCreditCardStatement: Boolean(ccStmt),
+    creditCardStatement: ccStmt ? {
+      id: ccStmt.id,
+      periodKey: ccStmt.periodKey,
+      status: ccStmt.status,
+      statementAmount: ccStmt.statementAmount ? ccStmt.statementAmount.toString() : null,
+      dueDate: ccStmt.dueDate ? ccStmt.dueDate.toISOString() : null,
+      accountId: ccStmt.accountId,
+      accountName: ccStmt.account?.name,
+    } : null,
+  };
 }
 
 /**
@@ -1578,18 +1652,46 @@ export async function markObligationPaid(
     return occurrenceKey.trim() === localDate;
   })();
 
-  // Scheduled date/instant for this occurrence
+  // Scheduled date/instant for this occurrence (SOL-R001-007)
   const occurrenceScheduledDate = (() => {
     if (isCurrentOccurrence) {
       return obligation.nextDueAt;
     }
-    if (occurrenceKey.includes('T')) {
-      const d = new Date(occurrenceKey);
-      if (!isNaN(d.getTime())) return d;
-    } else if (/^\d{4}-\d{2}-\d{2}$/.test(occurrenceKey.trim())) {
+    const anchorInTz = new TZDate(obligation.dueAt, tz);
+    const targetHour = anchorInTz.getHours();
+    const targetMinute = anchorInTz.getMinutes();
+    const targetSecond = anchorInTz.getSeconds();
+    const targetMs = anchorInTz.getMilliseconds();
+    const anchorUtcHour = obligation.dueAt.getUTCHours();
+    const anchorUtcMinute = obligation.dueAt.getUTCMinutes();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(occurrenceKey.trim())) {
       const [y, m, d] = occurrenceKey.trim().split('-').map(Number);
-      return new Date(new TZDate(y, m - 1, d, 12, 0, 0, 0, tz).getTime());
+      return new Date(new TZDate(y, m - 1, d, targetHour, targetMinute, targetSecond, targetMs, tz).getTime());
     }
+
+    if (occurrenceKey.includes('T')) {
+      const [datePart, timePart] = occurrenceKey.trim().split('T');
+      const [y, m, d] = datePart.split('-').map(Number);
+      const [hh, mm] = timePart.split(':').map(Number);
+
+      if (tz === 'UTC') {
+        return new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
+      }
+
+      const localCandidate = new Date(new TZDate(y, m - 1, d, hh, mm, targetSecond, targetMs, tz).getTime());
+      const utcCandidate = new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
+
+      if (hh === targetHour && mm === targetMinute) {
+        return localCandidate;
+      }
+      if (hh === anchorUtcHour && mm === anchorUtcMinute) {
+        return utcCandidate;
+      }
+
+      return localCandidate;
+    }
+
     return obligation.nextDueAt;
   })();
 
@@ -2451,29 +2553,88 @@ export async function revertObligationPayment(
     );
     const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
 
+    // SOL-R004-010: Check whether the occurrence being undone was a historical occurrence
+    // An occurrence was historical if it did NOT advance the active schedule.
+    // If the occurrence was historical, leave obligation.nextDueAt UNCHANGED!
+    // Only restore obligation.nextDueAt if the occurrence being undone was the one that advanced nextDueAt.
+    const currentOb = await tx.obligation.findUnique({
+      where: { id: obligation.id },
+      select: {
+        dueAt: true,
+        nextDueAt: true,
+        recurrenceType: true,
+        recurrenceInterval: true,
+        loan: { select: { dueDay: true } }
+      }
+    });
+
+    const currentNextDue = currentOb?.nextDueAt || obligation.nextDueAt;
+    const currentDueAt = currentOb?.dueAt || obligation.dueAt;
+    const recType = currentOb?.recurrenceType || obligation.recurrenceType;
+    const recInterval = currentOb?.recurrenceInterval ?? obligation.recurrenceInterval;
+
+    const targetDay = recType === 'MONTHLY'
+      ? (currentOb?.loan?.dueDay ?? obligation.loan?.dueDay ?? new TZDate(currentDueAt, tz).getDate())
+      : undefined;
+
+    const rule: RecurrenceRule = {
+      type: recType as any,
+      interval: recInterval,
+      targetDayOfMonth: targetDay,
+      timezone: tz,
+    };
+
+    const lockedTargetDueTime = new Date(lockedTarget.dueDate).getTime();
+    const anchorTime = new Date(currentDueAt).getTime();
+    const currentNextDueTime = new Date(currentNextDue).getTime();
+
+    let isHistorical = false;
+    if (lockedTargetDueTime < anchorTime) {
+      isHistorical = true;
+    } else if (recType === 'ONCE') {
+      isHistorical = lockedTargetDueTime !== currentNextDueTime;
+    } else {
+      const expectedNext = getNextOccurrence(rule, currentDueAt, lockedTarget.dueDate);
+      if (!expectedNext || expectedNext.getTime() !== currentNextDueTime) {
+        isHistorical = true;
+      }
+    }
+
+    const restoredDueAt = isHistorical ? currentNextDue : lockedTarget.dueDate;
+
     // 4. Restore nextDueAt and reactivate obligation
     await tx.obligation.update({
       where: { id: obligation.id },
       data: {
-        nextDueAt: lockedTarget.dueDate,
+        nextDueAt: restoredDueAt,
         lastCompletedAt,
         isActive: true,
       }
     });
 
     // 5. Cancel future unsent reminder deliveries (status == 'PENDING')
-    await tx.reminderDelivery.deleteMany({
-      where: {
-        obligationId: obligation.id,
-        status: 'PENDING',
-        scheduledFor: { gte: lockedTarget.dueDate },
-      }
-    });
+    if (!isHistorical) {
+      await tx.reminderDelivery.deleteMany({
+        where: {
+          obligationId: obligation.id,
+          status: 'PENDING',
+          scheduledFor: { gte: lockedTarget.dueDate },
+        }
+      });
+    } else {
+      await tx.reminderDelivery.deleteMany({
+        where: {
+          obligationId: obligation.id,
+          status: 'PENDING',
+          occurrenceKey: lockedTarget.occurrenceKey,
+        }
+      });
+    }
 
     return {
       alreadyReversed: false,
       revertedOccurrenceId: lockedTarget.id,
-      restoredNextDueAt: lockedTarget.dueDate,
+      restoredNextDueAt: restoredDueAt,
     };
   };
 

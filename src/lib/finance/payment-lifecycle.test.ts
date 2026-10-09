@@ -2368,4 +2368,277 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     const honoluluDate = formatDateForInput('2026-11-15T02:00:00.000Z', 'Pacific/Honolulu');
     assert.equal(honoluluDate, '2026-11-14', 'Honolulu calendar date is Nov 14');
   });
+
+  await t.test('SOL-R002-008: getObligations and getObligationById read models expose user.timezone', async () => {
+    const userKiri = await db.user.create({
+      data: {
+        id: `usr_tz_read_${timestamp}`,
+        email: `tz_read_${timestamp}@test.com`,
+        name: 'Timezone Read Model User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati',
+      }
+    });
+
+    const ob = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Timezone Read Test Bill',
+        kind: 'BILL',
+        amount: new Decimal('750.00'),
+        dueAt: new Date('2026-09-14T22:00:00.000Z'), // 2026-09-15 12:00 in Kiritimati
+        nextDueAt: new Date('2026-09-14T22:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. getObligations exposes user.timezone
+    const obs = await financeService.getObligations(userKiri.id, db);
+    const obItem = obs.find((o) => o.id === ob.id);
+    assert.ok(obItem, 'Obligation returned by getObligations');
+    assert.ok(obItem?.user, 'Obligation exposes user object');
+    assert.equal(obItem?.user?.timezone, 'Pacific/Kiritimati', 'getObligations exposes user.timezone');
+
+    // 2. getObligationById exposes user.timezone
+    const singleOb = await financeService.getObligationById(userKiri.id, ob.id, db);
+    assert.ok(singleOb, 'Obligation returned by getObligationById');
+    assert.ok(singleOb.user, 'getObligationById exposes user object');
+    assert.equal(singleOb.user?.timezone, 'Pacific/Kiritimati', 'getObligationById exposes user.timezone');
+
+    // Clean up
+    await db.obligation.delete({ where: { id: ob.id } });
+    await db.user.delete({ where: { id: userKiri.id } });
+  });
+
+  await t.test('SOL-R001-007: Historical Occurrence Resolution & Canonical Scheduled Instant', async () => {
+    const userKiri = await db.user.create({
+      data: {
+        id: `usr_sol_r001_007_${timestamp}`,
+        email: `sol_r001_007_${timestamp}@test.com`,
+        name: 'Historical Resolution User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userKiri.id,
+        name: 'Kiritimati Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(10000),
+      }
+    });
+
+    // Scheduled at 12:00 local noon in Kiritimati = 22:00 UTC previous day
+    // Anchor dueAt: Sept 14 22:00 UTC = Sept 15 12:00 local
+    const ob = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Kiritimati Monthly Electricity',
+        kind: 'BILL',
+        amount: new Decimal('2000.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-14T22:00:00.000Z'),
+        nextDueAt: new Date('2026-09-14T22:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. Mark historical August occurrence using local key '2026-08-15T12:00'
+    const payLocal = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-15T12:00',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocal.success, true);
+    assert.equal(payLocal.alreadyCompleted, false);
+    assert.ok(payLocal.transactionId);
+
+    // Verify stored occurrence has exact instant 2026-08-14T22:00:00.000Z
+    const occLocal = await db.obligationOccurrence.findUnique({
+      where: { id: payLocal.occurrenceId! }
+    });
+    assert.ok(occLocal);
+    assert.equal(occLocal.dueDate.toISOString(), '2026-08-14T22:00:00.000Z', 'Local key resolves to scheduled UTC instant');
+
+    // 2. Retry with alternate format: UTC key '2026-08-14T22:00'
+    // Must return alreadyCompleted: true and create NO duplicate expense
+    const payUtcRetry = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-14T22:00',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtcRetry.success, true);
+    assert.equal(payUtcRetry.alreadyCompleted, true, 'UTC key recognized as already completed');
+    assert.equal(payUtcRetry.transactionId, payLocal.transactionId, 'Same transactionId returned on UTC retry');
+
+    // 3. Retry with alternate format: date-only key '2026-08-15'
+    const payDateOnlyRetry = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-15',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payDateOnlyRetry.success, true);
+    assert.equal(payDateOnlyRetry.alreadyCompleted, true, 'Date-only key recognized as already completed');
+
+    // Exactly one expense transaction exists for this occurrence
+    const expenseCount = await db.financialTransaction.count({
+      where: { obligationId: ob.id }
+    });
+    assert.equal(expenseCount, 1, 'Exactly one expense created across all representation formats');
+
+    // 4. Preserve non-noon scheduled time for date-only historical completion
+    // Create UTC-scheduled bill at 09:00 UTC
+    const userUtc = await db.user.create({
+      data: {
+        id: `usr_sol_utc_sched_${timestamp}`,
+        email: `utc_sched_${timestamp}@test.com`,
+        name: 'UTC Sched User',
+        password: 'password123',
+        timezone: 'UTC',
+      }
+    });
+
+    const obUtc9 = await db.obligation.create({
+      data: {
+        userId: userUtc.id,
+        title: 'Morning 9am UTC Server Bill',
+        kind: 'BILL',
+        amount: new Decimal('500.00'),
+        dueAt: new Date('2026-09-15T09:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T09:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Mark historical August occurrence with date-only key '2026-08-15'
+    const payDateOnly9 = await financeService.markObligationPaid(userUtc.id, {
+      obligationId: obUtc9.id,
+      occurrenceKey: '2026-08-15',
+      createExpense: false,
+    }, db);
+    assert.equal(payDateOnly9.success, true);
+    assert.equal(payDateOnly9.alreadyCompleted, false);
+
+    const occ9 = await db.obligationOccurrence.findUnique({
+      where: { id: payDateOnly9.occurrenceId! }
+    });
+    assert.ok(occ9);
+    assert.equal(occ9.dueDate.toISOString(), '2026-08-15T09:00:00.000Z', 'Date-only completion preserves 09:00 scheduled time, not 12:00 noon');
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.financialTransaction.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+    await db.financialAccount.delete({ where: { id: account.id } });
+    await db.user.delete({ where: { id: userKiri.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: obUtc9.id } });
+    await db.obligation.delete({ where: { id: obUtc9.id } });
+    await db.user.delete({ where: { id: userUtc.id } });
+  });
+
+  await t.test('SOL-R004-010: Undo of Historical Payment Must Not Rewind Unrelated Active Schedule', async () => {
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Broadband Plan Schedule Isolation',
+        kind: 'BILL',
+        amount: new Decimal('999.00'),
+        dueAt: new Date('2026-09-15T10:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const rem = await db.reminder.create({
+      data: {
+        userId: userAId,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob.title,
+        obligationId: ob.id,
+        isActive: true,
+      }
+    });
+
+    const activeDelSept = await db.reminderDelivery.create({
+      data: {
+        userId: userAId,
+        reminderId: rem.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15T10:00',
+        scheduledFor: new Date('2026-09-15T10:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // 1. Pay historical occurrence for August 15 while September 15 is current
+    const histPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-15T10:00',
+      createExpense: false,
+    }, db);
+    assert.equal(histPay.success, true);
+    assert.equal(histPay.alreadyCompleted, false);
+
+    // Verify nextDueAt remained September 15
+    const obAfterHistPay = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterHistPay?.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'Historical payment leaves nextDueAt at Sept 15');
+
+    // 2. Revert / Undo historical August payment
+    const histUndo = await financeService.revertObligationPayment(userAId, {
+      obligationId: ob.id,
+      occurrenceId: histPay.occurrenceId!,
+    }, db);
+    assert.equal(histUndo.success, true);
+    assert.equal(histUndo.alreadyReversed, false);
+
+    // SOL-R004-010: Undo of historical payment must NOT rewind nextDueAt back to August 15!
+    const obAfterHistUndo = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterHistUndo?.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'Undo of historical payment leaves nextDueAt UNCHANGED at Sept 15');
+    assert.equal(histUndo.restoredNextDueAt, '2026-09-15T10:00:00.000Z', 'Result reports unchanged nextDueAt');
+
+    // Verify active September reminder delivery was NOT deleted or cancelled
+    const delAfterUndo = await db.reminderDelivery.findUnique({ where: { id: activeDelSept.id } });
+    assert.equal(delAfterUndo?.status, 'PENDING', 'September reminder delivery preserved as PENDING');
+
+    // 3. Now pay the active September occurrence
+    const activePay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-09-15T10:00',
+      createExpense: false,
+    }, db);
+    assert.equal(activePay.success, true);
+
+    // nextDueAt advances to October 15
+    const obAfterActivePay = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterActivePay?.nextDueAt.toISOString(), '2026-10-15T10:00:00.000Z', 'Active payment advances schedule to Oct 15');
+
+    // 4. Undo the active September payment -> schedule MUST be restored back to September 15
+    const activeUndo = await financeService.revertObligationPayment(userAId, {
+      obligationId: ob.id,
+      occurrenceId: activePay.occurrenceId!,
+    }, db);
+    assert.equal(activeUndo.success, true);
+    assert.equal(activeUndo.alreadyReversed, false);
+
+    const obAfterActiveUndo = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterActiveUndo?.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'Undo of active payment restores nextDueAt to Sept 15');
+
+    // Clean up
+    await db.reminderDelivery.deleteMany({ where: { obligationId: ob.id } });
+    await db.reminder.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
 });
