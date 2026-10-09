@@ -3393,8 +3393,9 @@ test('V2-R004-ROUND4-B: Accounts Repayment UI Payer Account Restrictions (SOL-R0
 
   // Verify payerAccounts filtering
   assert.ok(
-    ccDialogContent.includes('const payerAccounts = (accounts || []).filter(isEligiblePayer)'),
-    'CreditCardDialog must filter payerAccounts using isEligiblePayer'
+    ccDialogContent.includes('payerAccounts = useMemo') ||
+      ccDialogContent.includes('const payerAccounts = (accounts || []).filter(isEligiblePayer)'),
+    'CreditCardDialog must filter payerAccounts using isEligiblePayer / useMemo'
   );
 
   // Verify selectedFromAccountId prefers defaultPaymentAccountId when present and eligible
@@ -3554,6 +3555,292 @@ test('V2-R004-ROUND4-B: Accounts Repayment UI Payer Account Restrictions (SOL-R0
       await db.user.deleteMany({ where: { id: userId } });
     } catch (cleanupErr) {
       console.warn('V2-R004-ROUND4-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});
+
+test('V2-R004-ROUND5-B: CreditCardDialog Payer Accounts Memoization & Selection Stability (SOL-R004-015)', async (t) => {
+  // 1. Static Component Verification: CreditCardDialog implementation
+  const ccDialogPath = path.resolve(process.cwd(), 'src/components/finance/CreditCardDialog.tsx');
+  const ccDialogContent = fs.readFileSync(ccDialogPath, 'utf8');
+
+  // Verify useMemo import and memoization of payerAccounts
+  assert.ok(
+    ccDialogContent.includes('useMemo') &&
+      ccDialogContent.includes('const payerAccounts = useMemo('),
+    'CreditCardDialog must memoize payerAccounts with useMemo'
+  );
+  assert.ok(
+    ccDialogContent.includes('[accounts, account.id]'),
+    'CreditCardDialog must specify [accounts, account.id] as useMemo dependency array'
+  );
+
+  // Verify loadDetails stabilization: useCallback does NOT depend on payerAccounts
+  assert.ok(
+    ccDialogContent.includes('const loadDetails = useCallback('),
+    'CreditCardDialog must define loadDetails with useCallback'
+  );
+  assert.ok(
+    ccDialogContent.includes('[account.id, toast]'),
+    'CreditCardDialog loadDetails must only depend on [account.id, toast] to avoid infinite re-render loops'
+  );
+
+  // Verify loadDetails does NOT overwrite selectedFromAccountId directly
+  const loadDetailsBodyMatch = ccDialogContent.match(/const loadDetails = useCallback\(async \(\) => {([\s\S]*?)}, \[account\.id, toast\]\);/);
+  assert.ok(loadDetailsBodyMatch, 'Must match loadDetails implementation');
+  const loadDetailsBody = loadDetailsBodyMatch[1];
+  assert.ok(
+    !loadDetailsBody.includes('setSelectedFromAccountId'),
+    'loadDetails must NOT directly call setSelectedFromAccountId'
+  );
+
+  // Verify selectedFromAccountId synchronization preserves existing eligible selection
+  assert.ok(
+    ccDialogContent.includes('setSelectedFromAccountId((current: string) =>') &&
+      ccDialogContent.includes('if (current && payerAccounts.some((a) => a.id === current))') &&
+      ccDialogContent.includes('return current;'),
+    'selectedFromAccountId effect must preserve current selection if present in payerAccounts'
+  );
+
+  // Verify submit button disabled and empty state presentation
+  assert.ok(
+    ccDialogContent.includes('disabled={submitting || !selectedFromAccountId || payerAccounts.length === 0}'),
+    'CreditCardDialog must disable submit when payerAccounts is empty or no account is selected'
+  );
+  assert.ok(
+    ccDialogContent.includes('No eligible bank, cash or wallet account available'),
+    'CreditCardDialog must display placeholder indicating no eligible payer accounts'
+  );
+
+  // 2. Logic Verification: Memoization & Payer Filtering
+  const targetCardId = 'acc_cc_target_r5';
+  const sampleAccounts = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_cc_other_1', name: 'ICICI Rubyx Card', type: 'CREDIT_CARD' },
+    { id: 'acc_cc_other_2', name: 'SBI Cashback Card', type: 'CREDIT_CARD' },
+    { id: 'acc_bank_salary', name: 'HDFC Salary Account', type: 'BANK' },
+    { id: 'acc_bank_savings', name: 'Axis Savings Account', type: 'BANK' },
+    { id: 'acc_cash_safe', name: 'Home Locker Cash', type: 'CASH' },
+    { id: 'acc_wallet_amazon', name: 'Amazon Pay Balance', type: 'WALLET' },
+  ];
+
+  const filterEligiblePayers = (accounts: any[], cardId: string) =>
+    (accounts || []).filter((a: any) => a.id !== cardId && a.type !== 'CREDIT_CARD');
+
+  const eligiblePayers = filterEligiblePayers(sampleAccounts, targetCardId);
+  assert.equal(eligiblePayers.length, 4, 'Must return exactly 4 eligible payer accounts');
+  assert.deepEqual(
+    eligiblePayers.map((a) => a.id),
+    ['acc_bank_salary', 'acc_bank_savings', 'acc_cash_safe', 'acc_wallet_amazon'],
+    'Eligible payers must exclude target card and all other credit cards'
+  );
+
+  // When only credit cards exist
+  const onlyCreditCards = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_cc_other_1', name: 'ICICI Rubyx Card', type: 'CREDIT_CARD' },
+  ];
+  const emptyPayers = filterEligiblePayers(onlyCreditCards, targetCardId);
+  assert.equal(emptyPayers.length, 0, 'Must produce empty array when only credit cards exist');
+
+  // 3. Selection Stability Simulation: User Manual Choice Preserved Across Updates
+  const defaultPaymentAccountId = 'acc_bank_salary';
+
+  // Functional updater mirroring CreditCardDialog's setSelectedFromAccountId logic
+  const calculateNextSelection = (
+    current: string,
+    defaultId: string | null | undefined,
+    payers: { id: string }[]
+  ): string => {
+    if (current && payers.some((a) => a.id === current)) {
+      return current;
+    }
+    if (defaultId && payers.some((a) => a.id === defaultId)) {
+      return defaultId;
+    }
+    return payers[0]?.id || '';
+  };
+
+  // Case A: Initial mount with empty current selection -> selects default
+  let selection = calculateNextSelection('', defaultPaymentAccountId, eligiblePayers);
+  assert.equal(selection, 'acc_bank_salary', 'Initial selection must fall back to defaultPaymentAccountId');
+
+  // Case B: User manually selects an alternative eligible bank ('acc_bank_savings')
+  selection = 'acc_bank_savings';
+
+  // Case C: Card details reloaded / updated (statement created, payment made, or polling)
+  // The updater runs with current = 'acc_bank_savings' and cardData.defaultId = 'acc_bank_salary'
+  const selectionAfterReload = calculateNextSelection(selection, defaultPaymentAccountId, eligiblePayers);
+  assert.equal(
+    selectionAfterReload,
+    'acc_bank_savings',
+    'User manual selection of alternative eligible bank must be preserved across card details reloads'
+  );
+
+  // Case D: Repeated renders / reloads maintain selection
+  const selectionAfterMultipleReloads = calculateNextSelection(
+    selectionAfterReload,
+    defaultPaymentAccountId,
+    eligiblePayers
+  );
+  assert.equal(
+    selectionAfterMultipleReloads,
+    'acc_bank_savings',
+    'Selection must remain stable across multiple renders'
+  );
+
+  // Case E: If user-selected account is removed from eligible accounts, fallback to defaultId
+  const payersWithoutSavings = eligiblePayers.filter((a) => a.id !== 'acc_bank_savings');
+  const selectionAfterAccountRemoved = calculateNextSelection(
+    selection,
+    defaultPaymentAccountId,
+    payersWithoutSavings
+  );
+  assert.equal(
+    selectionAfterAccountRemoved,
+    'acc_bank_salary',
+    'Must fall back to defaultId if previously selected account is no longer in payerAccounts'
+  );
+
+  // Case F: If both selected account and default account are removed, fallback to first eligible account
+  const payersOnlyCash = [sampleAccounts[5]]; // acc_cash_safe
+  const selectionAfterDefaultAlsoRemoved = calculateNextSelection(
+    'acc_bank_savings',
+    defaultPaymentAccountId,
+    payersOnlyCash
+  );
+  assert.equal(
+    selectionAfterDefaultAlsoRemoved,
+    'acc_cash_safe',
+    'Must fall back to first eligible account when neither current nor default is available'
+  );
+
+  // Case G: If no eligible accounts exist at all, selection resets to '' and submission is disabled
+  const selectionWithNoPayers = calculateNextSelection('acc_cash_safe', null, []);
+  assert.equal(selectionWithNoPayers, '', 'Must reset to empty string when no payer accounts exist');
+
+  const isSubmitDisabled = (submitting: boolean, selectedId: string, payers: any[]) =>
+    submitting || !selectedId || payers.length === 0;
+
+  assert.equal(
+    isSubmitDisabled(false, selectionWithNoPayers, []),
+    true,
+    'Submit button must be disabled when payerAccounts is empty'
+  );
+  assert.equal(
+    isSubmitDisabled(false, '', eligiblePayers),
+    true,
+    'Submit button must be disabled when no account is selected'
+  );
+  assert.equal(
+    isSubmitDisabled(false, 'acc_bank_savings', eligiblePayers),
+    false,
+    'Submit button must be enabled when an eligible account is selected'
+  );
+
+  // 4. Database Integration Verification
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userId = `usr_r004_r5_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `user-r5-${timestamp}@test.local`,
+        name: 'User Round 5 Test',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      },
+    });
+
+    const primaryBank = await financeService.createAccount(user.id, {
+      name: 'Default Salary Bank',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+
+    const alternativeBank = await financeService.createAccount(user.id, {
+      name: 'Secondary Savings Bank',
+      type: 'BANK',
+      openingBalance: '30000.00',
+    }, db);
+
+    const targetCard = await financeService.createAccount(user.id, {
+      name: 'Target Platinum CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '150000.00',
+      defaultPaymentAccountId: primaryBank.account.id,
+    }, db);
+
+    const otherCard = await financeService.createAccount(user.id, {
+      name: 'Other Rewards CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '50000.00',
+    }, db);
+
+    // Verify DB accounts filtering
+    const userDbAccounts = await financeService.getAccounts(user.id, db);
+    const dbEligiblePayers = filterEligiblePayers(userDbAccounts, targetCard.account.id);
+
+    assert.equal(dbEligiblePayers.length, 2, 'Must have 2 eligible payer accounts (Primary & Secondary Bank)');
+    assert.ok(dbEligiblePayers.some((a: any) => a.id === primaryBank.account.id), 'Must include Primary Bank');
+    assert.ok(dbEligiblePayers.some((a: any) => a.id === alternativeBank.account.id), 'Must include Secondary Bank');
+    assert.ok(!dbEligiblePayers.some((a: any) => a.type === 'CREDIT_CARD'), 'Must NOT include any CREDIT_CARD');
+
+    // Create a statement on Target Card
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: targetCard.account.id,
+      periodKey: '2026-10',
+      statementDate: '2026-10-01',
+      dueDate: '2026-10-25',
+      statementAmount: '8000.00',
+    }, db);
+
+    // Record payment using the alternative bank (user's chosen alternative)
+    const payRes = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtRes.statement.id,
+      fromAccountId: alternativeBank.account.id,
+      amount: '3000.00',
+    }, db);
+
+    assert.equal(payRes.success, true);
+    assert.equal(payRes.pendingBalance, '5000');
+
+    // Verify Secondary Bank balance was reduced, while Primary Bank balance was unaffected
+    const accountsAfterPay = await financeService.getAccounts(user.id, db);
+    const primaryAfter = accountsAfterPay.find((a: any) => a.id === primaryBank.account.id);
+    const altAfter = accountsAfterPay.find((a: any) => a.id === alternativeBank.account.id);
+
+    assert.equal(primaryAfter.currentBalance, '50000', 'Primary Bank balance must remain untouched');
+    assert.equal(altAfter.currentBalance, '27000', 'Secondary Bank balance must reflect the 3000 deduction');
+
+    // Verify paying from otherCard is rejected by backend
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtRes.statement.id,
+          fromAccountId: otherCard.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      (err: any) => {
+        return err.message && err.message.toLowerCase().includes('credit card');
+      },
+      'Backend must reject payment from another credit card account'
+    );
+
+  } finally {
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND5-B cleanup warning:', cleanupErr);
     } finally {
       await db.$disconnect();
     }

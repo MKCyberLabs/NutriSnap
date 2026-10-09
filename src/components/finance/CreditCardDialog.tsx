@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -86,7 +86,10 @@ export function CreditCardDialog({
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const isEligiblePayer = (a: any) => a.id !== account.id && a.type !== 'CREDIT_CARD';
-  const payerAccounts = (accounts || []).filter(isEligiblePayer);
+  const payerAccounts = useMemo(
+    () => (accounts || []).filter((a: any) => a.id !== account.id && a.type !== 'CREDIT_CARD'),
+    [accounts, account.id]
+  );
 
   const [selectedFromAccountId, setSelectedFromAccountId] = useState<string>(() => {
     const defaultId =
@@ -106,13 +109,15 @@ export function CreditCardDialog({
       cardData?.account?.defaultPaymentAccountId ||
       cardData?.defaultPaymentAccount?.id ||
       account.defaultPaymentAccountId;
-    if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
-      setSelectedFromAccountId(defaultId);
-    } else {
-      setSelectedFromAccountId((current: string) =>
-        payerAccounts.some((a) => a.id === current) ? current : (payerAccounts[0]?.id || '')
-      );
-    }
+    setSelectedFromAccountId((current: string) => {
+      if (current && payerAccounts.some((a) => a.id === current)) {
+        return current;
+      }
+      if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+        return defaultId;
+      }
+      return payerAccounts[0]?.id || '';
+    });
   }, [
     cardData?.account?.defaultPaymentAccountId,
     cardData?.defaultPaymentAccount?.id,
@@ -127,17 +132,6 @@ export function CreditCardDialog({
     try {
       const details = await getCreditCardDetails(session.id, account.id);
       setCardData(details);
-      const defaultId =
-        (details as any)?.account?.defaultPaymentAccountId ||
-        details?.defaultPaymentAccount?.id ||
-        account.defaultPaymentAccountId;
-      if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
-        setSelectedFromAccountId(defaultId);
-      } else {
-        setSelectedFromAccountId((current: string) =>
-          payerAccounts.some((a) => a.id === current) ? current : (payerAccounts[0]?.id || '')
-        );
-      }
     } catch (err: any) {
       toast({
         title: 'Error loading credit card',
@@ -147,7 +141,7 @@ export function CreditCardDialog({
     } finally {
       setLoading(false);
     }
-  }, [account.id, account.defaultPaymentAccountId, payerAccounts, toast]);
+  }, [account.id, toast]);
 
   useEffect(() => {
     if (open) {
@@ -385,11 +379,15 @@ export function CreditCardDialog({
                           cardData?.account?.defaultPaymentAccountId ||
                           cardData?.defaultPaymentAccount?.id ||
                           account.defaultPaymentAccountId;
-                        if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
-                          setSelectedFromAccountId(defaultId);
-                        } else if (!payerAccounts.some((a) => a.id === selectedFromAccountId)) {
-                          setSelectedFromAccountId(payerAccounts[0]?.id || '');
-                        }
+                        setSelectedFromAccountId((current: string) => {
+                          if (current && payerAccounts.some((a) => a.id === current)) {
+                            return current;
+                          }
+                          if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+                            return defaultId;
+                          }
+                          return payerAccounts[0]?.id || '';
+                        });
                         setPaymentModalOpen(true);
                       }}
                       className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
