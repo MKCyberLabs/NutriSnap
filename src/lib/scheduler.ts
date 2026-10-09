@@ -28,24 +28,21 @@ export const OUTBOUND_SEND_TIMEOUT_MS = 30_000; // 30 seconds strict outbound ti
  * SOL-R006-004: Telegram Outbound Timeout & Safe Delivery Semantics
  * ============================================================================
  *
- * 1. Bounded Outbound Request Lifetime:
- *    Telegram API calls via grammY default to a 500-second request timeout if no
- *    abort signal is provided. Because crash recovery leases expire after 5 minutes
- *    (LEASE_TIMEOUT_MS = 300,000ms), a slow or hung network request could still be
- *    in flight when a subsequent scheduler tick (e.g. at 6 minutes) considers the
- *    lease expired. This caused duplicate outbound notifications to be dispatched
- *    simultaneously while the first was still live.
- *    We enforce an explicit 30-second timeout (OUTBOUND_SEND_TIMEOUT_MS) via
- *    AbortSignal and Promise.race on all outbound Telegram requests. Hung requests
- *    abort and fail cleanly within 30s, long before lease expiration.
+ * 1. Bounded Outbound Request Lifetime & Fresh Claim Leases:
+ *    Claims acquire leases stamped with the current time of acquisition (via injectable clock),
+ *    preventing queued targets from inheriting a stale tick-start timestamp. Furthermore,
+ *    pre-dispatch validations verify attempt ownership and lease validity immediately before
+ *    initiating any outbound network call. Outbound requests are bounded by a 30-second timeout
+ *    (OUTBOUND_SEND_TIMEOUT_MS) via AbortSignal, well below the 5-minute lease duration
+ *    (LEASE_TIMEOUT_MS = 300,000ms).
  *
- * 2. Duplicate Delivery Limitations in Distributed Systems:
- *    External messaging APIs (like Telegram Bot API) follow at-least-once delivery
- *    semantics. If a network partition occurs after Telegram receives and delivers
- *    a message to the user but before the HTTP response reaches NutriSnap, the
- *    client-side timeout fires and the attempt is marked as failed. In such edge
- *    cases, duplicate delivery cannot be 100% prevented by the client alone without
- *    upstream idempotent message deduplication.
+ * 2. Delivery Guarantees in Distributed Systems:
+ *    External messaging APIs (like Telegram Bot API) enforce at-least-once delivery semantics;
+ *    client-side fencing and bounded requests minimize duplicate dispatch risk but cannot
+ *    guarantee exactly-once external delivery across network partitions without provider-side
+ *    idempotency keys. Local dispatch exclusivity is strictly protected via fresh claim
+ *    timestamps, pre-dispatch ownership validation, and atomic optimistic fencing tokens
+ *    (attemptCount and lastAttemptAt).
  *
  * 3. Safe Retry & Fencing Semantics:
  *    To minimize duplicate delivery risk while guaranteeing recovery:
@@ -61,7 +58,9 @@ export interface ProcessSchedulerTickOptions {
   prismaClient?: any;
   botClient?: any;
   now?: Date;
+  clock?: () => Date;
   outboundTimeoutMs?: number;
+  beforeDispatch?: (delivery: any) => Promise<void> | void;
 }
 
 export interface SchedulerTickResult {
@@ -124,7 +123,8 @@ export async function processSchedulerTick(
 ): Promise<SchedulerTickResult> {
   const db = options?.prismaClient || prisma;
   const bot = options?.botClient || new Bot(process.env.TELEGRAM_BOT_TOKEN || 'mock');
-  const now = options?.now || new Date();
+  const getNow = options?.clock || (options?.now ? () => options.now! : () => new Date());
+  const now = getNow();
   const outboundTimeoutMs = options?.outboundTimeoutMs ?? OUTBOUND_SEND_TIMEOUT_MS;
 
   const result: SchedulerTickResult = {
@@ -317,9 +317,10 @@ export async function processSchedulerTick(
         isArchived: ob.isArchived,
       };
 
-      const schedules = calculateDeliverySchedules(target, now);
+      const schedules = calculateDeliverySchedules(target, getNow());
 
       for (const sched of schedules) {
+        const evalTime = getNow();
         const existingDelivery = await db.reminderDelivery.findFirst({
           where: {
             obligationId: ob.id,
@@ -330,7 +331,7 @@ export async function processSchedulerTick(
         });
 
         const isClaimExpired = existingDelivery?.status === 'SENDING' &&
-          Boolean(existingDelivery?.lastAttemptAt && (now.getTime() - new Date(existingDelivery.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+          Boolean(existingDelivery?.lastAttemptAt && (evalTime.getTime() - new Date(existingDelivery.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
 
         if (existingDelivery?.status === 'SENDING' && !isClaimExpired) {
           continue;
@@ -338,7 +339,7 @@ export async function processSchedulerTick(
 
         const eligibility = shouldDeliverNow({
           scheduledFor: sched.scheduledFor,
-          now,
+          now: evalTime,
           snoozedUntil: existingDelivery?.snoozedUntil,
           isStale: sched.isStale,
           deliveryStatus: (existingDelivery?.status as any) || null,
@@ -399,16 +400,18 @@ export async function processSchedulerTick(
             },
           });
 
+          const claimAcquisitionTime = getNow();
+
           if (del) {
             if (del.status === 'SENT' || del.status === 'ACKNOWLEDGED') {
               return null;
             }
-            if (del.status === 'SNOOZED' && del.snoozedUntil && new Date(del.snoozedUntil).getTime() > now.getTime()) {
+            if (del.status === 'SNOOZED' && del.snoozedUntil && new Date(del.snoozedUntil).getTime() > claimAcquisitionTime.getTime()) {
               return null;
             }
 
             const isDelClaimExpired = del.status === 'SENDING' &&
-              Boolean(del.lastAttemptAt && (now.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+              Boolean(del.lastAttemptAt && (claimAcquisitionTime.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
 
             if (del.status === 'SENDING' && !isDelClaimExpired) {
               return null;
@@ -421,7 +424,7 @@ export async function processSchedulerTick(
                 data: {
                   status: 'FAILED',
                   nextRetryAt: null,
-                  lastAttemptAt: now,
+                  lastAttemptAt: claimAcquisitionTime,
                 },
               });
               return null;
@@ -429,7 +432,7 @@ export async function processSchedulerTick(
 
             const recheck = shouldDeliverNow({
               scheduledFor: sched.scheduledFor,
-              now,
+              now: claimAcquisitionTime,
               snoozedUntil: del.snoozedUntil,
               isStale: sched.isStale,
               deliveryStatus: del.status as any,
@@ -447,14 +450,14 @@ export async function processSchedulerTick(
               return null;
             }
 
-            // SOL-R003-004: Increment attemptCount on renewal as fencing token
+            // SOL-R003-004 & SOL-R006-004: Increment attemptCount on renewal as fencing token with fresh acquisition time
             const nextAttemptCount = (del.attemptCount || 0) + 1;
             const updated = await tx.reminderDelivery.update({
               where: { id: del.id },
               data: {
                 status: 'SENDING',
                 attemptCount: nextAttemptCount,
-                lastAttemptAt: now,
+                lastAttemptAt: claimAcquisitionTime,
               },
             });
             return updated;
@@ -479,10 +482,10 @@ export async function processSchedulerTick(
             });
           }
 
-          // Evaluate eligibility for brand new delivery claim
+          // Evaluate eligibility for brand new delivery claim using fresh acquisition time
           const newEligibility = shouldDeliverNow({
             scheduledFor: sched.scheduledFor,
-            now,
+            now: claimAcquisitionTime,
             snoozedUntil: null,
             isStale: sched.isStale,
             deliveryStatus: null,
@@ -494,7 +497,7 @@ export async function processSchedulerTick(
             return null;
           }
 
-          // Create new exclusively claimed delivery with attemptCount: 1
+          // Create new exclusively claimed delivery with attemptCount: 1 and fresh lastAttemptAt
           del = await tx.reminderDelivery.create({
             data: {
               userId: ob.userId,
@@ -506,7 +509,7 @@ export async function processSchedulerTick(
               channel: 'TELEGRAM',
               status: 'SENDING',
               attemptCount: 1,
-              lastAttemptAt: now,
+              lastAttemptAt: claimAcquisitionTime,
             },
           });
           return del;
@@ -523,6 +526,76 @@ export async function processSchedulerTick(
         }
 
         if (!delivery) {
+          continue;
+        }
+
+        if (options?.beforeDispatch) {
+          await options.beforeDispatch(delivery);
+        }
+
+        // SOL-R006-004: Pre-dispatch lease and attempt ownership check
+        const preDispatchTime = getNow();
+        const leaseAgeMs = preDispatchTime.getTime() - new Date(delivery.lastAttemptAt).getTime();
+        if (leaseAgeMs >= LEASE_TIMEOUT_MS) {
+          console.warn(`[Scheduler] Delivery ${delivery.id} aborted before dispatch: lease expired (${leaseAgeMs}ms >= ${LEASE_TIMEOUT_MS}ms)`);
+          continue;
+        }
+
+        if (typeof db.reminderDelivery?.findUnique === 'function') {
+          const currentClaim = await db.reminderDelivery.findUnique({
+            where: { id: delivery.id },
+            select: { id: true, status: true, attemptCount: true, lastAttemptAt: true },
+          });
+          if (currentClaim) {
+            if (currentClaim.status !== 'SENDING' || currentClaim.attemptCount !== delivery.attemptCount) {
+              console.warn(`[Scheduler] Delivery ${delivery.id} lost ownership before dispatch (attemptCount mismatch: expected ${delivery.attemptCount}, found ${currentClaim?.attemptCount})`);
+              continue;
+            }
+            if (currentClaim.lastAttemptAt && delivery.lastAttemptAt && new Date(currentClaim.lastAttemptAt).getTime() !== new Date(delivery.lastAttemptAt).getTime()) {
+              console.warn(`[Scheduler] Delivery ${delivery.id} lost ownership before dispatch (lastAttemptAt mismatch)`);
+              continue;
+            }
+          }
+        }
+
+        // Business eligibility recheck before dispatch
+        if (typeof db.obligation?.findUnique === 'function') {
+          const freshOb = await db.obligation.findUnique({
+            where: { id: ob.id },
+            select: { isActive: true, isArchived: true },
+          });
+          if (!freshOb || !freshOb.isActive || freshOb.isArchived) {
+            console.warn(`[Scheduler] Obligation ${ob.id} no longer eligible before dispatch`);
+            continue;
+          }
+        }
+        if (typeof db.obligationOccurrence?.findFirst === 'function') {
+          const completedOcc = await db.obligationOccurrence.findFirst({
+            where: {
+              obligationId: ob.id,
+              occurrenceKey: sched.occurrenceKey,
+              status: 'COMPLETED',
+            },
+            select: { id: true },
+          });
+          if (completedOcc) {
+            console.warn(`[Scheduler] Obligation ${ob.id} occurrence ${sched.occurrenceKey} already completed before dispatch`);
+            continue;
+          }
+        }
+
+        const preEligibility = shouldDeliverNow({
+          scheduledFor: sched.scheduledFor,
+          now: preDispatchTime,
+          snoozedUntil: delivery.snoozedUntil,
+          isStale: sched.isStale,
+          deliveryStatus: delivery.status as any,
+          attemptCount: (delivery.attemptCount || 1) - 1,
+          lastAttemptAt: delivery.lastAttemptAt ?? null,
+          nextRetryAt: delivery.nextRetryAt ?? null,
+        });
+        if (!preEligibility.shouldSend && !preEligibility.reason.includes('Retry')) {
+          console.warn(`[Scheduler] Delivery ${delivery.id} no longer eligible before dispatch: ${preEligibility.reason}`);
           continue;
         }
 
@@ -550,10 +623,11 @@ export async function processSchedulerTick(
             outboundTimeoutMs
           );
 
+          const sendFinishTime = getNow();
           const claimedAttemptCount = delivery.attemptCount || 1;
           const successState = evaluateDeliverySuccess({
             currentAttemptCount: claimedAttemptCount - 1,
-            sentAt: now,
+            sentAt: sendFinishTime,
           });
 
           const updateSuccessData = {
@@ -589,10 +663,11 @@ export async function processSchedulerTick(
           result.wealthRemindersSent++;
           console.log(`[Scheduler] Sent bill reminder ${ob.title} to user ${ob.user.id}`);
         } catch (sendErr: any) {
+          const sendFailTime = getNow();
           const claimedAttemptCount = delivery.attemptCount || 1;
           const failureState = evaluateDeliveryFailure({
             currentAttemptCount: claimedAttemptCount - 1,
-            failedAt: now,
+            failedAt: sendFailTime,
             failureReason: sendErr?.message || 'Send error',
           });
 
@@ -661,10 +736,12 @@ export async function processSchedulerTick(
           isArchived: debt.status === 'ARCHIVED',
         };
 
-        const schedules = calculateDeliverySchedules(target, now);
+        const schedules = calculateDeliverySchedules(target, getNow());
 
         for (const sched of schedules) {
           const claimOperation = async (tx: any) => {
+            const claimAcquisitionTime = getNow();
+
             if (typeof tx.$queryRaw === 'function') {
               try {
                 await tx.$queryRaw`SELECT id FROM "PersonalDebt" WHERE id = ${debt.id} FOR UPDATE`;
@@ -757,7 +834,7 @@ export async function processSchedulerTick(
               }
 
               const isDelClaimExpired = del.status === 'SENDING' &&
-                Boolean(del.lastAttemptAt && (now.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+                Boolean(del.lastAttemptAt && (claimAcquisitionTime.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
 
               if (del.status === 'SENDING' && !isDelClaimExpired) {
                 return null;
@@ -770,7 +847,7 @@ export async function processSchedulerTick(
                   data: {
                     status: 'FAILED',
                     nextRetryAt: null,
-                    lastAttemptAt: now,
+                    lastAttemptAt: claimAcquisitionTime,
                   },
                 });
                 return null;
@@ -778,7 +855,7 @@ export async function processSchedulerTick(
 
               const recheck = shouldDeliverNow({
                 scheduledFor: sched.scheduledFor,
-                now,
+                now: claimAcquisitionTime,
                 snoozedUntil: del.snoozedUntil,
                 isStale: sched.isStale,
                 deliveryStatus: del.status as any,
@@ -796,23 +873,23 @@ export async function processSchedulerTick(
                 return null;
               }
 
-              // SOL-R003-004: Increment attemptCount on renewal as fencing token
+              // SOL-R003-004 & SOL-R006-004: Increment attemptCount on renewal as fencing token with fresh acquisition time
               const nextAttemptCount = (del.attemptCount || 0) + 1;
               const updated = await tx.reminderDelivery.update({
                 where: { id: del.id },
                 data: {
                   status: 'SENDING',
                   attemptCount: nextAttemptCount,
-                  lastAttemptAt: now,
+                  lastAttemptAt: claimAcquisitionTime,
                 },
               });
               return updated;
             }
 
-            // SOL-R003-001: Evaluate shouldDeliverNow before creating new delivery claim
+            // SOL-R003-001: Evaluate shouldDeliverNow before creating new delivery claim using fresh acquisition time
             const newEligibility = shouldDeliverNow({
               scheduledFor: sched.scheduledFor,
-              now,
+              now: claimAcquisitionTime,
               snoozedUntil: null,
               isStale: sched.isStale,
               deliveryStatus: null,
@@ -834,7 +911,7 @@ export async function processSchedulerTick(
                 channel: 'TELEGRAM',
                 status: 'SENDING',
                 attemptCount: 1,
-                lastAttemptAt: now,
+                lastAttemptAt: claimAcquisitionTime,
               },
             });
             return del;
@@ -850,6 +927,71 @@ export async function processSchedulerTick(
           }
 
           if (!delivery) {
+            continue;
+          }
+
+          if (options?.beforeDispatch) {
+            await options.beforeDispatch(delivery);
+          }
+
+          // SOL-R006-004: Pre-dispatch lease and attempt ownership check
+          const preDispatchTime = getNow();
+          const leaseAgeMs = preDispatchTime.getTime() - new Date(delivery.lastAttemptAt).getTime();
+          if (leaseAgeMs >= LEASE_TIMEOUT_MS) {
+            console.warn(`[Scheduler] Debt delivery ${delivery.id} aborted before dispatch: lease expired (${leaseAgeMs}ms >= ${LEASE_TIMEOUT_MS}ms)`);
+            continue;
+          }
+
+          if (typeof db.reminderDelivery?.findUnique === 'function') {
+            const currentClaim = await db.reminderDelivery.findUnique({
+              where: { id: delivery.id },
+              select: { id: true, status: true, attemptCount: true, lastAttemptAt: true },
+            });
+            if (currentClaim) {
+              if (currentClaim.status !== 'SENDING' || currentClaim.attemptCount !== delivery.attemptCount) {
+                console.warn(`[Scheduler] Debt delivery ${delivery.id} lost ownership before dispatch (attemptCount mismatch: expected ${delivery.attemptCount}, found ${currentClaim?.attemptCount})`);
+                continue;
+              }
+              if (currentClaim.lastAttemptAt && delivery.lastAttemptAt && new Date(currentClaim.lastAttemptAt).getTime() !== new Date(delivery.lastAttemptAt).getTime()) {
+                console.warn(`[Scheduler] Debt delivery ${delivery.id} lost ownership before dispatch (lastAttemptAt mismatch)`);
+                continue;
+              }
+            }
+          }
+
+          // Business eligibility recheck before dispatch
+          if (typeof db.personalDebt?.findUnique === 'function') {
+            const freshDebt = await db.personalDebt.findUnique({
+              where: { id: debt.id },
+              include: { transactions: true },
+            });
+            if (!freshDebt || freshDebt.status !== 'OPEN') {
+              console.warn(`[Scheduler] Debt ${debt.id} no longer OPEN before dispatch`);
+              continue;
+            }
+            const currentOutstanding = calculateDebtOutstanding(
+              freshDebt.direction,
+              freshDebt.originalAmount,
+              freshDebt.transactions || []
+            );
+            if (currentOutstanding.lte(0)) {
+              console.warn(`[Scheduler] Debt ${debt.id} has no outstanding balance before dispatch`);
+              continue;
+            }
+          }
+
+          const preEligibility = shouldDeliverNow({
+            scheduledFor: sched.scheduledFor,
+            now: preDispatchTime,
+            snoozedUntil: delivery.snoozedUntil,
+            isStale: sched.isStale,
+            deliveryStatus: delivery.status as any,
+            attemptCount: (delivery.attemptCount || 1) - 1,
+            lastAttemptAt: delivery.lastAttemptAt ?? null,
+            nextRetryAt: delivery.nextRetryAt ?? null,
+          });
+          if (!preEligibility.shouldSend && !preEligibility.reason.includes('Retry')) {
+            console.warn(`[Scheduler] Debt delivery ${delivery.id} no longer eligible before dispatch: ${preEligibility.reason}`);
             continue;
           }
 
@@ -875,10 +1017,11 @@ export async function processSchedulerTick(
               outboundTimeoutMs
             );
 
+            const sendFinishTime = getNow();
             const claimedAttemptCount = delivery.attemptCount || 1;
             const successState = evaluateDeliverySuccess({
               currentAttemptCount: claimedAttemptCount - 1,
-              sentAt: now,
+              sentAt: sendFinishTime,
             });
 
             const updateSuccessData = {
@@ -914,10 +1057,11 @@ export async function processSchedulerTick(
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent debt reminder ${debt.id} to user ${debt.user.id}`);
           } catch (sendErr: any) {
+            const sendFailTime = getNow();
             const claimedAttemptCount = delivery.attemptCount || 1;
             const failureState = evaluateDeliveryFailure({
               currentAttemptCount: claimedAttemptCount - 1,
-              failedAt: now,
+              failedAt: sendFailTime,
               failureReason: sendErr?.message || 'Send error',
             });
 
@@ -946,7 +1090,7 @@ export async function processSchedulerTick(
               });
             }
             console.error(
-              `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for debt reminder ${debt.id}:`,
+              `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for reminder ${debt.id}:`,
               sendErr?.message
             );
           }
@@ -986,10 +1130,12 @@ export async function processSchedulerTick(
           isArchived: loan.status === 'ARCHIVED',
         };
 
-        const schedules = calculateDeliverySchedules(target, now);
+        const schedules = calculateDeliverySchedules(target, getNow());
 
         for (const sched of schedules) {
           const claimOperation = async (tx: any) => {
+            const claimAcquisitionTime = getNow();
+
             if (typeof tx.$queryRaw === 'function') {
               try {
                 await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loan.id} FOR UPDATE`;
@@ -1066,7 +1212,7 @@ export async function processSchedulerTick(
               }
 
               const isDelClaimExpired = del.status === 'SENDING' &&
-                Boolean(del.lastAttemptAt && (now.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+                Boolean(del.lastAttemptAt && (claimAcquisitionTime.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
 
               if (del.status === 'SENDING' && !isDelClaimExpired) {
                 return null;
@@ -1079,7 +1225,7 @@ export async function processSchedulerTick(
                   data: {
                     status: 'FAILED',
                     nextRetryAt: null,
-                    lastAttemptAt: now,
+                    lastAttemptAt: claimAcquisitionTime,
                   },
                 });
                 return null;
@@ -1087,7 +1233,7 @@ export async function processSchedulerTick(
 
               const recheck = shouldDeliverNow({
                 scheduledFor: sched.scheduledFor,
-                now,
+                now: claimAcquisitionTime,
                 snoozedUntil: del.snoozedUntil,
                 isStale: sched.isStale,
                 deliveryStatus: del.status as any,
@@ -1105,23 +1251,23 @@ export async function processSchedulerTick(
                 return null;
               }
 
-              // SOL-R003-004: Increment attemptCount on renewal as fencing token
+              // SOL-R003-004 & SOL-R006-004: Increment attemptCount on renewal as fencing token with fresh acquisition time
               const nextAttemptCount = (del.attemptCount || 0) + 1;
               const updated = await tx.reminderDelivery.update({
                 where: { id: del.id },
                 data: {
                   status: 'SENDING',
                   attemptCount: nextAttemptCount,
-                  lastAttemptAt: now,
+                  lastAttemptAt: claimAcquisitionTime,
                 },
               });
               return updated;
             }
 
-            // SOL-R003-001: Evaluate shouldDeliverNow before creating new delivery claim
+            // SOL-R003-001: Evaluate shouldDeliverNow before creating new delivery claim using fresh acquisition time
             const newEligibility = shouldDeliverNow({
               scheduledFor: sched.scheduledFor,
-              now,
+              now: claimAcquisitionTime,
               snoozedUntil: null,
               isStale: sched.isStale,
               deliveryStatus: null,
@@ -1143,7 +1289,7 @@ export async function processSchedulerTick(
                 channel: 'TELEGRAM',
                 status: 'SENDING',
                 attemptCount: 1,
-                lastAttemptAt: now,
+                lastAttemptAt: claimAcquisitionTime,
               },
             });
             return del;
@@ -1159,6 +1305,62 @@ export async function processSchedulerTick(
           }
 
           if (!delivery) {
+            continue;
+          }
+
+          if (options?.beforeDispatch) {
+            await options.beforeDispatch(delivery);
+          }
+
+          // SOL-R006-004: Pre-dispatch lease and attempt ownership check
+          const preDispatchTime = getNow();
+          const leaseAgeMs = preDispatchTime.getTime() - new Date(delivery.lastAttemptAt).getTime();
+          if (leaseAgeMs >= LEASE_TIMEOUT_MS) {
+            console.warn(`[Scheduler] Loan delivery ${delivery.id} aborted before dispatch: lease expired (${leaseAgeMs}ms >= ${LEASE_TIMEOUT_MS}ms)`);
+            continue;
+          }
+
+          if (typeof db.reminderDelivery?.findUnique === 'function') {
+            const currentClaim = await db.reminderDelivery.findUnique({
+              where: { id: delivery.id },
+              select: { id: true, status: true, attemptCount: true, lastAttemptAt: true },
+            });
+            if (currentClaim) {
+              if (currentClaim.status !== 'SENDING' || currentClaim.attemptCount !== delivery.attemptCount) {
+                console.warn(`[Scheduler] Loan delivery ${delivery.id} lost ownership before dispatch (attemptCount mismatch: expected ${delivery.attemptCount}, found ${currentClaim?.attemptCount})`);
+                continue;
+              }
+              if (currentClaim.lastAttemptAt && delivery.lastAttemptAt && new Date(currentClaim.lastAttemptAt).getTime() !== new Date(delivery.lastAttemptAt).getTime()) {
+                console.warn(`[Scheduler] Loan delivery ${delivery.id} lost ownership before dispatch (lastAttemptAt mismatch)`);
+                continue;
+              }
+            }
+          }
+
+          // Business eligibility recheck before dispatch
+          if (typeof db.loan?.findUnique === 'function') {
+            const freshLoan = await db.loan.findUnique({
+              where: { id: loan.id },
+              select: { status: true, isArchived: true, obligationId: true },
+            });
+            if (!freshLoan || freshLoan.status !== 'ACTIVE' || freshLoan.isArchived || freshLoan.obligationId) {
+              console.warn(`[Scheduler] Loan ${loan.id} no longer eligible before dispatch`);
+              continue;
+            }
+          }
+
+          const preEligibility = shouldDeliverNow({
+            scheduledFor: sched.scheduledFor,
+            now: preDispatchTime,
+            snoozedUntil: delivery.snoozedUntil,
+            isStale: sched.isStale,
+            deliveryStatus: delivery.status as any,
+            attemptCount: (delivery.attemptCount || 1) - 1,
+            lastAttemptAt: delivery.lastAttemptAt ?? null,
+            nextRetryAt: delivery.nextRetryAt ?? null,
+          });
+          if (!preEligibility.shouldSend && !preEligibility.reason.includes('Retry')) {
+            console.warn(`[Scheduler] Loan delivery ${delivery.id} no longer eligible before dispatch: ${preEligibility.reason}`);
             continue;
           }
 
@@ -1184,10 +1386,11 @@ export async function processSchedulerTick(
               outboundTimeoutMs
             );
 
+            const sendFinishTime = getNow();
             const claimedAttemptCount = delivery.attemptCount || 1;
             const successState = evaluateDeliverySuccess({
               currentAttemptCount: claimedAttemptCount - 1,
-              sentAt: now,
+              sentAt: sendFinishTime,
             });
 
             const updateSuccessData = {
@@ -1223,10 +1426,11 @@ export async function processSchedulerTick(
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent loan EMI reminder ${loan.id} to user ${loan.user.id}`);
           } catch (sendErr: any) {
+            const sendFailTime = getNow();
             const claimedAttemptCount = delivery.attemptCount || 1;
             const failureState = evaluateDeliveryFailure({
               currentAttemptCount: claimedAttemptCount - 1,
-              failedAt: now,
+              failedAt: sendFailTime,
               failureReason: sendErr?.message || 'Send error',
             });
 
@@ -1255,7 +1459,7 @@ export async function processSchedulerTick(
               });
             }
             console.error(
-              `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for loan EMI reminder ${loan.id}:`,
+              `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for reminder ${loan.id}:`,
               sendErr?.message
             );
           }

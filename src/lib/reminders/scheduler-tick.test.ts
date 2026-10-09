@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { processSchedulerTick } from '../scheduler';
+import { formatOccurrenceKey } from './delivery-engine';
 import { Prisma } from '../../../prisma/generated/client';
 
 function createMockBot() {
@@ -1622,4 +1623,396 @@ test('SOL-R006-004: Bounded outbound send timeout preventing dual-tick duplicate
   assert.equal(responsiveMockBot.sentMessages.length, 1, 'Exactly one message dispatched on retry');
   assert.equal(deliveryRecord.status, 'SENT');
   assert.equal(deliveryRecord.attemptCount, 2, 'attemptCount incremented to 2 on retry');
+});
+
+// ============================================================================
+// SOL-R006-004: Concurrency, Lease Aging & Pre-Dispatch Fencing Tests
+// ============================================================================
+
+function createSharedMemoryStore() {
+  const deliveries: any[] = [];
+  const obligations: any[] = [];
+  const debts: any[] = [];
+  const loans: any[] = [];
+  const occurrences: any[] = [];
+  const reminders: any[] = [];
+
+  const db = {
+    reminder: {
+      findMany: async () => [],
+      findFirst: async (args: any) => reminders.find(r =>
+        (!args?.where?.id || r.id === args.where.id) &&
+        (!args?.where?.obligationId || r.obligationId === args.where.obligationId) &&
+        (!args?.where?.category || r.category === args.where.category)
+      ) || null,
+      create: async (args: any) => {
+        const item = { id: `rem-${reminders.length + 1}`, ...args.data };
+        reminders.push(item);
+        return item;
+      },
+    },
+    hydrationSetting: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: {
+      findMany: async () => obligations,
+      findUnique: async (args: any) => obligations.find(o => o.id === args.where.id) || null,
+    },
+    obligationOccurrence: {
+      findFirst: async (args: any) => occurrences.find(o =>
+        o.obligationId === args.where?.obligationId &&
+        (!args.where?.occurrenceKey || o.occurrenceKey === args.where.occurrenceKey) &&
+        (!args.where?.status || o.status === args.where.status)
+      ) || null,
+    },
+    personalDebt: {
+      findMany: async () => debts,
+      findUnique: async (args: any) => debts.find(d => d.id === args.where.id) || null,
+    },
+    loan: {
+      findMany: async () => loans,
+      findUnique: async (args: any) => loans.find(l => l.id === args.where.id) || null,
+    },
+    reminderDelivery: {
+      findUnique: async (args: any) => deliveries.find(d => d.id === args.where.id) || null,
+      findFirst: async (args: any) => deliveries.find(d => {
+        if (args.where?.id && d.id !== args.where.id) return false;
+        if (args.where?.obligationId && d.obligationId !== args.where.obligationId) return false;
+        if (args.where?.occurrenceKey && d.occurrenceKey !== args.where.occurrenceKey) return false;
+        if (args.where?.offsetMinutes !== undefined && d.offsetMinutes !== args.where.offsetMinutes) return false;
+        if (args.where?.channel && d.channel !== args.where.channel) return false;
+        if (args.where?.reminderId && d.reminderId !== args.where.reminderId) return false;
+        return true;
+      }) || null,
+      create: async (args: any) => {
+        const item = { id: `del-${deliveries.length + 1}`, ...args.data };
+        deliveries.push(item);
+        return item;
+      },
+      update: async (args: any) => {
+        const idx = deliveries.findIndex(d => d.id === args.where.id);
+        if (idx >= 0) {
+          deliveries[idx] = { ...deliveries[idx], ...args.data };
+          return deliveries[idx];
+        }
+        return null;
+      },
+      updateMany: async (args: any) => {
+        let count = 0;
+        for (let i = 0; i < deliveries.length; i++) {
+          const d = deliveries[i];
+          if (args.where.id && d.id !== args.where.id) continue;
+          if (args.where.status && d.status !== args.where.status) continue;
+          if (args.where.attemptCount !== undefined && d.attemptCount !== args.where.attemptCount) continue;
+          if (args.where.lastAttemptAt && (!d.lastAttemptAt || new Date(d.lastAttemptAt).getTime() !== new Date(args.where.lastAttemptAt).getTime())) continue;
+          deliveries[i] = { ...d, ...args.data };
+          count++;
+        }
+        return { count };
+      },
+    },
+    $transaction: async (fn: any) => fn(db),
+  };
+
+  return { db, deliveries, obligations, debts, loans, occurrences, reminders };
+}
+
+test('SOL-R006-004-R1: Multiple obligations queued during slow tick acquire fresh lease timestamps preventing duplicate dispatch', async () => {
+  const store = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+  let currentTime = new Date(startTime);
+
+  // Setup 13 due obligations
+  for (let i = 1; i <= 13; i++) {
+    store.obligations.push({
+      id: `ob-${i}`,
+      userId: `usr-${i}`,
+      title: `Bill ${i}`,
+      kind: 'BILL',
+      amount: new Prisma.Decimal('500.00'),
+      nextDueAt: startTime,
+      reminderOffsetsMin: [0],
+      isActive: true,
+      isArchived: false,
+      user: { id: `usr-${i}`, telegramId: `tg-${i}`, timezone: 'UTC' },
+      reminders: [],
+    });
+  }
+
+  const botA = {
+    sentMessages: [] as any[],
+    api: {
+      sendMessage: async (chatId: string, text: string) => {
+        botA.sentMessages.push({ chatId, text, time: new Date(currentTime) });
+        // Model slow send: advance clock by 30 seconds for each send
+        currentTime = new Date(currentTime.getTime() + 30 * 1000);
+        return { message_id: 1000 + botA.sentMessages.length };
+      },
+    },
+  };
+
+  // Run Tick A with injectable clock
+  const resTickA = await processSchedulerTick({
+    prismaClient: store.db as any,
+    botClient: botA,
+    clock: () => currentTime,
+  });
+
+  assert.equal(resTickA.wealthRemindersSent, 13, 'Tick A must send all 13 obligations');
+  assert.equal(botA.sentMessages.length, 13);
+
+  // The 13th obligation was processed after 12 * 30s = 360s (09:06:00)
+  const delivery13 = store.deliveries.find(d => d.obligationId === 'ob-13');
+  assert.ok(delivery13);
+  // Key invariant: lastAttemptAt must be fresh acquisition time (>= 09:06:00), NOT tick start 09:00:00!
+  assert.ok(
+    new Date(delivery13.lastAttemptAt).getTime() >= startTime.getTime() + 360 * 1000,
+    `Delivery 13 lastAttemptAt (${delivery13.lastAttemptAt}) must reflect queue progression, not tick-start time`
+  );
+
+  // Run Tick B right after Tick A finishes against the same store
+  const botB = createMockBot();
+  const resTickB = await processSchedulerTick({
+    prismaClient: store.db as any,
+    botClient: botB,
+    clock: () => currentTime,
+  });
+
+  assert.equal(resTickB.wealthRemindersSent, 0, 'Tick B must send 0 duplicates because all leases are either SENT or non-expired');
+  assert.equal(botB.sentMessages.length, 0, 'No overlapping Telegram calls from Tick B');
+});
+
+test('SOL-R006-004-R2: Later queued debt/loan messages acquire fresh lease timestamps and prevent dual dispatch', async () => {
+  // Test with Debts
+  const debtStore = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+  let debtCurrentTime = new Date(startTime);
+
+  for (let i = 1; i <= 13; i++) {
+    debtStore.debts.push({
+      id: `debt-${i}`,
+      userId: `usr-debt-${i}`,
+      counterpartyName: `Friend ${i}`,
+      direction: 'RECEIVABLE',
+      originalAmount: new Prisma.Decimal('1000.00'),
+      dueAt: startTime,
+      reminderOffsetsMin: [0],
+      status: 'OPEN',
+      user: { id: `usr-debt-${i}`, telegramId: `tg-debt-${i}`, timezone: 'UTC' },
+      transactions: [],
+    });
+  }
+
+  const debtBot = {
+    sentMessages: [] as any[],
+    api: {
+      sendMessage: async (chatId: string, text: string) => {
+        debtBot.sentMessages.push({ chatId, text });
+        debtCurrentTime = new Date(debtCurrentTime.getTime() + 30 * 1000);
+        return { message_id: 2000 + debtBot.sentMessages.length };
+      },
+    },
+  };
+
+  const resDebt = await processSchedulerTick({
+    prismaClient: debtStore.db as any,
+    botClient: debtBot,
+    clock: () => debtCurrentTime,
+  });
+
+  assert.equal(resDebt.wealthRemindersSent, 13);
+  const debtDel13 = debtStore.deliveries.find(d => d.occurrenceKey.startsWith('2026-10-15') && d.userId === 'usr-debt-13');
+  assert.ok(debtDel13);
+  assert.ok(new Date(debtDel13.lastAttemptAt).getTime() >= startTime.getTime() + 360 * 1000);
+
+  // Test with Loans
+  const loanStore = createSharedMemoryStore();
+  let loanCurrentTime = new Date(startTime);
+
+  for (let i = 1; i <= 13; i++) {
+    loanStore.loans.push({
+      id: `loan-${i}`,
+      userId: `usr-loan-${i}`,
+      name: `Home Loan ${i}`,
+      lender: 'HDFC',
+      emiAmount: new Prisma.Decimal('15000.00'),
+      nextEmiDate: startTime,
+      status: 'ACTIVE',
+      obligationId: null,
+      user: { id: `usr-loan-${i}`, telegramId: `tg-loan-${i}`, timezone: 'UTC' },
+    });
+  }
+
+  const loanBot = {
+    sentMessages: [] as any[],
+    api: {
+      sendMessage: async (chatId: string, text: string) => {
+        loanBot.sentMessages.push({ chatId, text });
+        loanCurrentTime = new Date(loanCurrentTime.getTime() + 30 * 1000);
+        return { message_id: 3000 + loanBot.sentMessages.length };
+      },
+    },
+  };
+
+  const resLoan = await processSchedulerTick({
+    prismaClient: loanStore.db as any,
+    botClient: loanBot,
+    clock: () => loanCurrentTime,
+  });
+
+  assert.equal(resLoan.wealthRemindersSent, 13);
+  const loanDel13 = loanStore.deliveries.find(d => d.occurrenceKey.startsWith('2026-10-15') && d.userId === 'usr-loan-13');
+  assert.ok(loanDel13);
+  assert.ok(new Date(loanDel13.lastAttemptAt).getTime() >= startTime.getTime() + 360 * 1000);
+});
+
+test('SOL-R006-004-R3: Pre-dispatch lease expiration check suppresses dispatch when queue aging exceeds lease duration', async () => {
+  const store = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+  let currentTime = new Date(startTime);
+
+  store.obligations.push({
+    id: 'ob-pause-test',
+    userId: 'usr-pause',
+    title: 'Paused Delivery Bill',
+    kind: 'BILL',
+    amount: new Prisma.Decimal('999.00'),
+    nextDueAt: startTime,
+    reminderOffsetsMin: [0],
+    isActive: true,
+    isArchived: false,
+    user: { id: 'usr-pause', telegramId: 'tg-pause', timezone: 'UTC' },
+    reminders: [],
+  });
+
+  const mockBot = createMockBot();
+
+  // Simulate a delay after claim acquisition that exceeds LEASE_TIMEOUT_MS (5 min = 300s)
+  const res = await processSchedulerTick({
+    prismaClient: store.db as any,
+    botClient: mockBot,
+    clock: () => currentTime,
+    beforeDispatch: async () => {
+      // Simulate 6-minute delay before dispatch
+      currentTime = new Date(currentTime.getTime() + 360 * 1000);
+    },
+  });
+
+  assert.equal(res.wealthRemindersSent, 0, 'Must NOT send message if lease expired before dispatch');
+  assert.equal(mockBot.sentMessages.length, 0, 'Outbound Telegram send must be prevented');
+});
+
+test('SOL-R006-004-R4: Pre-dispatch ownership fencing suppresses stale worker when another tick reclaimed delivery', async () => {
+  const store = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+  let currentTime = new Date(startTime);
+
+  store.obligations.push({
+    id: 'ob-reclaim-test',
+    userId: 'usr-reclaim',
+    title: 'Reclaim Test Bill',
+    kind: 'BILL',
+    amount: new Prisma.Decimal('1500.00'),
+    nextDueAt: startTime,
+    reminderOffsetsMin: [0],
+    isActive: true,
+    isArchived: false,
+    user: { id: 'usr-reclaim', telegramId: 'tg-reclaim', timezone: 'UTC' },
+    reminders: [],
+  });
+
+  const staleBot = createMockBot();
+
+  const res = await processSchedulerTick({
+    prismaClient: store.db as any,
+    botClient: staleBot,
+    clock: () => currentTime,
+    beforeDispatch: async (delivery) => {
+      // Simulate another worker / tick recovering the claim during delay
+      await store.db.reminderDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          attemptCount: 2, // Reclaimed with incremented attemptCount
+          lastAttemptAt: new Date(currentTime.getTime() + 60 * 1000),
+        },
+      });
+    },
+  });
+
+  assert.equal(res.wealthRemindersSent, 0, 'Stale worker must detect ownership loss and not count as sent');
+  assert.equal(staleBot.sentMessages.length, 0, 'Stale worker must NOT invoke outbound sendMessage');
+});
+
+test('SOL-R006-004-R5: Stale completion update is fenced out if newer attempt exists in DB', async () => {
+  const store = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+
+  // Pre-seed a delivery in DB that was already bumped to attemptCount: 2 by a recovery worker
+  const existingDelivery = {
+    id: 'del-fenced-completion',
+    obligationId: 'ob-fenced',
+    occurrenceKey: '2026-10-15',
+    offsetMinutes: 0,
+    channel: 'TELEGRAM',
+    status: 'SENDING',
+    attemptCount: 2,
+    lastAttemptAt: new Date(startTime.getTime() + 60 * 1000),
+  };
+  store.deliveries.push(existingDelivery);
+
+  // An old worker (attemptCount: 1) tries to complete its previous attempt
+  const updateRes = await store.db.reminderDelivery.updateMany({
+    where: {
+      id: existingDelivery.id,
+      status: 'SENDING',
+      attemptCount: 1, // Stale token!
+      lastAttemptAt: startTime,
+    },
+    data: {
+      status: 'SENT',
+      telegramMessageId: 9999,
+    },
+  });
+
+  assert.equal(updateRes.count, 0, 'Stale completion update must match 0 rows (fenced out)');
+  assert.equal(existingDelivery.status, 'SENDING', 'Database status must not be overwritten by stale attempt');
+  assert.equal(existingDelivery.attemptCount, 2, 'attemptCount remains 2');
+});
+
+test('SOL-R006-004-R6: Pre-dispatch business eligibility recheck suppresses dispatch if target became completed', async () => {
+  const store = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+
+  store.obligations.push({
+    id: 'ob-eligible-check',
+    userId: 'usr-paid',
+    title: 'Paid During Queue Bill',
+    kind: 'BILL',
+    amount: new Prisma.Decimal('2000.00'),
+    nextDueAt: startTime,
+    reminderOffsetsMin: [0],
+    isActive: true,
+    isArchived: false,
+    user: { id: 'usr-paid', telegramId: 'tg-paid', timezone: 'UTC' },
+    reminders: [],
+  });
+
+  const mockBot = createMockBot();
+
+  const res = await processSchedulerTick({
+    prismaClient: store.db as any,
+    botClient: mockBot,
+    clock: () => startTime,
+    beforeDispatch: async () => {
+      // Simulate user marking the bill paid before dispatch
+      store.occurrences.push({
+        id: 'occ-completed-in-flight',
+        obligationId: 'ob-eligible-check',
+        occurrenceKey: formatOccurrenceKey(startTime),
+        status: 'COMPLETED',
+      });
+    },
+  });
+
+  assert.equal(res.wealthRemindersSent, 0, 'Must suppress reminder if bill was completed before dispatch');
+  assert.equal(mockBot.sentMessages.length, 0, 'No Telegram message dispatched for completed bill');
 });

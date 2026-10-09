@@ -37,7 +37,7 @@
 ## 3. Worker A Scheduler & Timeout Validation (Requirement 5)
 - **Timeout Lifetime**:
   - Implemented `sendTelegramMessageWithTimeout` with `OUTBOUND_SEND_TIMEOUT_MS = 30_000` (30 seconds) and `AbortSignal`.
-  - Guaranteed outbound HTTP requests abort well before the 5-minute crash recovery lease timeout (`LEASE_TIMEOUT_MS = 300_000ms`), preventing dual-tick duplicate sends while slow network requests are pending.
+  - Outbound HTTP requests are bounded by a 30-second timeout (`OUTBOUND_SEND_TIMEOUT_MS = 30_000ms`) via `AbortSignal`, well before the 5-minute crash recovery lease timeout (`LEASE_TIMEOUT_MS = 300_000ms`). Combined with fresh claim acquisition timestamps and pre-dispatch ownership checks, this ensures queued sends do not start with expired leases or overlap with subsequent scheduler ticks. Note that external Telegram delivery guarantees remain at-least-once due to provider limitations.
 - **Lease Exclusivity & Eligibility Separation (SOL-R006-002)**:
   - Separated lease renewal from business delivery eligibility in [`src/lib/scheduler.ts`](file:///home/openclaw/Projects/NutriSnap-staging-v0.3/src/lib/scheduler.ts).
   - Business eligibility recheck strictly suppresses stale occurrences (> 7 days past due) upon lease expiration instead of resending.

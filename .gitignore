@@ -49,3 +49,4 @@ tsconfig.tsbuildinfo
 
 # Agent orchestration runtime
 .cbds/
+/artifacts/
