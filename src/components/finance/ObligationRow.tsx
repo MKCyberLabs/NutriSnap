@@ -15,6 +15,7 @@ import {
   Trash2,
   Pause,
   Play,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -60,6 +61,7 @@ interface ObligationRowProps {
   onToggleActive?: (id: string, active: boolean) => Promise<any>;
   onDelete?: (id: string) => Promise<any>;
   onArchive?: (id: string) => void;
+  onEdit?: (obligation: any) => void;
 }
 
 export function ObligationRow({
@@ -71,6 +73,7 @@ export function ObligationRow({
   onToggleActive,
   onDelete,
   onArchive,
+  onEdit,
 }: ObligationRowProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [createExpense, setCreateExpense] = useState(true);
@@ -281,6 +284,19 @@ export function ObligationRow({
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
+          {onEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={submitting}
+              onClick={() => onEdit(obligation)}
+              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+              title="Edit obligation"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+
           {onToggleActive && (
             <Button
               variant="ghost"

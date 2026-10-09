@@ -8,13 +8,16 @@ import {
   parseAndValidateAmount,
   validateTransferInvariants,
   calculateAccountBalance,
+  calculateCreditCardUsage,
   calculateMonthlyTotals,
   calculateCategoryBreakdown,
   calculateDebtOutstanding,
   Decimal
 } from '@/lib/finance/finance';
 import { getNextOccurrence, getOccurrenceKey, RecurrenceRule } from '@/lib/recurrence/recurrence';
+import { TZDate } from '@date-fns/tz';
 import { recordEmiPayment, revertEmiPayment } from './loan-service';
+import { recordCreditCardPayment, revertCreditCardPayment } from './credit-card-service';
 
 export const createAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -121,6 +124,10 @@ export async function getAccounts(userId: string, db: PrismaClientLike = default
     ];
 
     const currentBalance = calculateAccountBalance(acc.openingBalance, allTx, acc.id);
+    const isCreditCard = acc.type === 'CREDIT_CARD';
+    const ccUsage = isCreditCard
+      ? calculateCreditCardUsage(acc.openingBalance, allTx, acc.id, acc.creditLimit)
+      : null;
 
     return {
       id: acc.id,
@@ -130,6 +137,8 @@ export async function getAccounts(userId: string, db: PrismaClientLike = default
       openingBalance: acc.openingBalance.toString(),
       currentBalance: currentBalance.toString(),
       creditLimit: acc.creditLimit ? acc.creditLimit.toString() : null,
+      amountUsed: ccUsage ? ccUsage.amountUsed.toString() : null,
+      availableCredit: ccUsage && ccUsage.availableCredit ? ccUsage.availableCredit.toString() : null,
       statementDay: acc.statementDay,
       paymentDueDay: acc.paymentDueDay,
       defaultPaymentAccountId: acc.defaultPaymentAccountId,
@@ -146,6 +155,21 @@ export async function getAccounts(userId: string, db: PrismaClientLike = default
 export async function createAccount(userId: string, data: unknown, db: PrismaClientLike = defaultPrisma) {
   if (!userId) throw new Error('Unauthorized: missing userId');
   const parsed = createAccountSchema.parse(data);
+
+  const defaultPaymentAccountId =
+    parsed.defaultPaymentAccountId && parsed.defaultPaymentAccountId.trim() !== ''
+      ? parsed.defaultPaymentAccountId.trim()
+      : null;
+
+  if (defaultPaymentAccountId) {
+    const defAcc = await db.financialAccount.findUnique({
+      where: { id: defaultPaymentAccountId },
+      select: { userId: true, type: true }
+    });
+    if (!defAcc || defAcc.userId !== userId || !['BANK', 'CASH', 'WALLET'].includes(defAcc.type)) {
+      throw new Error('Default payment account not found or unauthorized');
+    }
+  }
 
   const openingBalanceDecimal = parsed.openingBalance
     ? new Decimal(parsed.openingBalance.toString())
@@ -165,7 +189,7 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
       creditLimit: creditLimitDecimal,
       statementDay: parsed.statementDay ?? null,
       paymentDueDay: parsed.paymentDueDay ?? null,
-      defaultPaymentAccountId: parsed.defaultPaymentAccountId ?? null,
+      defaultPaymentAccountId,
       isActive: true,
     }
   });
@@ -179,6 +203,7 @@ export async function createAccount(userId: string, data: unknown, db: PrismaCli
       openingBalance: account.openingBalance.toString(),
       statementDay: account.statementDay,
       paymentDueDay: account.paymentDueDay,
+      defaultPaymentAccountId: account.defaultPaymentAccountId,
     }
   };
 }
@@ -214,7 +239,24 @@ export async function updateAccount(
   }
   if (parsed.statementDay !== undefined) updateData.statementDay = parsed.statementDay;
   if (parsed.paymentDueDay !== undefined) updateData.paymentDueDay = parsed.paymentDueDay;
-  if (parsed.defaultPaymentAccountId !== undefined) updateData.defaultPaymentAccountId = parsed.defaultPaymentAccountId;
+  if (parsed.defaultPaymentAccountId !== undefined) {
+    if (parsed.defaultPaymentAccountId !== null && parsed.defaultPaymentAccountId.trim() !== '') {
+      const defId = parsed.defaultPaymentAccountId.trim();
+      if (defId === accountId) {
+        throw new Error('Default payment account not found or unauthorized');
+      }
+      const defAcc = await db.financialAccount.findUnique({
+        where: { id: defId },
+        select: { userId: true, type: true }
+      });
+      if (!defAcc || defAcc.userId !== userId || !['BANK', 'CASH', 'WALLET'].includes(defAcc.type)) {
+        throw new Error('Default payment account not found or unauthorized');
+      }
+      updateData.defaultPaymentAccountId = defId;
+    } else {
+      updateData.defaultPaymentAccountId = null;
+    }
+  }
   if (parsed.isActive !== undefined) updateData.isActive = parsed.isActive;
 
   // V2-1002 / V2-Q002: openingBalance editable ONLY when account has zero posted transactions
@@ -322,6 +364,10 @@ export async function getTransactions(
       account: { select: { id: true, name: true, type: true } },
       transferAccount: { select: { id: true, name: true, type: true } },
       obligation: { select: { id: true, title: true, kind: true } },
+      obligationOccurrence: { select: { id: true } },
+      loanPayment: { select: { id: true } },
+      wishlistItem: { select: { id: true } },
+      creditCardPayment: { select: { id: true } },
     }
   });
 
@@ -331,9 +377,23 @@ export async function getTransactions(
     amount: t.amount.toString(),
     category: t.category,
     occurredAt: t.occurredAt.toISOString(),
+    accountId: t.accountId,
+    transferAccountId: t.transferAccountId,
     account: t.account,
     transferAccount: t.transferAccount,
     obligation: t.obligation,
+    personalDebtId: t.personalDebtId,
+    obligationOccurrence: t.obligationOccurrence,
+    loanPayment: t.loanPayment,
+    wishlistItem: t.wishlistItem,
+    creditCardPayment: t.creditCardPayment,
+    isSystemManaged: Boolean(
+      t.obligationOccurrence ||
+      t.loanPayment ||
+      t.wishlistItem ||
+      t.creditCardPayment ||
+      t.personalDebtId
+    ),
     note: t.note,
     createdAt: t.createdAt.toISOString(),
   }));
@@ -867,6 +927,19 @@ export interface ObligationItem {
   notes: string | null;
   lastCompletedAt: string | null;
   nextDueAt: string;
+  loanId: string | null;
+  linkedLoanName: string | null;
+  loan?: { id: string; name: string } | null;
+  isCreditCardStatement?: boolean;
+  creditCardStatement?: {
+    id: string;
+    periodKey: string;
+    status: string;
+    statementAmount: string | null;
+    dueDate: string | null;
+    accountId: string;
+    accountName?: string;
+  } | null;
 }
 
 /**
@@ -883,6 +956,18 @@ export async function getObligations(
     orderBy: { nextDueAt: 'asc' },
     include: {
       account: { select: { id: true, name: true } },
+      loan: { select: { id: true, name: true, emiAmount: true, nextEmiDate: true, dueDay: true } },
+      creditCardStatements: {
+        select: {
+          id: true,
+          periodKey: true,
+          status: true,
+          statementAmount: true,
+          dueDate: true,
+          accountId: true,
+          account: { select: { id: true, name: true } },
+        }
+      },
       occurrences: {
         orderBy: { dueDate: 'desc' },
         take: 5,
@@ -890,21 +975,37 @@ export async function getObligations(
     }
   });
 
-  return obligations.map((ob: any) => ({
-    id: ob.id,
-    title: ob.title,
-    kind: ob.kind,
-    amount: ob.amount ? ob.amount.toString() : null,
-    account: ob.account,
-    dueAt: ob.dueAt.toISOString(),
-    recurrenceType: ob.recurrenceType,
-    recurrenceInterval: ob.recurrenceInterval,
-    reminderOffsetsMin: ob.reminderOffsetsMin,
-    isActive: ob.isActive,
-    notes: ob.notes,
-    lastCompletedAt: ob.lastCompletedAt ? ob.lastCompletedAt.toISOString() : null,
-    nextDueAt: ob.nextDueAt.toISOString(),
-  }));
+  return obligations.map((ob: any) => {
+    const ccStmt = ob.creditCardStatements && ob.creditCardStatements.length > 0 ? ob.creditCardStatements[0] : null;
+    return {
+      id: ob.id,
+      title: ob.title,
+      kind: ob.kind,
+      amount: ob.amount ? ob.amount.toString() : null,
+      account: ob.account,
+      dueAt: ob.dueAt.toISOString(),
+      recurrenceType: ob.recurrenceType,
+      recurrenceInterval: ob.recurrenceInterval,
+      reminderOffsetsMin: ob.reminderOffsetsMin,
+      isActive: ob.isActive,
+      notes: ob.notes,
+      lastCompletedAt: ob.lastCompletedAt ? ob.lastCompletedAt.toISOString() : null,
+      nextDueAt: ob.nextDueAt.toISOString(),
+      loanId: ob.loan?.id || null,
+      linkedLoanName: ob.loan?.name || null,
+      loan: ob.loan ? { id: ob.loan.id, name: ob.loan.name } : null,
+      isCreditCardStatement: Boolean(ccStmt),
+      creditCardStatement: ccStmt ? {
+        id: ccStmt.id,
+        periodKey: ccStmt.periodKey,
+        status: ccStmt.status,
+        statementAmount: ccStmt.statementAmount ? ccStmt.statementAmount.toString() : null,
+        dueDate: ccStmt.dueDate ? ccStmt.dueDate.toISOString() : null,
+        accountId: ccStmt.accountId,
+        accountName: ccStmt.account?.name,
+      } : null,
+    };
+  });
 }
 
 /**
@@ -924,14 +1025,19 @@ export async function createObligation(userId: string, data: unknown, db: Prisma
     }
   }
 
-  const dueAtDate = new Date(parsed.dueAt);
-  const amountDecimal = parsed.amount ? parseAndValidateAmount(parsed.amount.toString()) : null;
-
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { timezone: true }
   });
   const tz = user?.timezone || 'UTC';
+
+  const dueAtDate = typeof parsed.dueAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueAt.trim())
+    ? (() => {
+        const [y, m, d] = parsed.dueAt.trim().split('-').map(Number);
+        return new Date(new TZDate(y, m - 1, d, 12, 0, 0, 0, tz).getTime());
+      })()
+    : new Date(parsed.dueAt);
+  const amountDecimal = parsed.amount ? parseAndValidateAmount(parsed.amount.toString()) : null;
 
   const rule: RecurrenceRule = {
     type: parsed.recurrenceType,
@@ -994,11 +1100,42 @@ export async function updateObligation(
       recurrenceType: true,
       recurrenceInterval: true,
       nextDueAt: true,
+      loan: { select: { id: true, name: true } },
+      creditCardStatements: { select: { id: true } },
+      user: { select: { timezone: true } },
     }
   });
 
   if (!obligation || obligation.userId !== userId) {
     throw new Error('Obligation not found or unauthorized');
+  }
+
+  // SOL-R001-006: Protect credit card statement obligations
+  if (
+    obligation.creditCardStatements &&
+    obligation.creditCardStatements.length > 0 &&
+    (parsed.amount !== undefined ||
+      parsed.dueAt !== undefined ||
+      parsed.nextDueAt !== undefined ||
+      parsed.recurrenceType !== undefined ||
+      parsed.recurrenceInterval !== undefined)
+  ) {
+    throw new Error(
+      'Credit card statement obligations must be managed through the Credit Card statement workflow'
+    );
+  }
+
+  if (
+    obligation.loan &&
+    (parsed.amount !== undefined ||
+      parsed.dueAt !== undefined ||
+      parsed.nextDueAt !== undefined ||
+      parsed.recurrenceType !== undefined ||
+      parsed.recurrenceInterval !== undefined)
+  ) {
+    throw new Error(
+      'Linked loan obligations must be updated through the Loan manager to maintain schedule consistency'
+    );
   }
 
   const updateData: any = {};
@@ -1032,17 +1169,25 @@ export async function updateObligation(
   let targetRecurrenceType = obligation.recurrenceType;
   let targetRecurrenceInterval = obligation.recurrenceInterval;
 
-  if (parsed.dueAt !== undefined) {
-    targetDueAt = new Date(parsed.dueAt);
+  // Finding 4: Do NOT overwrite dueAt on edit unless anchor was explicitly changed
+  const anchorExplicitlyChanged = parsed.dueAt !== undefined && new Date(parsed.dueAt).getTime() !== obligation.dueAt.getTime();
+  if (anchorExplicitlyChanged) {
+    const userTz = obligation.user?.timezone || 'UTC';
+    targetDueAt = typeof parsed.dueAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueAt.trim())
+      ? (() => {
+          const [y, m, d] = parsed.dueAt.trim().split('-').map(Number);
+          return new Date(new TZDate(y, m - 1, d, 12, 0, 0, 0, userTz).getTime());
+        })()
+      : new Date(parsed.dueAt!);
     updateData.dueAt = targetDueAt;
     scheduleChanged = true;
   }
-  if (parsed.recurrenceType !== undefined) {
+  if (parsed.recurrenceType !== undefined && parsed.recurrenceType !== obligation.recurrenceType) {
     targetRecurrenceType = parsed.recurrenceType;
     updateData.recurrenceType = parsed.recurrenceType;
     scheduleChanged = true;
   }
-  if (parsed.recurrenceInterval !== undefined) {
+  if (parsed.recurrenceInterval !== undefined && parsed.recurrenceInterval !== obligation.recurrenceInterval) {
     targetRecurrenceInterval = parsed.recurrenceInterval;
     updateData.recurrenceInterval = parsed.recurrenceInterval;
     scheduleChanged = true;
@@ -1275,50 +1420,278 @@ export async function markObligationPaid(
     throw new Error('Invalid occurrence key format: must be YYYY-MM-DD or YYYY-MM-DDTHH:mm');
   }
 
-  // 2. Load obligation & check ownership
+  // 2. Load obligation & check ownership (including creditCardStatements)
   const obligation = await db.obligation.findUnique({
     where: { id: obligationId },
-    include: { account: true, loan: true }
+    include: {
+      account: true,
+      loan: true,
+      creditCardStatements: {
+        include: {
+          account: true,
+          payments: true,
+        }
+      }
+    }
   });
 
   if (!obligation || obligation.userId !== userId) {
     throw new Error('Obligation not found or unauthorized');
   }
 
-  // 3. Check if occurrence is already completed (idempotency check)
-  const existingCompletion = await db.obligationOccurrence.findUnique({
-    where: {
-      obligationId_occurrenceKey: {
-        obligationId,
-        occurrenceKey,
-      }
-    },
-    include: { transaction: true }
-  });
-
-  if (existingCompletion) {
-    return {
-      success: true,
-      alreadyCompleted: true,
-      occurrenceId: existingCompletion.id,
-      transactionId: existingCompletion.transactionId,
-      nextDueAt: obligation.nextDueAt.toISOString(),
-    };
-  }
-
-  // 4. User timezone for recurrence
+  // 3. User timezone for canonical occurrence key & recurrence
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { timezone: true }
   });
   const tz = user?.timezone || 'UTC';
 
-  const expectedKey = getOccurrenceKey(obligation.nextDueAt, tz);
-  const isCurrentOccurrence = occurrenceKey === expectedKey || occurrenceKey === expectedKey.substring(0, 10);
+  // SOL-R001-007: Canonicalize occurrence key using user timezone
+  const canonicalActiveKey = getOccurrenceKey(obligation.nextDueAt, tz);
+  const utcKey = getOccurrenceKey(obligation.nextDueAt, 'UTC');
+
+  const isCurrentOccurrence =
+    occurrenceKey === canonicalActiveKey ||
+    occurrenceKey === canonicalActiveKey.substring(0, 10) ||
+    occurrenceKey === utcKey ||
+    occurrenceKey === utcKey.substring(0, 10);
+
+  // If caller provided a timestamp with time (e.g. from scheduler UTC payload), canonicalize to user timezone;
+  // If caller provided a date-only key (e.g. YYYY-MM-DD), preserve the caller's date key format.
+  let canonicalKey = occurrenceKey;
+  if (occurrenceKey.includes('T')) {
+    if (occurrenceKey === utcKey || isCurrentOccurrence) {
+      canonicalKey = canonicalActiveKey;
+    }
+  }
+
+  const candidateKeys = Array.from(new Set([
+    occurrenceKey,
+    canonicalKey,
+    canonicalActiveKey,
+    utcKey,
+    canonicalActiveKey.substring(0, 10),
+    utcKey.substring(0, 10)
+  ]));
+
+  // 4. Check if occurrence is already completed (idempotency check)
+  let existingCompletion: any = null;
+
+  // SOL-R001-007: Search all existing completions for this obligation to identify if the supplied occurrenceKey
+  // (UTC, local, or date-only alias) corresponds to an already completed occurrence, ensuring idempotent retries across timezones.
+  if (typeof db.obligationOccurrence?.findMany === 'function') {
+    const pastCompletions = await db.obligationOccurrence.findMany({
+      where: {
+        obligationId,
+        status: 'COMPLETED',
+      },
+      include: { transaction: true },
+      orderBy: { dueDate: 'desc' },
+    });
+
+    for (const occ of pastCompletions) {
+      const occKey = occ.occurrenceKey;
+      const occDueIso = occ.dueDate ? new Date(occ.dueDate).toISOString() : '';
+      const occLocalDateKey = getOccurrenceKey(occ.dueDate, tz);
+      const occUtcDateKey = getOccurrenceKey(occ.dueDate, 'UTC');
+
+      const isMatch =
+        occKey === occurrenceKey ||
+        candidateKeys.includes(occKey) ||
+        (occurrenceKey.length >= 10 && occKey.startsWith(occurrenceKey.substring(0, 10))) ||
+        (occKey.length >= 10 && occurrenceKey.startsWith(occKey.substring(0, 10))) ||
+        (occDueIso.length >= 10 && occurrenceKey.startsWith(occDueIso.substring(0, 10))) ||
+        occLocalDateKey === occurrenceKey ||
+        occUtcDateKey === occurrenceKey ||
+        occLocalDateKey.substring(0, 10) === occurrenceKey.substring(0, 10) ||
+        occUtcDateKey.substring(0, 10) === occurrenceKey.substring(0, 10);
+
+      if (isMatch) {
+        existingCompletion = occ;
+        break;
+      }
+    }
+  }
+
+  if (!existingCompletion) {
+    if (typeof db.obligationOccurrence?.findUnique === 'function') {
+      existingCompletion = await db.obligationOccurrence.findUnique({
+        where: {
+          obligationId_occurrenceKey: {
+            obligationId,
+            occurrenceKey,
+          }
+        },
+        include: { transaction: true }
+      });
+      if (!existingCompletion && canonicalKey !== occurrenceKey) {
+        existingCompletion = await db.obligationOccurrence.findUnique({
+          where: {
+            obligationId_occurrenceKey: {
+              obligationId,
+              occurrenceKey: canonicalKey,
+            }
+          },
+          include: { transaction: true }
+        });
+      }
+    } else if (typeof db.obligationOccurrence?.findFirst === 'function') {
+      existingCompletion = await db.obligationOccurrence.findFirst({
+        where: {
+          obligationId,
+          occurrenceKey: { in: candidateKeys },
+        },
+        include: { transaction: true }
+      });
+    }
+  }
+
+  if (existingCompletion) {
+    return {
+      success: true,
+      alreadyCompleted: true,
+      alreadyProcessed: true,
+      occurrenceId: existingCompletion.id,
+      transactionId: existingCompletion.transactionId,
+      nextDueAt: obligation.nextDueAt.toISOString(),
+    };
+  }
+
+  // Scheduled date/instant for this occurrence
+  const occurrenceScheduledDate = (() => {
+    if (occurrenceKey.includes('T')) {
+      const d = new Date(occurrenceKey);
+      if (!isNaN(d.getTime())) return d;
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(occurrenceKey.trim())) {
+      const [y, m, d] = occurrenceKey.trim().split('-').map(Number);
+      return new Date(new TZDate(y, m - 1, d, 12, 0, 0, 0, tz).getTime());
+    }
+    return obligation.nextDueAt;
+  })();
+
+  // SOL-R001-004: Linked loan obligation guard - verify occurrence against loan state before advancing schedule
+  if (obligation.loan) {
+    const isLoanClosed = obligation.loan.status === 'CLOSED' || !obligation.loan.nextEmiDate;
+    const loanDateStr = obligation.loan.nextEmiDate ? getOccurrenceKey(obligation.loan.nextEmiDate, tz).substring(0, 10) : '';
+    const occDateStr = occurrenceKey.length >= 10 ? occurrenceKey.substring(0, 10) : '';
+    const isLoanOvertaken = Boolean(
+      obligation.loan.nextEmiDate &&
+      loanDateStr &&
+      occDateStr &&
+      occDateStr < loanDateStr
+    );
+    if ((!isCurrentOccurrence && isLoanOvertaken) || isLoanClosed) {
+      return {
+        success: true,
+        alreadyCompleted: true,
+        alreadyProcessed: true,
+        occurrenceId: null,
+        transactionId: null,
+        nextDueAt: obligation.nextDueAt ? obligation.nextDueAt.toISOString() : null,
+      };
+    }
+  }
+
+  // SOL-R001-005: Credit card statement obligation delegation
+  if (obligation.creditCardStatements && obligation.creditCardStatements.length > 0) {
+    const ccStmt = obligation.creditCardStatements.find((s: any) => s.status !== 'PAID') || obligation.creditCardStatements[0];
+    if (ccStmt.status === 'PAID') {
+      return {
+        success: true,
+        alreadyCompleted: true,
+        alreadyProcessed: true,
+        occurrenceId: null,
+        transactionId: null,
+        nextDueAt: obligation.nextDueAt.toISOString(),
+        statementStatus: 'PAID',
+      };
+    }
+
+    let sourceAccountId = accountId;
+    if (!sourceAccountId && obligation.accountId) {
+      const cardAcc = await db.financialAccount.findUnique({
+        where: { id: obligation.accountId },
+        select: { defaultPaymentAccountId: true }
+      });
+      if (cardAcc?.defaultPaymentAccountId) {
+        sourceAccountId = cardAcc.defaultPaymentAccountId;
+      }
+    }
+    if (!sourceAccountId) {
+      const bankAcc = await db.financialAccount.findFirst({
+        where: {
+          userId,
+          type: { in: ['BANK', 'CASH', 'WALLET'] },
+          isActive: true,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true }
+      });
+      if (bankAcc) {
+        sourceAccountId = bankAcc.id;
+      }
+    }
+
+    if (!sourceAccountId) {
+      throw new Error('Payment account required for credit card statement payment');
+    }
+
+    const payAmount = obligation.amount || ccStmt.statementAmount;
+    const ccRes = await recordCreditCardPayment(userId, {
+      statementId: ccStmt.id,
+      fromAccountId: sourceAccountId,
+      amount: payAmount,
+      paidAt: new Date(),
+      note: `Paid: ${obligation.title}`,
+    }, db);
+
+    // SOL-R002-001: Store created paymentId/transactionId on ObligationOccurrence for statement-linked obligations
+    let occurrenceRecordId: string | null = null;
+    if (typeof db.obligationOccurrence?.upsert === 'function') {
+      const occ = await db.obligationOccurrence.upsert({
+        where: {
+          obligationId_occurrenceKey: {
+            obligationId: obligation.id,
+            occurrenceKey: canonicalKey,
+          }
+        },
+        update: {
+          status: 'COMPLETED',
+          paidAt: new Date(),
+          transactionId: ccRes.transactionId || null,
+        },
+        create: {
+          userId,
+          obligationId: obligation.id,
+          occurrenceKey: canonicalKey,
+          dueDate: obligation.nextDueAt,
+          status: 'COMPLETED',
+          paidAt: new Date(),
+          transactionId: ccRes.transactionId || null,
+        }
+      });
+      occurrenceRecordId = occ.id;
+    }
+
+    return {
+      success: true,
+      alreadyCompleted: Boolean(ccRes.alreadyProcessed),
+      alreadyProcessed: Boolean(ccRes.alreadyProcessed),
+      occurrenceId: occurrenceRecordId,
+      transactionId: ccRes.transactionId,
+      nextDueAt: obligation.nextDueAt.toISOString(),
+      statementStatus: ccRes.statementStatus,
+    };
+  }
+
+  const targetDay = obligation.recurrenceType === 'MONTHLY'
+    ? (obligation.loan?.dueDay ?? new TZDate(obligation.dueAt, tz).getDate())
+    : undefined;
 
   const rule: RecurrenceRule = {
     type: obligation.recurrenceType as any,
     interval: obligation.recurrenceInterval,
+    targetDayOfMonth: targetDay,
     timezone: tz,
   };
 
@@ -1329,35 +1702,91 @@ export async function markObligationPaid(
   // 5. Execute atomically
   const executeInTransaction = async (tx: any) => {
     let createdTxId: string | null = null;
+    let emiRes: any = null;
 
-    // Record occurrence completion
-    const occurrence = await tx.obligationOccurrence.create({
-      data: {
-        userId,
-        obligationId: obligation.id,
-        occurrenceKey,
-        dueDate: obligation.nextDueAt,
-        status: 'COMPLETED',
-        paidAt: new Date(),
-        transactionId: null,
-      }
-    });
-
-    // Linked EMI Obligation delegation (V2-T045b, V2-T046b)
+    // Linked EMI Obligation delegation under loan row lock (SOL-R001-004)
     if (obligation.loan) {
-      const targetAccountId = accountId || obligation.loan.paymentAccountId || obligation.accountId;
+      if (typeof tx.$queryRaw === 'function') {
+        await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${obligation.loan.id} FOR UPDATE`;
+      }
+      const currentLoan = await tx.loan.findUnique({
+        where: { id: obligation.loan.id },
+        select: {
+          id: true,
+          status: true,
+          nextEmiDate: true,
+          paymentAccountId: true,
+          emiAmount: true,
+          dueDay: true,
+        }
+      });
+
+      if (!currentLoan || currentLoan.status === 'CLOSED' || !currentLoan.nextEmiDate) {
+        return {
+          alreadyCompleted: true,
+          alreadyProcessed: true,
+          occurrenceId: null,
+          transactionId: null,
+          nextDueAt: currentLoan?.nextEmiDate ? currentLoan.nextEmiDate.toISOString() : (obligation.nextDueAt?.toISOString() ?? null),
+        };
+      }
+
+      // Check if callback was overtaken by another payment under lock
+      const currentLoanDateStr = currentLoan.nextEmiDate ? getOccurrenceKey(currentLoan.nextEmiDate, tz).substring(0, 10) : '';
+      const occDateStr = occurrenceKey.length >= 10 ? occurrenceKey.substring(0, 10) : '';
+      const isOvertakenUnderLock = Boolean(
+        currentLoan.nextEmiDate &&
+        currentLoanDateStr &&
+        occDateStr &&
+        occDateStr < currentLoanDateStr
+      );
+      if (isOvertakenUnderLock) {
+        return {
+          alreadyCompleted: true,
+          alreadyProcessed: true,
+          occurrenceId: null,
+          transactionId: null,
+          nextDueAt: currentLoan.nextEmiDate.toISOString(),
+        };
+      }
+
+      // Record occurrence completion with canonicalKey
+      const occurrence = await tx.obligationOccurrence.create({
+        data: {
+          userId,
+          obligationId: obligation.id,
+          occurrenceKey: canonicalKey,
+          dueDate: obligation.nextDueAt,
+          status: 'COMPLETED',
+          paidAt: new Date(),
+          transactionId: null,
+        }
+      });
+
+      const targetAccountId = accountId || currentLoan.paymentAccountId || obligation.accountId;
       if (!targetAccountId) {
         throw new Error('Payment account required for linked loan EMI');
       }
 
-      const emiRes = await recordEmiPayment(userId, {
+      emiRes = await recordEmiPayment(userId, {
         loanId: obligation.loan.id,
-        amount: obligation.amount || obligation.loan.emiAmount || '0',
+        amount: obligation.amount || currentLoan.emiAmount || '0',
         accountId: targetAccountId,
         obligationOccurrenceId: occurrence.id,
-        occurredAt: new Date(),
+        obligationPaymentId: canonicalKey,
+        occurredAt: occurrenceScheduledDate,
         note: `EMI: ${obligation.title}`,
       }, tx);
+
+      if (emiRes.alreadyProcessed) {
+        return {
+          alreadyCompleted: true,
+          alreadyProcessed: true,
+          occurrenceId: occurrence.id,
+          transactionId: emiRes.transactionId || null,
+          nextDueAt: emiRes.nextEmiDate ? (emiRes.nextEmiDate instanceof Date ? emiRes.nextEmiDate.toISOString() : new Date(emiRes.nextEmiDate).toISOString()) : (obligation.nextDueAt?.toISOString() ?? null),
+        };
+      }
 
       if (emiRes.transactionId) {
         createdTxId = emiRes.transactionId;
@@ -1366,34 +1795,53 @@ export async function markObligationPaid(
           data: { transactionId: createdTxId }
         });
       }
-    } else {
-      // Optional expense creation for non-loan obligations
-      if (createExpense && obligation.amount) {
-        const targetAccountId = accountId || obligation.accountId;
-        if (targetAccountId) {
-          const acc = await tx.financialAccount.findUnique({
-            where: { id: targetAccountId },
-            select: { userId: true }
+
+      return {
+        occurrence,
+        createdTxId,
+        emiRes,
+      };
+    }
+
+    // Record occurrence completion with canonicalKey for standard obligation
+    const occurrence = await tx.obligationOccurrence.create({
+      data: {
+        userId,
+        obligationId: obligation.id,
+        occurrenceKey: canonicalKey,
+        dueDate: obligation.nextDueAt,
+        status: 'COMPLETED',
+        paidAt: new Date(),
+        transactionId: null,
+      }
+    });
+
+    // Optional expense creation for non-loan obligations
+    if (createExpense && obligation.amount) {
+      const targetAccountId = accountId || obligation.accountId;
+      if (targetAccountId) {
+        const acc = await tx.financialAccount.findUnique({
+          where: { id: targetAccountId },
+          select: { userId: true }
+        });
+        if (acc && acc.userId === userId) {
+          const expenseTx = await tx.financialTransaction.create({
+            data: {
+              userId,
+              type: 'EXPENSE',
+              amount: obligation.amount,
+              category: obligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
+              occurredAt: new Date(),
+              accountId: targetAccountId,
+              obligationId: obligation.id,
+              note: `Paid: ${obligation.title}`,
+            }
           });
-          if (acc && acc.userId === userId) {
-            const expenseTx = await tx.financialTransaction.create({
-              data: {
-                userId,
-                type: 'EXPENSE',
-                amount: obligation.amount,
-                category: obligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
-                occurredAt: new Date(),
-                accountId: targetAccountId,
-                obligationId: obligation.id,
-                note: `Paid: ${obligation.title}`,
-              }
-            });
-            createdTxId = expenseTx.id;
-            await tx.obligationOccurrence.update({
-              where: { id: occurrence.id },
-              data: { transactionId: createdTxId }
-            });
-          }
+          createdTxId = expenseTx.id;
+          await tx.obligationOccurrence.update({
+            where: { id: occurrence.id },
+            data: { transactionId: createdTxId }
+          });
         }
       }
     }
@@ -1421,7 +1869,7 @@ export async function markObligationPaid(
     await tx.reminderDelivery.updateMany({
       where: {
         obligationId: obligation.id,
-        occurrenceKey,
+        occurrenceKey: { in: candidateKeys },
         status: { in: ['PENDING', 'SENT', 'SNOOZED', 'FAILED'] }
       },
       data: {
@@ -1431,16 +1879,58 @@ export async function markObligationPaid(
       }
     });
 
+    const finalNextDueAtStr = (isCurrentOccurrence && nextDue ? nextDue : obligation.nextDueAt).toISOString();
+
     return {
       occurrenceId: occurrence.id,
       transactionId: createdTxId,
-      nextDueAt: (isCurrentOccurrence && nextDue ? nextDue : obligation.nextDueAt).toISOString(),
+      nextDueAt: finalNextDueAtStr,
     };
   };
 
   const result = typeof db.$transaction === 'function'
     ? await db.$transaction(executeInTransaction)
     : await executeInTransaction(db);
+
+  if (result.alreadyProcessed || result.alreadyCompleted) {
+    return {
+      success: true,
+      alreadyCompleted: true,
+      alreadyProcessed: true,
+      occurrenceId: result.occurrenceId || null,
+      transactionId: result.transactionId || null,
+      nextDueAt: result.nextDueAt || obligation.nextDueAt.toISOString(),
+    };
+  }
+
+  // For loan EMI payments that succeeded, handle delivery acknowledgement and schedule sync
+  if (obligation.loan && result.occurrence) {
+    await db.reminderDelivery.updateMany({
+      where: {
+        obligationId: obligation.id,
+        occurrenceKey: { in: candidateKeys },
+        status: { in: ['PENDING', 'SENT', 'SNOOZED', 'FAILED'] }
+      },
+      data: {
+        status: 'ACKNOWLEDGED',
+        acknowledgedAt: new Date(),
+        nextRetryAt: null,
+      }
+    });
+
+    const nextDueStr = result.emiRes?.nextEmiDate
+      ? (result.emiRes.nextEmiDate instanceof Date ? result.emiRes.nextEmiDate.toISOString() : new Date(result.emiRes.nextEmiDate).toISOString())
+      : obligation.nextDueAt.toISOString();
+
+    return {
+      success: true,
+      alreadyCompleted: false,
+      alreadyProcessed: false,
+      occurrenceId: result.occurrence.id,
+      transactionId: result.createdTxId,
+      nextDueAt: nextDueStr,
+    };
+  }
 
   return {
     success: true,
@@ -1479,6 +1969,7 @@ export async function revertObligationPayment(
     where: { id: obligationId },
     include: {
       loan: true,
+      creditCardStatements: true,
       occurrences: {
         orderBy: { dueDate: 'desc' },
       }
@@ -1494,10 +1985,81 @@ export async function revertObligationPayment(
   if (occurrenceId) {
     targetOccurrence = obligation.occurrences.find((o: any) => o.id === occurrenceId);
   } else if (occurrenceKey) {
-    targetOccurrence = obligation.occurrences.find((o: any) => o.occurrenceKey === occurrenceKey);
+    targetOccurrence = obligation.occurrences.find(
+      (o: any) =>
+        o.occurrenceKey === occurrenceKey ||
+        o.occurrenceKey.startsWith(occurrenceKey) ||
+        occurrenceKey.startsWith(o.occurrenceKey)
+    );
   } else {
     // Latest completed occurrence
-    targetOccurrence = obligation.occurrences[0] || null;
+    targetOccurrence = obligation.occurrences.find((o: any) => o.status === 'COMPLETED') || obligation.occurrences[0] || null;
+  }
+
+  // SOL-R002-001: Statement-linked obligation reversal
+  if (obligation.creditCardStatements && obligation.creditCardStatements.length > 0) {
+    const ccStmt = obligation.creditCardStatements[0];
+
+    // If no target occurrence is found, it was already reversed on a previous Undo call
+    if (!targetOccurrence) {
+      return {
+        success: true,
+        alreadyReversed: true,
+        message: 'Credit card payment not found or already reversed',
+        revertedOccurrenceId: null,
+        restoredNextDueAt: obligation.dueAt ? obligation.dueAt.toISOString() : null,
+        creditCardReversed: true,
+      };
+    }
+
+    // Identify specific payment linked to this occurrence
+    let targetPayment: any = null;
+    if (targetOccurrence.transactionId) {
+      targetPayment = await db.creditCardPayment.findFirst({
+        where: { transactionId: targetOccurrence.transactionId, userId },
+      });
+    }
+
+    if (!targetPayment) {
+      targetPayment = await db.creditCardPayment.findFirst({
+        where: { statementId: ccStmt.id, userId, paidAt: targetOccurrence.paidAt },
+      });
+    }
+
+    // If still no payment found, the payment was already reversed
+    if (!targetPayment) {
+      await db.obligationOccurrence.deleteMany({
+        where: { id: targetOccurrence.id },
+      });
+      return {
+        success: true,
+        alreadyReversed: true,
+        message: 'Credit card payment not found or already reversed',
+        revertedOccurrenceId: targetOccurrence.id,
+        restoredNextDueAt: obligation.dueAt ? obligation.dueAt.toISOString() : null,
+        creditCardReversed: true,
+      };
+    }
+
+    // Call revertCreditCardPayment with SPECIFIC paymentId
+    const ccRes = await revertCreditCardPayment(userId, { paymentId: targetPayment.id, statementId: ccStmt.id }, db);
+
+    // Clean up occurrence record
+    await db.obligationOccurrence.deleteMany({
+      where: { id: targetOccurrence.id },
+    });
+
+    return {
+      success: true,
+      alreadyReversed: Boolean(ccRes.alreadyReversed),
+      revertedOccurrenceId: targetOccurrence.id,
+      restoredNextDueAt: obligation.dueAt ? obligation.dueAt.toISOString() : null,
+      creditCardReversed: true,
+      statementStatus: ccRes.restoredStatus || ccRes.statementStatus || null,
+      restoredStatus: ccRes.restoredStatus || null,
+      pendingBalance: ccRes.pendingBalance || null,
+      creditCardDetails: ccRes,
+    };
   }
 
   if (!targetOccurrence) {
@@ -1519,47 +2081,55 @@ export async function revertObligationPayment(
     );
   }
 
-  // If linked to Loan, delegate to LoanService.revertEmiPayment
+  // SOL-R001-010: If linked to Loan, delegate in a single interactive transaction
   if (obligation.loan) {
-    const loanRes = await revertEmiPayment(
-      userId,
-      {
-        obligationOccurrenceId: targetOccurrence.id,
-        loanId: obligation.loan.id,
-        revertToDate: targetOccurrence.dueDate,
-      },
-      db
-    );
+    const executeLoanReversal = async (tx: any) => {
+      const loanRes = await revertEmiPayment(
+        userId,
+        {
+          obligationOccurrenceId: targetOccurrence.id,
+          loanId: obligation.loan.id,
+          revertToDate: targetOccurrence.dueDate,
+        },
+        tx
+      );
 
-    // Delete occurrence record
-    await db.obligationOccurrence.deleteMany({
-      where: { id: targetOccurrence.id }
-    });
+      // Delete occurrence record
+      await tx.obligationOccurrence.deleteMany({
+        where: { id: targetOccurrence.id }
+      });
 
-    // Find previous completed occurrence
-    const prevOccurrences = obligation.occurrences.filter(
-      (o: any) => o.id !== targetOccurrence.id && o.status === 'COMPLETED'
-    );
-    const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
+      // Find previous completed occurrence
+      const prevOccurrences = obligation.occurrences.filter(
+        (o: any) => o.id !== targetOccurrence.id && o.status === 'COMPLETED'
+      );
+      const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
 
-    // Restore obligation schedule
-    await db.obligation.update({
-      where: { id: obligation.id },
-      data: {
-        nextDueAt: targetOccurrence.dueDate,
-        lastCompletedAt,
-        isActive: true,
-      }
-    });
+      // Restore obligation schedule
+      await tx.obligation.update({
+        where: { id: obligation.id },
+        data: {
+          nextDueAt: targetOccurrence.dueDate,
+          lastCompletedAt,
+          isActive: true,
+        }
+      });
 
-    // Cancel future unsent delivery claims
-    await db.reminderDelivery.deleteMany({
-      where: {
-        obligationId: obligation.id,
-        status: 'PENDING',
-        scheduledFor: { gte: targetOccurrence.dueDate },
-      }
-    });
+      // Cancel future unsent delivery claims
+      await tx.reminderDelivery.deleteMany({
+        where: {
+          obligationId: obligation.id,
+          status: 'PENDING',
+          scheduledFor: { gte: targetOccurrence.dueDate },
+        }
+      });
+
+      return loanRes;
+    };
+
+    const loanRes = typeof db.$transaction === 'function'
+      ? await db.$transaction(executeLoanReversal)
+      : await executeLoanReversal(db);
 
     return {
       success: true,

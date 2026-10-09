@@ -3,7 +3,7 @@ set -euo pipefail
 
 branch=$(git branch --show-current)
 
-if [[ "$branch" != "feature/v0.2-money-life" ]]; then
+if [[ "$branch" != "feature/v0.2-money-life" && "$branch" != "orchestration/finance-crud-reminders-r001" ]]; then
   echo "ERROR: unexpected branch $branch" >&2
   exit 2
 fi

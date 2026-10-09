@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,9 +23,13 @@ import { useToast } from '@/hooks/use-toast';
 
 interface LoanFormProps {
   accounts: { id: string; name: string }[];
-  onLoanCreated: () => void;
+  onLoanCreated?: () => void;
   onSubmitAction: (data: any) => Promise<any>;
   trigger?: React.ReactNode;
+  loan?: any;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 const LOAN_TYPES = [
@@ -39,13 +43,41 @@ const LOAN_TYPES = [
   { value: 'OTHER', label: 'Other Loan' },
 ];
 
+export function formatCalendarDate(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '';
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+    return dateInput.trim();
+  }
+  try {
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  } catch {
+    return '';
+  }
+}
+
 export function LoanForm({
   accounts,
   onLoanCreated,
   onSubmitAction,
   trigger,
+  loan,
+  open: controlledOpen,
+  onOpenChange,
+  onSuccess,
 }: LoanFormProps) {
-  const [open, setOpen] = useState(false);
+  const isEdit = Boolean(loan);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (val: boolean) => {
+    if (onOpenChange) onOpenChange(val);
+    if (!isControlled) setInternalOpen(val);
+  };
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -56,6 +88,7 @@ export function LoanForm({
   const [originalPrincipal, setOriginalPrincipal] = useState('');
   const [emiAmount, setEmiAmount] = useState('');
   const [dueDay, setDueDay] = useState('');
+  const [nextEmiDate, setNextEmiDate] = useState('');
   const [interestRatePercent, setInterestRatePercent] = useState('');
   const [tenureMonths, setTenureMonths] = useState('');
   const [paymentAccountId, setPaymentAccountId] = useState('none');
@@ -67,6 +100,35 @@ export function LoanForm({
   // Credit Card EMI rule state
   const [ccAlreadyRecognized, setCcAlreadyRecognized] = useState(false);
 
+  useEffect(() => {
+    if (loan) {
+      setName(loan.name || '');
+      setLender(loan.lender || '');
+      setLoanType(loan.loanType || 'PERSONAL');
+      setOpeningOutstanding(loan.outstandingPrincipal ? String(loan.outstandingPrincipal) : '');
+      setOriginalPrincipal(loan.originalPrincipal ? String(loan.originalPrincipal) : '');
+      setEmiAmount(loan.emiAmount ? String(loan.emiAmount) : '');
+      setDueDay(loan.dueDay ? String(loan.dueDay) : (loan.emiDueDay ? String(loan.emiDueDay) : ''));
+      setInterestRatePercent(
+        loan.interestRatePercent
+          ? String(loan.interestRatePercent)
+          : loan.interestRate
+          ? String(loan.interestRate)
+          : ''
+      );
+      setTenureMonths(loan.tenureMonths ? String(loan.tenureMonths) : '');
+      setPaymentAccountId(loan.paymentAccountId || loan.paymentAccount?.id || 'none');
+      setProductName(loan.productName || '');
+      setMerchant(loan.merchant || '');
+      setNotes(loan.notes || '');
+      if (loan.nextEmiDate) {
+        setNextEmiDate(formatCalendarDate(loan.nextEmiDate));
+      } else {
+        setNextEmiDate('');
+      }
+    }
+  }, [loan]);
+
   const resetForm = () => {
     setName('');
     setLender('');
@@ -75,6 +137,7 @@ export function LoanForm({
     setOriginalPrincipal('');
     setEmiAmount('');
     setDueDay('');
+    setNextEmiDate('');
     setInterestRatePercent('');
     setTenureMonths('');
     setPaymentAccountId('none');
@@ -97,80 +160,166 @@ export function LoanForm({
       return;
     }
 
-    const outVal = parseFloat(openingOutstanding);
-    if (isNaN(outVal) || outVal <= 0) {
-      toast({ title: 'Invalid balance', description: 'Enter current outstanding principal greater than 0.', variant: 'destructive' });
-      return;
+    if (!isEdit) {
+      const cleanOpening = openingOutstanding.trim();
+      const numOpening = Number(cleanOpening);
+      if (!cleanOpening || isNaN(numOpening) || numOpening <= 0) {
+        toast({ title: 'Invalid balance', description: 'Enter current outstanding principal greater than 0.', variant: 'destructive' });
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      const payload: any = {
-        name: name.trim(),
-        lender: lender.trim(),
-        loanType,
-        openingOutstanding: outVal.toFixed(2),
-        createLinkedObligation,
-      };
+      if (isEdit) {
+        // Safe mutable metadata only - disallow editing outstandingPrincipal
+        const payload: any = {
+          name: name.trim(),
+          lender: lender.trim(),
+          loanType,
+          paymentAccountId: paymentAccountId !== 'none' ? paymentAccountId : null,
+          productName: productName.trim() || null,
+          merchant: merchant.trim() || null,
+          notes: notes.trim() || null,
+        };
 
-      if (originalPrincipal && parseFloat(originalPrincipal) > 0) {
-        payload.originalPrincipal = parseFloat(originalPrincipal).toFixed(2);
-      }
-      if (emiAmount && parseFloat(emiAmount) > 0) {
-        payload.emiAmount = parseFloat(emiAmount).toFixed(2);
-      }
-      if (dueDay && parseInt(dueDay, 10) >= 1 && parseInt(dueDay, 10) <= 31) {
-        payload.dueDay = parseInt(dueDay, 10);
-      }
-      if (interestRatePercent && parseFloat(interestRatePercent) >= 0) {
-        payload.interestRatePercent = parseFloat(interestRatePercent).toFixed(2);
-      }
-      if (tenureMonths && parseInt(tenureMonths, 10) > 0) {
-        payload.tenureMonths = parseInt(tenureMonths, 10);
-      }
-      if (paymentAccountId && paymentAccountId !== 'none') {
-        payload.paymentAccountId = paymentAccountId;
-      }
-      if (productName.trim()) {
-        payload.productName = productName.trim();
-      }
-      if (merchant.trim()) {
-        payload.merchant = merchant.trim();
-      }
-      if (notes.trim()) {
-        payload.notes = notes.trim();
-      }
-
-      // CC EMI accounting rules
-      if (loanType === 'CREDIT_CARD_EMI') {
-        if (ccAlreadyRecognized) {
-          payload.principalAlreadyRecognized = true;
-          payload.emiGeneratesExpense = false;
+        const cleanEmi = emiAmount.trim();
+        if (cleanEmi && !isNaN(Number(cleanEmi)) && Number(cleanEmi) > 0) {
+          payload.emiAmount = cleanEmi;
         } else {
-          payload.principalAlreadyRecognized = false;
-          payload.emiGeneratesExpense = true;
+          payload.emiAmount = null;
         }
+
+        const initialDueDay = loan?.dueDay ?? (loan as any)?.emiDueDay ?? null;
+        let newDueDayVal: number | null = null;
+        if (dueDay && parseInt(dueDay, 10) >= 1 && parseInt(dueDay, 10) <= 31) {
+          newDueDayVal = parseInt(dueDay, 10);
+        }
+        payload.dueDay = newDueDayVal;
+
+        const initialNextEmiDateStr = formatCalendarDate(loan?.nextEmiDate);
+        const currentNextEmiDateStr = nextEmiDate ? nextEmiDate.trim() : '';
+
+        const isDueDayEdited = newDueDayVal !== initialDueDay;
+        const isNextEmiDateEdited = currentNextEmiDateStr !== initialNextEmiDateStr;
+
+        // Ticket R001-P1-02: If loan?.nextEmiDate is null and nextEmiDate input is empty,
+        // preserve cleared schedule (do not submit or force generation of new date).
+        if (!loan?.nextEmiDate && !currentNextEmiDateStr) {
+          payload.nextEmiDate = null;
+        } else if (isDueDayEdited) {
+          if (isNextEmiDateEdited) {
+            payload.nextEmiDate = currentNextEmiDateStr ? currentNextEmiDateStr : null;
+          }
+        } else {
+          if (isNextEmiDateEdited) {
+            payload.nextEmiDate = currentNextEmiDateStr ? currentNextEmiDateStr : null;
+          } else if (loan?.nextEmiDate) {
+            payload.nextEmiDate = typeof loan.nextEmiDate === 'string' ? loan.nextEmiDate : new Date(loan.nextEmiDate).toISOString();
+          }
+        }
+
+        const cleanRate = interestRatePercent.trim();
+        if (cleanRate && !isNaN(Number(cleanRate)) && Number(cleanRate) >= 0) {
+          payload.interestRatePercent = cleanRate;
+        } else {
+          payload.interestRatePercent = null;
+        }
+
+        if (tenureMonths && parseInt(tenureMonths, 10) > 0) {
+          payload.tenureMonths = parseInt(tenureMonths, 10);
+        } else {
+          payload.tenureMonths = null;
+        }
+
+        const res = await onSubmitAction(payload);
+        if (res && res.error) {
+          throw new Error(res.error);
+        }
+
+        toast({
+          title: 'Loan updated',
+          description: `Successfully updated ${name}.`,
+        });
+
+        setOpen(false);
+        if (onSuccess) onSuccess();
+        if (onLoanCreated) onLoanCreated();
       } else {
-        payload.emiGeneratesExpense = true;
-        payload.principalAlreadyRecognized = false;
+        const payload: any = {
+          name: name.trim(),
+          lender: lender.trim(),
+          loanType,
+          openingOutstanding: openingOutstanding.trim(),
+          createLinkedObligation,
+        };
+
+        const cleanOrig = originalPrincipal.trim();
+        if (cleanOrig && !isNaN(Number(cleanOrig)) && Number(cleanOrig) > 0) {
+          payload.originalPrincipal = cleanOrig;
+        }
+        const cleanEmi = emiAmount.trim();
+        if (cleanEmi && !isNaN(Number(cleanEmi)) && Number(cleanEmi) > 0) {
+          payload.emiAmount = cleanEmi;
+        }
+        if (dueDay && parseInt(dueDay, 10) >= 1 && parseInt(dueDay, 10) <= 31) {
+          payload.dueDay = parseInt(dueDay, 10);
+        }
+        if (nextEmiDate) {
+          payload.nextEmiDate = nextEmiDate.trim();
+        }
+        const cleanRate = interestRatePercent.trim();
+        if (cleanRate && !isNaN(Number(cleanRate)) && Number(cleanRate) >= 0) {
+          payload.interestRatePercent = cleanRate;
+        }
+        if (tenureMonths && parseInt(tenureMonths, 10) > 0) {
+          payload.tenureMonths = parseInt(tenureMonths, 10);
+        }
+        if (paymentAccountId && paymentAccountId !== 'none') {
+          payload.paymentAccountId = paymentAccountId;
+        }
+        if (productName.trim()) {
+          payload.productName = productName.trim();
+        }
+        if (merchant.trim()) {
+          payload.merchant = merchant.trim();
+        }
+        if (notes.trim()) {
+          payload.notes = notes.trim();
+        }
+
+        // CC EMI accounting rules
+        if (loanType === 'CREDIT_CARD_EMI') {
+          if (ccAlreadyRecognized) {
+            payload.principalAlreadyRecognized = true;
+            payload.emiGeneratesExpense = false;
+          } else {
+            payload.principalAlreadyRecognized = false;
+            payload.emiGeneratesExpense = true;
+          }
+        } else {
+          payload.emiGeneratesExpense = true;
+          payload.principalAlreadyRecognized = false;
+        }
+
+        const res = await onSubmitAction(payload);
+        if (res && res.error) {
+          throw new Error(res.error);
+        }
+
+        toast({
+          title: 'Loan liability tracked',
+          description: `Successfully added ${name}.`,
+        });
+
+        resetForm();
+        setOpen(false);
+        if (onSuccess) onSuccess();
+        if (onLoanCreated) onLoanCreated();
       }
-
-      const res = await onSubmitAction(payload);
-      if (res && res.error) {
-        throw new Error(res.error);
-      }
-
-      toast({
-        title: 'Loan liability tracked',
-        description: `Successfully added ${name}.`,
-      });
-
-      resetForm();
-      setOpen(false);
-      onLoanCreated();
     } catch (err: any) {
       toast({
-        title: 'Error adding loan',
+        title: isEdit ? 'Error updating loan' : 'Error adding loan',
         description: err?.message || 'Could not save loan liability.',
         variant: 'destructive',
       });
@@ -181,23 +330,25 @@ export function LoanForm({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button
-            size="sm"
-            className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Loan / EMI</span>
-          </Button>
-        )}
-      </DialogTrigger>
+      {!isEdit && (
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button
+              size="sm"
+              className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Loan / EMI</span>
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-[#111827] flex items-center gap-2">
             <Building2 className="h-5 w-5 text-[#16A34A]" />
-            Track Loan or EMI Liability
+            {isEdit ? `Edit Loan: ${loan?.name}` : 'Track Loan or EMI Liability'}
           </DialogTitle>
         </DialogHeader>
 
@@ -244,21 +395,34 @@ export function LoanForm({
 
             <div>
               <Label className="text-xs font-semibold text-[#344054]">
-                Current Outstanding (₹) *
+                {isEdit ? 'Outstanding Principal (₹)' : 'Current Outstanding (₹) *'}
               </Label>
-              <Input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={openingOutstanding}
-                onChange={(e) => setOpeningOutstanding(e.target.value)}
-                className="mt-1 h-9 text-sm font-medium"
-                required
-              />
+              {isEdit ? (
+                <>
+                  <Input
+                    disabled
+                    value={loan?.outstandingPrincipal || openingOutstanding}
+                    className="mt-1 h-9 text-sm font-medium bg-[#F8FAFC] text-[#64748B] cursor-not-allowed"
+                  />
+                  <p className="text-[10px] text-[#667085] mt-0.5">
+                    Principal locked. Use Reconcile to adjust.
+                  </p>
+                </>
+              ) : (
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={openingOutstanding}
+                  onChange={(e) => setOpeningOutstanding(e.target.value)}
+                  className="mt-1 h-9 text-sm font-medium"
+                  required
+                />
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <Label className="text-xs font-semibold text-[#344054]">
                 Original Principal (₹)
@@ -270,6 +434,7 @@ export function LoanForm({
                 value={originalPrincipal}
                 onChange={(e) => setOriginalPrincipal(e.target.value)}
                 className="mt-1 h-9 text-sm"
+                disabled={isEdit}
               />
             </div>
 
@@ -286,7 +451,7 @@ export function LoanForm({
             </div>
 
             <div>
-              <Label className="text-xs font-semibold text-[#344054]">Due Day of Month</Label>
+              <Label className="text-xs font-semibold text-[#344054]">Due Day</Label>
               <Input
                 type="number"
                 min="1"
@@ -294,6 +459,16 @@ export function LoanForm({
                 placeholder="1 - 31"
                 value={dueDay}
                 onChange={(e) => setDueDay(e.target.value)}
+                className="mt-1 h-9 text-sm"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold text-[#344054]">Next EMI Date</Label>
+              <Input
+                type="date"
+                value={nextEmiDate}
+                onChange={(e) => setNextEmiDate(e.target.value)}
                 className="mt-1 h-9 text-sm"
               />
             </div>
@@ -370,7 +545,7 @@ export function LoanForm({
                 </div>
               </div>
 
-              {loanType === 'CREDIT_CARD_EMI' && (
+              {loanType === 'CREDIT_CARD_EMI' && !isEdit && (
                 <div className="pt-2 border-t border-[#E2E8F0]">
                   <Label className="text-xs font-semibold text-[#1E293B] block mb-1">
                     Expense Accounting Rule
@@ -392,18 +567,20 @@ export function LoanForm({
             </div>
           )}
 
-          <div className="flex items-start gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="createLinkedObligation"
-              checked={createLinkedObligation}
-              onChange={(e) => setCreateLinkedObligation(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#16A34A] focus:ring-[#16A34A]"
-            />
-            <label htmlFor="createLinkedObligation" className="text-xs text-[#475467] leading-relaxed cursor-pointer">
-              <strong>Create recurring EMI reminder:</strong> Automatically adds an active obligation to track upcoming monthly payments.
-            </label>
-          </div>
+          {!isEdit && (
+            <div className="flex items-start gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="createLinkedObligation"
+                checked={createLinkedObligation}
+                onChange={(e) => setCreateLinkedObligation(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#16A34A] focus:ring-[#16A34A]"
+              />
+              <label htmlFor="createLinkedObligation" className="text-xs text-[#475467] leading-relaxed cursor-pointer">
+                <strong>Create recurring EMI reminder:</strong> Automatically adds an active obligation to track upcoming monthly payments.
+              </label>
+            </div>
+          )}
 
           <div>
             <Label className="text-xs font-semibold text-[#344054]">Notes (Optional)</Label>
@@ -436,7 +613,7 @@ export function LoanForm({
                   <span>Saving...</span>
                 </>
               ) : (
-                <span>Save Loan Liability</span>
+                <span>{isEdit ? 'Save Changes' : 'Save Loan Liability'}</span>
               )}
             </Button>
           </div>

@@ -19,6 +19,7 @@ import { calculateDebtOutstanding } from './finance/finance';
 let isStarted = false;
 
 export const lastHydrationMessageMap = new Map<string, number>();
+export const LEASE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes crash recovery lease timeout (SOL-R002-004)
 
 export interface ProcessSchedulerTickOptions {
   prismaClient?: any;
@@ -253,6 +254,13 @@ export async function processSchedulerTick(
           },
         });
 
+        const isClaimExpired = existingDelivery?.status === 'SENDING' &&
+          Boolean(existingDelivery?.lastAttemptAt && (now.getTime() - new Date(existingDelivery.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+
+        if (existingDelivery?.status === 'SENDING' && !isClaimExpired) {
+          continue;
+        }
+
         const eligibility = shouldDeliverNow({
           scheduledFor: sched.scheduledFor,
           now,
@@ -264,45 +272,124 @@ export async function processSchedulerTick(
           nextRetryAt: existingDelivery?.nextRetryAt ?? null,
         });
 
-        if (!eligibility.shouldSend) {
+        if (!eligibility.shouldSend && !isClaimExpired) {
           continue;
         }
 
-        // Atomic claim creation if not already present
-        let delivery = existingDelivery;
-        if (!delivery) {
-          try {
-            let reminderId = ob.reminders?.[0]?.id;
-            if (!reminderId) {
-              const createdReminder = await db.reminder.create({
-                data: {
-                  userId: ob.userId,
-                  domain: 'FINANCE',
-                  type: 'OBLIGATION',
-                  title: ob.title,
-                  obligationId: ob.id,
-                  isActive: true,
-                },
-              });
-              reminderId = createdReminder.id;
+        // SOL-R001-008: Exclusively claim delivery attempt before invoking sendMessage
+        const claimOperation = async (tx: any) => {
+          if (typeof tx.$queryRaw === 'function') {
+            await tx.$queryRaw`SELECT id FROM "Obligation" WHERE id = ${ob.id} FOR UPDATE`;
+          }
+
+          if (typeof tx.obligation?.findUnique === 'function') {
+            const freshOb = await tx.obligation.findUnique({
+              where: { id: ob.id },
+              select: { id: true, isActive: true, isArchived: true }
+            });
+            if (!freshOb || !freshOb.isActive || freshOb.isArchived) {
+              return null;
+            }
+          }
+
+          let del = await tx.reminderDelivery.findFirst({
+            where: {
+              obligationId: ob.id,
+              occurrenceKey: sched.occurrenceKey,
+              offsetMinutes: sched.offsetMinutes,
+              channel: 'TELEGRAM',
+            },
+          });
+
+          if (del) {
+            if (del.status === 'SENT' || del.status === 'ACKNOWLEDGED') {
+              return null;
+            }
+            if (del.status === 'SNOOZED' && del.snoozedUntil && new Date(del.snoozedUntil).getTime() > now.getTime()) {
+              return null;
             }
 
-            delivery = await db.reminderDelivery.create({
+            const isDelClaimExpired = del.status === 'SENDING' &&
+              Boolean(del.lastAttemptAt && (now.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+
+            if (del.status === 'SENDING' && !isDelClaimExpired) {
+              return null;
+            }
+
+            const recheck = shouldDeliverNow({
+              scheduledFor: sched.scheduledFor,
+              now,
+              snoozedUntil: del.snoozedUntil,
+              isStale: sched.isStale,
+              deliveryStatus: del.status as any,
+              attemptCount: del.attemptCount ?? 0,
+              lastAttemptAt: del.lastAttemptAt ?? null,
+              nextRetryAt: del.nextRetryAt ?? null,
+            });
+            if (!recheck.shouldSend && !isDelClaimExpired) {
+              return null;
+            }
+
+            // Exclusively transition eligible delivery to SENDING
+            const updated = await tx.reminderDelivery.update({
+              where: { id: del.id },
               data: {
-                userId: ob.userId,
-                reminderId,
-                obligationId: ob.id,
-                occurrenceKey: sched.occurrenceKey,
-                scheduledFor: sched.scheduledFor,
-                offsetMinutes: sched.offsetMinutes,
-                channel: 'TELEGRAM',
-                status: 'PENDING',
-                attemptCount: 0,
+                status: 'SENDING',
+                lastAttemptAt: now,
               },
             });
-          } catch {
-            continue;
+            return updated;
           }
+
+          // No delivery exists yet: find or create unique reminder for this obligation
+          let reminder = ob.reminders?.[0] || (typeof tx.reminder?.findFirst === 'function' ? await tx.reminder.findFirst({
+            where: { obligationId: ob.id },
+            select: { id: true },
+          }) : null);
+
+          if (!reminder && typeof tx.reminder?.create === 'function') {
+            reminder = await tx.reminder.create({
+              data: {
+                userId: ob.userId,
+                domain: 'FINANCE',
+                type: 'OBLIGATION',
+                title: ob.title,
+                obligationId: ob.id,
+                isActive: true,
+              },
+            });
+          }
+
+          // Create new exclusively claimed delivery
+          del = await tx.reminderDelivery.create({
+            data: {
+              userId: ob.userId,
+              reminderId: reminder.id,
+              obligationId: ob.id,
+              occurrenceKey: sched.occurrenceKey,
+              scheduledFor: sched.scheduledFor,
+              offsetMinutes: sched.offsetMinutes,
+              channel: 'TELEGRAM',
+              status: 'SENDING',
+              attemptCount: 0,
+              lastAttemptAt: now,
+            },
+          });
+          return del;
+        };
+
+        let delivery: any = null;
+        try {
+          delivery = typeof db.$transaction === 'function'
+            ? await db.$transaction(claimOperation)
+            : await claimOperation(db);
+        } catch {
+          // Concurrent constraint or conflict error -> already claimed
+          continue;
+        }
+
+        if (!delivery) {
+          continue;
         }
 
         // Deliver via Telegram
@@ -328,17 +415,26 @@ export async function processSchedulerTick(
             sentAt: now,
           });
 
-          await db.reminderDelivery.update({
-            where: { id: delivery.id },
-            data: {
-              status: successState.status,
-              sentAt: successState.sentAt,
-              telegramMessageId: sent.message_id,
-              attemptCount: successState.attemptCount,
-              lastAttemptAt: successState.lastAttemptAt,
-              nextRetryAt: successState.nextRetryAt,
-            },
-          });
+          const updateSuccessData = {
+            status: successState.status,
+            sentAt: successState.sentAt,
+            telegramMessageId: sent.message_id,
+            attemptCount: successState.attemptCount,
+            lastAttemptAt: successState.lastAttemptAt,
+            nextRetryAt: successState.nextRetryAt,
+          };
+
+          if (typeof db.reminderDelivery?.updateMany === 'function') {
+            await db.reminderDelivery.updateMany({
+              where: { id: delivery.id, status: 'SENDING' },
+              data: updateSuccessData,
+            });
+          } else if (typeof db.reminderDelivery?.update === 'function') {
+            await db.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: updateSuccessData,
+            });
+          }
           result.wealthRemindersSent++;
           console.log(`[Scheduler] Sent bill reminder ${ob.title} to user ${ob.user.id}`);
         } catch (sendErr: any) {
@@ -348,16 +444,25 @@ export async function processSchedulerTick(
             failureReason: sendErr?.message || 'Send error',
           });
 
-          await db.reminderDelivery.update({
-            where: { id: delivery.id },
-            data: {
-              status: failureState.status,
-              failureReason: failureState.failureReason,
-              attemptCount: failureState.attemptCount,
-              lastAttemptAt: failureState.lastAttemptAt,
-              nextRetryAt: failureState.nextRetryAt,
-            },
-          });
+          const updateFailData = {
+            status: failureState.status,
+            failureReason: failureState.failureReason,
+            attemptCount: failureState.attemptCount,
+            lastAttemptAt: failureState.lastAttemptAt,
+            nextRetryAt: failureState.nextRetryAt,
+          };
+
+          if (typeof db.reminderDelivery?.updateMany === 'function') {
+            await db.reminderDelivery.updateMany({
+              where: { id: delivery.id, status: 'SENDING' },
+              data: updateFailData,
+            });
+          } else if (typeof db.reminderDelivery?.update === 'function') {
+            await db.reminderDelivery.update({
+              where: { id: delivery.id },
+              data: updateFailData,
+            });
+          }
           console.error(
             `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for reminder ${ob.title}:`,
             sendErr?.message
@@ -402,81 +507,140 @@ export async function processSchedulerTick(
         const schedules = calculateDeliverySchedules(target, now);
 
         for (const sched of schedules) {
-          let reminder = await db.reminder.findFirst({
-            where: {
-              userId: debt.userId,
-              domain: 'FINANCE',
-              type: 'PERSONAL_DEBT',
-              category: debt.id,
-            },
-          });
-
-          if (!reminder) {
-            try {
-              reminder = await db.reminder.create({
-                data: {
-                  userId: debt.userId,
-                  domain: 'FINANCE',
-                  type: 'PERSONAL_DEBT',
-                  category: debt.id,
-                  title: target.title,
-                  isActive: true,
-                },
-              });
-            } catch {
-              reminder = await db.reminder.findFirst({
-                where: {
-                  userId: debt.userId,
-                  domain: 'FINANCE',
-                  type: 'PERSONAL_DEBT',
-                  category: debt.id,
-                },
-              });
+          const claimOperation = async (tx: any) => {
+            if (typeof tx.$queryRaw === 'function') {
+              try {
+                await tx.$queryRaw`SELECT id FROM "PersonalDebt" WHERE id = ${debt.id} FOR UPDATE`;
+              } catch {
+                // Ignore if raw lock not supported in mock / test DB
+              }
             }
+
+            if (typeof tx.personalDebt?.findUnique === 'function') {
+              const currentDebt = await tx.personalDebt.findUnique({
+                where: { id: debt.id },
+                include: { transactions: true },
+              });
+              if (!currentDebt || currentDebt.status !== 'OPEN' || !currentDebt.dueAt) {
+                return null;
+              }
+              const currentOutstanding = calculateDebtOutstanding(
+                currentDebt.direction,
+                currentDebt.originalAmount,
+                currentDebt.transactions || []
+              );
+              if (currentOutstanding.lte(0)) {
+                return null;
+              }
+            }
+
+            let reminder = typeof tx.reminder?.findFirst === 'function' ? await tx.reminder.findFirst({
+              where: {
+                userId: debt.userId,
+                domain: 'FINANCE',
+                type: 'PERSONAL_DEBT',
+                category: debt.id,
+              },
+            }) : null;
+
+            if (!reminder && typeof tx.reminder?.create === 'function') {
+              try {
+                reminder = await tx.reminder.create({
+                  data: {
+                    userId: debt.userId,
+                    domain: 'FINANCE',
+                    type: 'PERSONAL_DEBT',
+                    category: debt.id,
+                    title: target.title,
+                    isActive: true,
+                  },
+                });
+              } catch {
+                reminder = typeof tx.reminder?.findFirst === 'function' ? await tx.reminder.findFirst({
+                  where: {
+                    userId: debt.userId,
+                    domain: 'FINANCE',
+                    type: 'PERSONAL_DEBT',
+                    category: debt.id,
+                  },
+                }) : null;
+              }
+            }
+
+            if (!reminder) return null;
+
+            let del = typeof tx.reminderDelivery?.findFirst === 'function' ? await tx.reminderDelivery.findFirst({
+              where: {
+                reminderId: reminder.id,
+                occurrenceKey: sched.occurrenceKey,
+                offsetMinutes: sched.offsetMinutes,
+                channel: 'TELEGRAM',
+              },
+            }) : null;
+
+            if (del) {
+              if (del.status === 'SENT') {
+                return null;
+              }
+
+              const isDelClaimExpired = del.status === 'SENDING' &&
+                Boolean(del.lastAttemptAt && (now.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+
+              if (del.status === 'SENDING' && !isDelClaimExpired) {
+                return null;
+              }
+
+              const recheck = shouldDeliverNow({
+                scheduledFor: sched.scheduledFor,
+                now,
+                snoozedUntil: del.snoozedUntil,
+                isStale: sched.isStale,
+                deliveryStatus: del.status as any,
+                attemptCount: del.attemptCount ?? 0,
+                lastAttemptAt: del.lastAttemptAt ?? null,
+                nextRetryAt: del.nextRetryAt ?? null,
+              });
+              if (!recheck.shouldSend && !isDelClaimExpired) {
+                return null;
+              }
+
+              const updated = await tx.reminderDelivery.update({
+                where: { id: del.id },
+                data: {
+                  status: 'SENDING',
+                  lastAttemptAt: now,
+                },
+              });
+              return updated;
+            }
+
+            del = await tx.reminderDelivery.create({
+              data: {
+                userId: debt.userId,
+                reminderId: reminder.id,
+                occurrenceKey: sched.occurrenceKey,
+                scheduledFor: sched.scheduledFor,
+                offsetMinutes: sched.offsetMinutes,
+                channel: 'TELEGRAM',
+                status: 'SENDING',
+                attemptCount: 0,
+                lastAttemptAt: now,
+              },
+            });
+            return del;
+          };
+
+          let delivery: any = null;
+          try {
+            delivery = typeof db.$transaction === 'function'
+              ? await db.$transaction(claimOperation)
+              : await claimOperation(db);
+          } catch {
+            continue;
           }
 
-          if (!reminder) continue;
-
-          const existingDelivery = await db.reminderDelivery.findFirst({
-            where: {
-              reminderId: reminder.id,
-              occurrenceKey: sched.occurrenceKey,
-              offsetMinutes: sched.offsetMinutes,
-              channel: 'TELEGRAM',
-            },
-          });
-
-          const eligibility = shouldDeliverNow({
-            scheduledFor: sched.scheduledFor,
-            now,
-            snoozedUntil: existingDelivery?.snoozedUntil,
-            isStale: sched.isStale,
-            deliveryStatus: (existingDelivery?.status as any) || null,
-            attemptCount: existingDelivery?.attemptCount ?? 0,
-            lastAttemptAt: existingDelivery?.lastAttemptAt ?? null,
-            nextRetryAt: existingDelivery?.nextRetryAt ?? null,
-          });
-
-          if (!eligibility.shouldSend) continue;
-
-          let delivery = existingDelivery;
           if (!delivery) {
-            try {
-              delivery = await db.reminderDelivery.create({
-                data: {
-                  userId: debt.userId,
-                  reminderId: reminder.id,
-                  occurrenceKey: sched.occurrenceKey,
-                  scheduledFor: sched.scheduledFor,
-                  offsetMinutes: sched.offsetMinutes,
-                  channel: 'TELEGRAM',
-                  status: 'PENDING',
-                  attemptCount: 0,
-                },
-              });
-            } catch {
-              continue;
-            }
+            continue;
           }
 
           const payload = formatTelegramDebtReminder({
@@ -500,17 +664,26 @@ export async function processSchedulerTick(
               sentAt: now,
             });
 
-            await db.reminderDelivery.update({
-              where: { id: delivery.id },
-              data: {
-                status: successState.status,
-                sentAt: successState.sentAt,
-                telegramMessageId: sent.message_id,
-                attemptCount: successState.attemptCount,
-                lastAttemptAt: successState.lastAttemptAt,
-                nextRetryAt: successState.nextRetryAt,
-              },
-            });
+            const updateSuccessData = {
+              status: successState.status,
+              sentAt: successState.sentAt,
+              telegramMessageId: sent.message_id,
+              attemptCount: successState.attemptCount,
+              lastAttemptAt: successState.lastAttemptAt,
+              nextRetryAt: successState.nextRetryAt,
+            };
+
+            if (typeof db.reminderDelivery?.updateMany === 'function') {
+              await db.reminderDelivery.updateMany({
+                where: { id: delivery.id, status: 'SENDING' },
+                data: updateSuccessData,
+              });
+            } else if (typeof db.reminderDelivery?.update === 'function') {
+              await db.reminderDelivery.update({
+                where: { id: delivery.id },
+                data: updateSuccessData,
+              });
+            }
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent debt reminder ${debt.id} to user ${debt.user.id}`);
           } catch (sendErr: any) {
@@ -520,16 +693,25 @@ export async function processSchedulerTick(
               failureReason: sendErr?.message || 'Send error',
             });
 
-            await db.reminderDelivery.update({
-              where: { id: delivery.id },
-              data: {
-                status: failureState.status,
-                failureReason: failureState.failureReason,
-                attemptCount: failureState.attemptCount,
-                lastAttemptAt: failureState.lastAttemptAt,
-                nextRetryAt: failureState.nextRetryAt,
-              },
-            });
+            const updateFailData = {
+              status: failureState.status,
+              failureReason: failureState.failureReason,
+              attemptCount: failureState.attemptCount,
+              lastAttemptAt: failureState.lastAttemptAt,
+              nextRetryAt: failureState.nextRetryAt,
+            };
+
+            if (typeof db.reminderDelivery?.updateMany === 'function') {
+              await db.reminderDelivery.updateMany({
+                where: { id: delivery.id, status: 'SENDING' },
+                data: updateFailData,
+              });
+            } else if (typeof db.reminderDelivery?.update === 'function') {
+              await db.reminderDelivery.update({
+                where: { id: delivery.id },
+                data: updateFailData,
+              });
+            }
             console.error(
               `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for debt reminder ${debt.id}:`,
               sendErr?.message
@@ -574,81 +756,131 @@ export async function processSchedulerTick(
         const schedules = calculateDeliverySchedules(target, now);
 
         for (const sched of schedules) {
-          let reminder = await db.reminder.findFirst({
-            where: {
-              userId: loan.userId,
-              domain: 'FINANCE',
-              type: 'LOAN_EMI',
-              category: loan.id,
-            },
-          });
-
-          if (!reminder) {
-            try {
-              reminder = await db.reminder.create({
-                data: {
-                  userId: loan.userId,
-                  domain: 'FINANCE',
-                  type: 'LOAN_EMI',
-                  category: loan.id,
-                  title: loan.name,
-                  isActive: true,
-                },
-              });
-            } catch {
-              reminder = await db.reminder.findFirst({
-                where: {
-                  userId: loan.userId,
-                  domain: 'FINANCE',
-                  type: 'LOAN_EMI',
-                  category: loan.id,
-                },
-              });
+          const claimOperation = async (tx: any) => {
+            if (typeof tx.$queryRaw === 'function') {
+              try {
+                await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${loan.id} FOR UPDATE`;
+              } catch {
+                // Ignore if raw lock not supported in mock / test DB
+              }
             }
+
+            if (typeof tx.loan?.findUnique === 'function') {
+              const currentLoan = await tx.loan.findUnique({
+                where: { id: loan.id },
+              });
+              if (!currentLoan || currentLoan.status !== 'ACTIVE' || !currentLoan.nextEmiDate || currentLoan.obligationId) {
+                return null;
+              }
+            }
+
+            let reminder = typeof tx.reminder?.findFirst === 'function' ? await tx.reminder.findFirst({
+              where: {
+                userId: loan.userId,
+                domain: 'FINANCE',
+                type: 'LOAN_EMI',
+                category: loan.id,
+              },
+            }) : null;
+
+            if (!reminder && typeof tx.reminder?.create === 'function') {
+              try {
+                reminder = await tx.reminder.create({
+                  data: {
+                    userId: loan.userId,
+                    domain: 'FINANCE',
+                    type: 'LOAN_EMI',
+                    category: loan.id,
+                    title: loan.name,
+                    isActive: true,
+                  },
+                });
+              } catch {
+                reminder = typeof tx.reminder?.findFirst === 'function' ? await tx.reminder.findFirst({
+                  where: {
+                    userId: loan.userId,
+                    domain: 'FINANCE',
+                    type: 'LOAN_EMI',
+                    category: loan.id,
+                  },
+                }) : null;
+              }
+            }
+
+            if (!reminder) return null;
+
+            let del = typeof tx.reminderDelivery?.findFirst === 'function' ? await tx.reminderDelivery.findFirst({
+              where: {
+                reminderId: reminder.id,
+                occurrenceKey: sched.occurrenceKey,
+                offsetMinutes: sched.offsetMinutes,
+                channel: 'TELEGRAM',
+              },
+            }) : null;
+
+            if (del) {
+              if (del.status === 'SENT') {
+                return null;
+              }
+
+              const isDelClaimExpired = del.status === 'SENDING' &&
+                Boolean(del.lastAttemptAt && (now.getTime() - new Date(del.lastAttemptAt).getTime() > LEASE_TIMEOUT_MS));
+
+              if (del.status === 'SENDING' && !isDelClaimExpired) {
+                return null;
+              }
+
+              const recheck = shouldDeliverNow({
+                scheduledFor: sched.scheduledFor,
+                now,
+                snoozedUntil: del.snoozedUntil,
+                isStale: sched.isStale,
+                deliveryStatus: del.status as any,
+                attemptCount: del.attemptCount ?? 0,
+                lastAttemptAt: del.lastAttemptAt ?? null,
+                nextRetryAt: del.nextRetryAt ?? null,
+              });
+              if (!recheck.shouldSend && !isDelClaimExpired) {
+                return null;
+              }
+
+              const updated = await tx.reminderDelivery.update({
+                where: { id: del.id },
+                data: {
+                  status: 'SENDING',
+                  lastAttemptAt: now,
+                },
+              });
+              return updated;
+            }
+
+            del = await tx.reminderDelivery.create({
+              data: {
+                userId: loan.userId,
+                reminderId: reminder.id,
+                occurrenceKey: sched.occurrenceKey,
+                scheduledFor: sched.scheduledFor,
+                offsetMinutes: sched.offsetMinutes,
+                channel: 'TELEGRAM',
+                status: 'SENDING',
+                attemptCount: 0,
+                lastAttemptAt: now,
+              },
+            });
+            return del;
+          };
+
+          let delivery: any = null;
+          try {
+            delivery = typeof db.$transaction === 'function'
+              ? await db.$transaction(claimOperation)
+              : await claimOperation(db);
+          } catch {
+            continue;
           }
 
-          if (!reminder) continue;
-
-          const existingDelivery = await db.reminderDelivery.findFirst({
-            where: {
-              reminderId: reminder.id,
-              occurrenceKey: sched.occurrenceKey,
-              offsetMinutes: sched.offsetMinutes,
-              channel: 'TELEGRAM',
-            },
-          });
-
-          const eligibility = shouldDeliverNow({
-            scheduledFor: sched.scheduledFor,
-            now,
-            snoozedUntil: existingDelivery?.snoozedUntil,
-            isStale: sched.isStale,
-            deliveryStatus: (existingDelivery?.status as any) || null,
-            attemptCount: existingDelivery?.attemptCount ?? 0,
-            lastAttemptAt: existingDelivery?.lastAttemptAt ?? null,
-            nextRetryAt: existingDelivery?.nextRetryAt ?? null,
-          });
-
-          if (!eligibility.shouldSend) continue;
-
-          let delivery = existingDelivery;
           if (!delivery) {
-            try {
-              delivery = await db.reminderDelivery.create({
-                data: {
-                  userId: loan.userId,
-                  reminderId: reminder.id,
-                  occurrenceKey: sched.occurrenceKey,
-                  scheduledFor: sched.scheduledFor,
-                  offsetMinutes: sched.offsetMinutes,
-                  channel: 'TELEGRAM',
-                  status: 'PENDING',
-                  attemptCount: 0,
-                },
-              });
-            } catch {
-              continue;
-            }
+            continue;
           }
 
           const payload = formatTelegramLoanEmiReminder({
@@ -672,17 +904,26 @@ export async function processSchedulerTick(
               sentAt: now,
             });
 
-            await db.reminderDelivery.update({
-              where: { id: delivery.id },
-              data: {
-                status: successState.status,
-                sentAt: successState.sentAt,
-                telegramMessageId: sent.message_id,
-                attemptCount: successState.attemptCount,
-                lastAttemptAt: successState.lastAttemptAt,
-                nextRetryAt: successState.nextRetryAt,
-              },
-            });
+            const updateSuccessData = {
+              status: successState.status,
+              sentAt: successState.sentAt,
+              telegramMessageId: sent.message_id,
+              attemptCount: successState.attemptCount,
+              lastAttemptAt: successState.lastAttemptAt,
+              nextRetryAt: successState.nextRetryAt,
+            };
+
+            if (typeof db.reminderDelivery?.updateMany === 'function') {
+              await db.reminderDelivery.updateMany({
+                where: { id: delivery.id, status: 'SENDING' },
+                data: updateSuccessData,
+              });
+            } else if (typeof db.reminderDelivery?.update === 'function') {
+              await db.reminderDelivery.update({
+                where: { id: delivery.id },
+                data: updateSuccessData,
+              });
+            }
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent loan EMI reminder ${loan.id} to user ${loan.user.id}`);
           } catch (sendErr: any) {
@@ -692,16 +933,25 @@ export async function processSchedulerTick(
               failureReason: sendErr?.message || 'Send error',
             });
 
-            await db.reminderDelivery.update({
-              where: { id: delivery.id },
-              data: {
-                status: failureState.status,
-                failureReason: failureState.failureReason,
-                attemptCount: failureState.attemptCount,
-                lastAttemptAt: failureState.lastAttemptAt,
-                nextRetryAt: failureState.nextRetryAt,
-              },
-            });
+            const updateFailData = {
+              status: failureState.status,
+              failureReason: failureState.failureReason,
+              attemptCount: failureState.attemptCount,
+              lastAttemptAt: failureState.lastAttemptAt,
+              nextRetryAt: failureState.nextRetryAt,
+            };
+
+            if (typeof db.reminderDelivery?.updateMany === 'function') {
+              await db.reminderDelivery.updateMany({
+                where: { id: delivery.id, status: 'SENDING' },
+                data: updateFailData,
+              });
+            } else if (typeof db.reminderDelivery?.update === 'function') {
+              await db.reminderDelivery.update({
+                where: { id: delivery.id },
+                data: updateFailData,
+              });
+            }
             console.error(
               `[Scheduler] Delivery attempt ${failureState.attemptCount}/${MAX_DELIVERY_ATTEMPTS} failed for loan EMI reminder ${loan.id}:`,
               sendErr?.message

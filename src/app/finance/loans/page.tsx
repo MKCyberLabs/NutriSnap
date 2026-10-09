@@ -20,6 +20,7 @@ import {
   getAccounts,
   getLoans,
   createLoan,
+  updateLoan,
   recordEmiPayment,
   reconcileOutstanding,
   closeLoan,
@@ -41,6 +42,8 @@ export default function LoansPage() {
   // Modal states
   const [emiModalOpen, setEmiModalOpen] = useState(false);
   const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
+  const [editLoanModalOpen, setEditLoanModalOpen] = useState(false);
+  const [editingLoan, setEditingLoan] = useState<any>(null);
   const [selectedLoan, setSelectedLoan] = useState<any>(null);
 
   const loadData = useCallback(async (userId: string) => {
@@ -278,6 +281,10 @@ export default function LoansPage() {
                 <LoanCard
                   key={loan.id}
                   loan={loan}
+                  onEdit={(l) => {
+                    setEditingLoan(l);
+                    setEditLoanModalOpen(true);
+                  }}
                   onRecordEmi={handleOpenEmiModal}
                   onReconcile={handleOpenReconcileModal}
                   onClose={handleCloseLoan}
@@ -285,6 +292,25 @@ export default function LoansPage() {
                 />
               ))}
             </div>
+          )}
+
+          {/* Edit Loan Modal */}
+          {editingLoan && (
+            <LoanForm
+              loan={editingLoan}
+              open={editLoanModalOpen}
+              onOpenChange={setEditLoanModalOpen}
+              accounts={accounts}
+              onSubmitAction={async (data) => {
+                const session = getAuthSession();
+                if (!session) throw new Error('Not authenticated');
+                return await updateLoan(session.id, editingLoan.id, data);
+              }}
+              onSuccess={() => {
+                const session = getAuthSession();
+                if (session) loadData(session.id);
+              }}
+            />
           )}
 
           {/* Record EMI Modal */}

@@ -51,9 +51,10 @@ None.
 
 | Pane | Agent | Role | Assignment | Write mode | Starting SHA | Status |
 |---|---|---|---|---|---|---|
-| 1 | AGY-Manickam | Sole implementer | UI Redesign complete implementation & local gate | `WRITE-SAME-TREE-SEQUENTIAL` | `98d013d` | COMPLETE (PASS) |
-| 2 | Codex | None | n/a (sole agent policy) | `READ-ONLY` | n/a | IDLE |
-| 3 | AGY-Rohit | None | n/a (sole agent policy) | n/a | n/a | IDLE |
+| cbds | Gemini (Orchestrator) | Control-Plane Lead | NUTRI-R001 Orchestration & Integration | `WRITE-SEPARATE-WORKTREE` | `a6fb089` | IN PROGRESS |
+| cbds | AGY-Manickam (Worker A) | Implementer A | Transaction & Account CRUD UI + Credit Card Usage Presentation | `WRITE-SEPARATE-WORKTREE` | `a6fb089` | ASSIGNED |
+| cbds | AGY-Rohit (Worker B) | Implementer B | Loan & Debt Safe Edit + Automatic Reminder Lifecycle | `WRITE-SEPARATE-WORKTREE` | `a6fb089` | ASSIGNED |
+| review | Codex | Reviewer | High-risk review (Sol 6.1) if escalation criteria met | `READ-ONLY` | n/a | STANDBY |
 
 When opening a secondary pane, replace the relevant row with:
 

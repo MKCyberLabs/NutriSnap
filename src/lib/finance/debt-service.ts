@@ -11,6 +11,14 @@ import {
 const defaultPrisma = prisma;
 type PrismaClientLike = any;
 
+export const updateDebtSchema = z.object({
+  counterpartyName: z.string().trim().min(1, 'Person name is required').max(100).optional(),
+  title: z.string().trim().max(100).optional().nullable(),
+  dueAt: z.string().or(z.date()).optional().nullable(),
+  reminderOffsetsMin: z.array(z.number().int().min(0)).optional(),
+  notes: z.string().trim().max(255).optional().nullable(),
+});
+
 export const createDebtSchema = z.object({
   direction: z.enum(['RECEIVABLE', 'PAYABLE']),
   counterpartyName: z.string().trim().min(1, 'Person name is required').max(100),
@@ -695,4 +703,71 @@ export async function archiveDebt(
   });
 
   return { success: true };
+}
+
+/**
+ * Updates personal debt metadata (safe mutable fields).
+ * Invariant: Historical transactions are never rewritten; originalAmount cannot be altered directly.
+ * Verifies authenticated user ownership; rejects foreign debt IDs.
+ */
+export async function updateDebt(
+  userId: string,
+  debtId: string,
+  data: unknown,
+  db: PrismaClientLike = defaultPrisma
+) {
+  if (!userId) throw new Error('Unauthorized: missing userId');
+
+  if (typeof data === 'object' && data !== null) {
+    if ('originalAmount' in data && (data as any).originalAmount !== undefined) {
+      throw new Error('originalAmount cannot be updated directly; use additional lend/borrow transactions instead');
+    }
+    if ('direction' in data && (data as any).direction !== undefined) {
+      throw new Error('direction cannot be updated directly');
+    }
+  }
+
+  const parsed = updateDebtSchema.parse(data);
+
+  const debt = await db.personalDebt.findUnique({
+    where: { id: debtId },
+    select: { id: true, userId: true, status: true }
+  });
+
+  if (!debt || debt.userId !== userId) {
+    throw new Error('Debt not found or unauthorized');
+  }
+
+  if (debt.status === 'ARCHIVED') {
+    throw new Error('Cannot update an archived debt');
+  }
+
+  const updateData: any = {};
+  if (parsed.counterpartyName !== undefined) updateData.counterpartyName = parsed.counterpartyName;
+  if (parsed.title !== undefined) updateData.title = parsed.title;
+  if (parsed.dueAt !== undefined) {
+    updateData.dueAt = parsed.dueAt ? new Date(parsed.dueAt) : null;
+  }
+  if (parsed.reminderOffsetsMin !== undefined) updateData.reminderOffsetsMin = parsed.reminderOffsetsMin;
+  if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+
+  const updated = await db.personalDebt.update({
+    where: { id: debtId },
+    data: updateData,
+  });
+
+  return {
+    success: true,
+    debt: {
+      id: updated.id,
+      counterpartyName: updated.counterpartyName,
+      title: updated.title,
+      direction: updated.direction,
+      originalAmount: updated.originalAmount.toString(),
+      dueAt: updated.dueAt ? updated.dueAt.toISOString() : null,
+      reminderOffsetsMin: updated.reminderOffsetsMin,
+      status: updated.status,
+      notes: updated.notes,
+    }
+  };
 }
