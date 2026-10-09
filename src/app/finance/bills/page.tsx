@@ -188,7 +188,8 @@ export default function BillsPage() {
 
   const userTimezone =
     obligations.find((o) => (o as any).user?.timezone)?.user?.timezone ||
-    (typeof window !== 'undefined' ? (getAuthSession() as any)?.timezone : undefined);
+    (typeof window !== 'undefined' ? (getAuthSession() as any)?.timezone : undefined) ||
+    'Asia/Kolkata';
 
   const activeObligations = obligations.filter((o) => o.isActive && !o.isArchived);
   const displayedObligations = filter === 'UPCOMING'
@@ -208,6 +209,7 @@ export default function BillsPage() {
         action={
           <ObligationForm
             accounts={accounts}
+            timezone={userTimezone}
             onSubmitAction={async (data) => {
               const session = getAuthSession();
               if (session) return await createObligation(session.id, data);
@@ -261,6 +263,7 @@ export default function BillsPage() {
               action={
                 <ObligationForm
                   accounts={accounts}
+                  timezone={userTimezone}
                   onSubmitAction={async (data) => {
                     const session = getAuthSession();
                     if (session) return await createObligation(session.id, data);
@@ -354,6 +357,7 @@ export default function BillsPage() {
               <ObligationForm
                 accounts={accounts}
                 obligation={editingObligation}
+                timezone={userTimezone}
                 open={editModalOpen}
                 onOpenChange={(isOpen) => {
                   setEditModalOpen(isOpen);
@@ -1078,7 +1082,7 @@ function StatementRepaymentModal({
     (acc) => acc.type !== 'CREDIT_CARD' && acc.id !== cardAccountId
   );
 
-  const tz = userTimezone || obligation?.user?.timezone;
+  const tz = userTimezone || obligation?.user?.timezone || 'Asia/Kolkata';
   const pendingAmount = obligation?.amount != null ? String(obligation.amount) : '0';
   const [paymentAmount, setPaymentAmount] = useState(pendingAmount);
   const [fromAccountId, setFromAccountId] = useState(

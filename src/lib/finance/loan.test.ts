@@ -7,6 +7,9 @@ import * as financeService from './finance-service';
 import { calculateMonthlyTotals } from './finance';
 import { formatCalendarDate } from '../../components/finance/LoanForm';
 import * as creditCardService from './credit-card-service';
+import fs from 'node:fs';
+import path from 'node:path';
+import { generateEmiIdempotencyKey } from '../../components/finance/RecordEmiModal';
 
 const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
 
@@ -2841,7 +2844,11 @@ test('V2-R004-WORKER-B: Repair test suite for SOL-R001-011, SOL-R002-006, SOL-R0
 });
 
 test('V2-R004-ROUND2-B: Round 2 Worker B Verification Suite (SOL-R004-003, SOL-R001-011, SOL-R002-006, SOL-R004-004, SOL-R004-008)', async (t) => {
-  const db = new PrismaClient();
+  assert.ok(
+    TEST_DB_URL.includes('5433') && TEST_DB_URL.includes('nutrisnap_test'),
+    'Test suite must run against isolated test DB (port 5433, nutrisnap_test)'
+  );
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
   const timestamp = Date.now();
   const userId = `usr_r004_r2_${timestamp}`;
 
@@ -3097,6 +3104,276 @@ test('V2-R004-ROUND2-B: Round 2 Worker B Verification Suite (SOL-R004-003, SOL-R
     assert.equal(resumeRes.isActive, true);
 
   } finally {
-    await db.$disconnect();
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.reminderDelivery.deleteMany({ where: { userId } });
+      await db.obligationOccurrence.deleteMany({ where: { userId } });
+      await db.reminder.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.obligation.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND2-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});
+
+test('V2-R004-ROUND3-B: Statement & EMI Idempotency, Test DB Isolation, Login Timezone (SOL-R004-003, SOL-R004-009, SOL-R004-011, SOL-R004-004)', async (t) => {
+  // 1. SOL-R004-011: Isolated Test DB Assertion and Connection
+  assert.ok(
+    TEST_DB_URL.includes('5433') && TEST_DB_URL.includes('nutrisnap_test'),
+    'Test suite must run against isolated test DB (port 5433, nutrisnap_test)'
+  );
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userId = `usr_r004_r3_${timestamp}`;
+
+  try {
+    // 2. SOL-R004-004: Login Timezone in API response and ObligationForm callers
+    // Verify login route source code ensures timezone: user.timezone in responseData
+    const loginRoutePath = path.resolve(process.cwd(), 'src/app/api/auth/login/route.ts');
+    const loginRouteContent = fs.readFileSync(loginRoutePath, 'utf8');
+    assert.ok(
+      loginRouteContent.includes('timezone: user.timezone'),
+      'Login responseData must include timezone: user.timezone (SOL-R004-004)'
+    );
+
+    // Verify bills/page.tsx ObligationForm callers receive timezone={userTimezone}
+    const billsPagePath = path.resolve(process.cwd(), 'src/app/finance/bills/page.tsx');
+    const billsPageContent = fs.readFileSync(billsPagePath, 'utf8');
+    const obligationFormMatches = billsPageContent.match(/<ObligationForm[\s\S]*?\/>/g) || [];
+    assert.equal(
+      obligationFormMatches.length,
+      3,
+      'bills/page.tsx must contain exactly 3 <ObligationForm /> callers'
+    );
+    for (let i = 0; i < obligationFormMatches.length; i++) {
+      assert.ok(
+        obligationFormMatches[i].includes('timezone={userTimezone}'),
+        `ObligationForm caller #${i + 1} in bills/page.tsx must pass timezone={userTimezone}`
+      );
+    }
+    // Verify StatementRepaymentModal tz fallback in bills/page.tsx
+    assert.ok(
+      billsPageContent.includes("const tz = userTimezone || obligation?.user?.timezone || 'Asia/Kolkata';"),
+      'StatementRepaymentModal must resolve tz with fallback to Asia/Kolkata'
+    );
+
+    // Verify midday anchor date in Pacific/Kiritimati (UTC+14)
+    // 2026-11-15 12:00 in Pacific/Kiritimati is 2026-11-14T22:00:00.000Z
+    const kiritimatiMidday = new TZDate(2026, 10, 15, 12, 0, 0, 0, 'Pacific/Kiritimati');
+    assert.equal(kiritimatiMidday.getFullYear(), 2026);
+    assert.equal(kiritimatiMidday.getMonth(), 10);
+    assert.equal(kiritimatiMidday.getDate(), 15, 'Midday anchor must preserve Nov 15 in Pacific/Kiritimati');
+    // Verify formatting in Kiritimati remains 2026-11-15
+    const tzDateFormatted = new TZDate(kiritimatiMidday.toISOString(), 'Pacific/Kiritimati');
+    assert.equal(tzDateFormatted.getDate(), 15, 'Calendar date in Pacific/Kiritimati must not drift to Nov 16');
+
+    // Create user in DB for finance operations
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `r004_r3_${timestamp}@nutrisnap.app`,
+        name: 'Worker B Round 3 User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati',
+      }
+    });
+    assert.equal(user.timezone, 'Pacific/Kiritimati', 'User timezone must be persisted');
+
+    const bankAcc = await financeService.createAccount(user.id, {
+      name: 'Salary Bank Acc',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankId = bankAcc.account.id;
+
+    // 3. SOL-R004-003: Accounts Statement Repayment Retry Identity (Idempotency Key)
+    // Verify CreditCardDialog component defines generateRepaymentIdempotencyKey and passes idempotencyKey
+    const ccDialogPath = path.resolve(process.cwd(), 'src/components/finance/CreditCardDialog.tsx');
+    const ccDialogContent = fs.readFileSync(ccDialogPath, 'utf8');
+    assert.ok(
+      ccDialogContent.includes('generateRepaymentIdempotencyKey'),
+      'CreditCardDialog must define generateRepaymentIdempotencyKey'
+    );
+    assert.ok(
+      ccDialogContent.includes('idempotencyKey') && ccDialogContent.includes('setPaymentIdempotencyKey'),
+      'CreditCardDialog must manage paymentIdempotencyKey state'
+    );
+    assert.ok(
+      ccDialogContent.includes('idempotencyKey,') || ccDialogContent.includes('idempotencyKey:'),
+      'CreditCardDialog must pass idempotencyKey to recordCreditCardPayment'
+    );
+
+    // Live DB test: recordCreditCardPayment retry with same idempotencyKey is deduplicated
+    const ccAccount = await financeService.createAccount(user.id, {
+      name: 'Titanium CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '200000.00',
+    }, db);
+    const ccId = ccAccount.account.id;
+
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: ccId,
+      periodKey: '2026-11',
+      statementDate: '2026-11-01',
+      dueDate: '2026-11-20',
+      statementAmount: '12000.00',
+      minimumDue: '1200.00',
+    }, db);
+    const stmtId = stmtRes.statement.id;
+
+    const ccIdempKey = `cc-repay-r3-${timestamp}`;
+    const ccPay1 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: bankId,
+      amount: '5000.00',
+      idempotencyKey: ccIdempKey,
+    }, db);
+
+    assert.equal(ccPay1.success, true);
+    assert.equal(ccPay1.fullyPaid, false);
+    assert.equal(ccPay1.pendingBalance.toString(), '7000');
+
+    // Retry with SAME idempotencyKey
+    const ccPayRetry = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: bankId,
+      amount: '5000.00',
+      idempotencyKey: ccIdempKey,
+    }, db);
+
+    assert.equal(ccPayRetry.success, true);
+    assert.equal(ccPayRetry.alreadyProcessed, true, 'Retry with same idempotencyKey must be marked alreadyProcessed');
+    assert.equal(ccPayRetry.paymentId, ccPay1.paymentId, 'Must return the original payment record');
+
+    // Verify only 1 payment and 1 transfer transaction exists in DB
+    const ccPaymentsInDb = await db.creditCardPayment.findMany({
+      where: { statementId: stmtId }
+    });
+    assert.equal(ccPaymentsInDb.length, 1, 'Only 1 CreditCardPayment must exist in DB');
+
+    const transferTxInDb = await db.financialTransaction.findMany({
+      where: { accountId: bankId, type: 'TRANSFER' }
+    });
+    assert.equal(transferTxInDb.length, 1, 'Only 1 TRANSFER transaction must exist in DB');
+
+    // 4. SOL-R004-009: RecordEmiModal Retry Identity (Idempotency Key)
+    // Behavioral test of generateEmiIdempotencyKey
+    const key1 = generateEmiIdempotencyKey();
+    const key2 = generateEmiIdempotencyKey();
+    assert.ok(key1.startsWith('emi-pay-'), 'generateEmiIdempotencyKey must produce emi-pay- prefix');
+    assert.ok(key2.startsWith('emi-pay-'), 'generateEmiIdempotencyKey must produce emi-pay- prefix');
+    assert.notEqual(key1, key2, 'Two calls to generateEmiIdempotencyKey must produce distinct keys');
+
+    // Static verification of RecordEmiModal and loans/page.tsx
+    const emiModalPath = path.resolve(process.cwd(), 'src/components/finance/RecordEmiModal.tsx');
+    const emiModalContent = fs.readFileSync(emiModalPath, 'utf8');
+    assert.ok(
+      emiModalContent.includes('idempotencyKey?: string'),
+      'RecordEmiModalProps onSubmit must accept idempotencyKey'
+    );
+    assert.ok(
+      emiModalContent.includes('idempotencyKey: keyToUse'),
+      'RecordEmiModal handleSubmit must pass idempotencyKey to onSubmit'
+    );
+    assert.ok(
+      emiModalContent.includes('setIdempotencyKey(generateEmiIdempotencyKey())'),
+      'RecordEmiModal must reset idempotencyKey upon open and success'
+    );
+
+    const loansPagePath = path.resolve(process.cwd(), 'src/app/finance/loans/page.tsx');
+    const loansPageContent = fs.readFileSync(loansPagePath, 'utf8');
+    assert.ok(
+      loansPageContent.includes('recordEmiPayment(session.id, params)'),
+      'loans/page.tsx onSubmit must forward params (including idempotencyKey) to recordEmiPayment'
+    );
+
+    // Live DB test: recordEmiPayment retry with same idempotencyKey is deduplicated
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Personal Auto Loan',
+      loanType: 'VEHICLE',
+      lender: 'HDFC Bank',
+      openingOutstanding: '60000.00',
+      emiAmount: '6000.00',
+      dueDay: 5,
+      nextEmiDate: '2026-11-05',
+      paymentAccountId: bankId,
+      createLinkedObligation: true,
+      emiGeneratesExpense: true,
+    }, db);
+    const loanId = loanRes.loan.id;
+
+    const emiIdempKey = `emi-pay-r3-${timestamp}`;
+    const emiPay1 = await loanService.recordEmiPayment(user.id, {
+      loanId,
+      amount: '6000.00',
+      accountId: bankId,
+      principalPaid: '5000.00',
+      interestPaid: '1000.00',
+      idempotencyKey: emiIdempKey,
+      note: 'November EMI',
+    }, db);
+
+    assert.equal(emiPay1.success, true);
+    assert.equal(emiPay1.remainingPrincipal, '55000');
+
+    // Retry with SAME idempotencyKey
+    const emiPayRetry = await loanService.recordEmiPayment(user.id, {
+      loanId,
+      amount: '6000.00',
+      accountId: bankId,
+      principalPaid: '5000.00',
+      interestPaid: '1000.00',
+      idempotencyKey: emiIdempKey,
+      note: 'November EMI',
+    }, db);
+
+    assert.equal(emiPayRetry.success, true);
+    assert.equal(emiPayRetry.alreadyProcessed, true, 'Retry with same idempotencyKey must return alreadyProcessed');
+    assert.equal(emiPayRetry.paymentId, emiPay1.paymentId, 'Must return the original paymentId');
+    assert.equal(emiPayRetry.remainingPrincipal, '55000', 'Remaining principal must remain 55000 (not reduced again to 50000)');
+
+    // Verify DB state: exactly 1 LoanPayment and exactly 1 EXPENSE transaction
+    const emiPaymentsInDb = await db.loanPayment.findMany({
+      where: { loanId }
+    });
+    assert.equal(emiPaymentsInDb.length, 1, 'Only 1 LoanPayment record must exist in DB');
+
+    const expensesInDb = await db.financialTransaction.findMany({
+      where: { userId, type: 'EXPENSE', category: 'EMI' }
+    });
+    assert.equal(expensesInDb.length, 1, 'Only 1 EXPENSE transaction must exist in DB');
+
+    // Verify loan record in DB
+    const loanInDb = await db.loan.findUnique({
+      where: { id: loanId }
+    });
+    assert.equal(loanInDb?.outstandingPrincipal.toString(), '55000');
+
+  } finally {
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.reminderDelivery.deleteMany({ where: { userId } });
+      await db.obligationOccurrence.deleteMany({ where: { userId } });
+      await db.reminder.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.obligation.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND3-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
   }
 });

@@ -44,6 +44,13 @@ interface CreditCardDialogProps {
   onRefresh?: () => void;
 }
 
+export function generateRepaymentIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `cc-repay-${crypto.randomUUID()}`;
+  }
+  return `cc-repay-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export function CreditCardDialog({
   account,
   accounts,
@@ -66,6 +73,7 @@ export function CreditCardDialog({
     format(new Date(Date.now() + 20 * 86400000), 'yyyy-MM-dd')
   );
 
+
   // Record Payment Form State
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
@@ -73,6 +81,7 @@ export function CreditCardDialog({
     accounts.find((a) => a.id !== account.id)?.id || ''
   );
   const [paymentNote, setPaymentNote] = useState('');
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState<string>('');
 
   const loadDetails = useCallback(async () => {
     const session = getAuthSession();
@@ -149,11 +158,17 @@ export function CreditCardDialog({
 
     setSubmitting(true);
     try {
+      const idempotencyKey = paymentIdempotencyKey || generateRepaymentIdempotencyKey();
+      if (!paymentIdempotencyKey) {
+        setPaymentIdempotencyKey(idempotencyKey);
+      }
+
       await recordCreditCardPayment(session.id, {
         statementId: cardData.activeStatement.id,
         fromAccountId: selectedFromAccountId,
         amount: parseFloat(payAmount).toFixed(2),
         note: paymentNote.trim() || undefined,
+        idempotencyKey,
       });
 
       toast({
@@ -163,6 +178,7 @@ export function CreditCardDialog({
       setPaymentModalOpen(false);
       setPayAmount('');
       setPaymentNote('');
+      setPaymentIdempotencyKey('');
       await loadDetails();
       if (onRefresh) onRefresh();
     } catch (err: any) {
@@ -171,6 +187,7 @@ export function CreditCardDialog({
         description: err?.message,
         variant: 'destructive',
       });
+      // SOL-R004-003: Keep paymentIdempotencyKey stable across errors/retries of the same submission
     } finally {
       setSubmitting(false);
     }
@@ -316,6 +333,7 @@ export function CreditCardDialog({
                       size="sm"
                       onClick={() => {
                         setPayAmount(activeStatement.pendingBalance);
+                        setPaymentIdempotencyKey(generateRepaymentIdempotencyKey());
                         setPaymentModalOpen(true);
                       }}
                       className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
@@ -437,7 +455,17 @@ export function CreditCardDialog({
         </Dialog>
 
         {/* Modal: Record Payment */}
-        <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
+        <Dialog
+          open={paymentModalOpen}
+          onOpenChange={(isOpen) => {
+            setPaymentModalOpen(isOpen);
+            if (isOpen) {
+              setPaymentIdempotencyKey((prev) => prev || generateRepaymentIdempotencyKey());
+            } else {
+              setPaymentIdempotencyKey('');
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-[420px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
             <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
               <DialogTitle className="text-base font-semibold text-[#111827]">

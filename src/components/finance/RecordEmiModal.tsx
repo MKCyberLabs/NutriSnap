@@ -21,6 +21,13 @@ import { Loader2, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatIndianRupees } from '@/components/design-system/MoneyAmount';
 
+export function generateEmiIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `emi-pay-${crypto.randomUUID()}`;
+  }
+  return `emi-pay-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
 interface RecordEmiModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,6 +50,7 @@ interface RecordEmiModalProps {
     feesPaid?: string;
     occurredAt?: string;
     note?: string;
+    idempotencyKey?: string;
   }) => Promise<any>;
   onSuccess: () => void;
 }
@@ -62,8 +70,15 @@ export function RecordEmiModal({
   const [feesPaid, setFeesPaid] = useState('');
   const [occurredAt, setOccurredAt] = useState(new Date().toISOString().substring(0, 10));
   const [note, setNote] = useState('');
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => generateEmiIdempotencyKey());
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+
+  React.useEffect(() => {
+    if (open) {
+      setIdempotencyKey(generateEmiIdempotencyKey());
+    }
+  }, [open]);
 
   React.useEffect(() => {
     if (loan) {
@@ -101,6 +116,11 @@ export function RecordEmiModal({
 
     setSubmitting(true);
     try {
+      const keyToUse = idempotencyKey || generateEmiIdempotencyKey();
+      if (!idempotencyKey) {
+        setIdempotencyKey(keyToUse);
+      }
+
       const res = await onSubmit({
         loanId: loan.id,
         amount: val.toFixed(2),
@@ -110,6 +130,7 @@ export function RecordEmiModal({
         feesPaid: feesPaid ? f.toFixed(2) : undefined,
         occurredAt: new Date(occurredAt).toISOString(),
         note: note.trim() || undefined,
+        idempotencyKey: keyToUse,
       });
 
       if (res && res.error) {
@@ -125,6 +146,7 @@ export function RecordEmiModal({
       setInterestPaid('');
       setFeesPaid('');
       setNote('');
+      setIdempotencyKey(generateEmiIdempotencyKey());
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
@@ -133,6 +155,7 @@ export function RecordEmiModal({
         description: err?.message || 'Could not save payment.',
         variant: 'destructive',
       });
+      // SOL-R004-009: Preserve idempotencyKey across errors and retries of the same submission
     } finally {
       setSubmitting(false);
     }
