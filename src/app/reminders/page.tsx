@@ -68,6 +68,7 @@ export default function RemindersPage() {
   const [healthReminders, setHealthReminders] = useState<any[]>([]);
   const [obligations, setObligations] = useState<any[]>([]);
   const [filter, setFilter] = useState<string>('ALL');
+  const [telegramConnected, setTelegramConnected] = useState(false);
 
   // Dialog state for adding a health reminder
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
@@ -107,6 +108,7 @@ export default function RemindersPage() {
       router.push('/onboarding');
       return;
     }
+    setTelegramConnected(Boolean(session.telegramId && session.telegramId.trim()));
     loadData(session.id);
   }, [router, loadData]);
 
@@ -409,10 +411,21 @@ export default function RemindersPage() {
             />
             <div className="flex items-center gap-2 text-xs text-[#64748B]">
               <span className="text-[#94A3B8]">Active Channels:</span>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs text-[#1E293B]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]"></span>
-                <span>Telegram Alerts</span>
-              </div>
+              {telegramConnected ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs text-[#1E293B]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]"></span>
+                  <span>Telegram Alerts</span>
+                </div>
+              ) : (
+                <Link
+                  href="/settings"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FEF3C7] border border-[#FDE68A] text-xs text-[#92400E] hover:bg-[#FDE68A] transition-colors"
+                  title="Configure Telegram Chat ID in Settings"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F59E0B]"></span>
+                  <span>Connect Telegram</span>
+                </Link>
+              )}
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs text-[#1E293B]">
                 <Bell className="h-3 w-3 text-[#6D28D9]" />
                 <span>In-App</span>

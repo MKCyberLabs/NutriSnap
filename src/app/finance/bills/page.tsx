@@ -94,6 +94,37 @@ function generateRepaymentIdempotencyKey(): string {
   }
   return `cc-repay-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
+
+/**
+ * Normalizes an obligation amount to its monthly recurring equivalent based on recurrenceType.
+ * Excludes one-time (ONCE) obligations (returns 0).
+ */
+function calculateMonthlyRecurringAmount(
+  amount: number | string | null | undefined,
+  recurrenceType: string,
+  recurrenceInterval?: number | null
+): number {
+  const numericAmount = typeof amount === 'number' ? amount : parseFloat(String(amount || '0')) || 0;
+  if (!numericAmount || numericAmount <= 0) return 0;
+
+  switch (recurrenceType) {
+    case 'MONTHLY':
+      return numericAmount;
+    case 'YEARLY':
+      return numericAmount / 12;
+    case 'WEEKLY':
+      return (numericAmount * 52) / 12;
+    case 'DAILY':
+      return (numericAmount * 365) / 12;
+    case 'EVERY_N_DAYS': {
+      const days = recurrenceInterval && recurrenceInterval > 0 ? recurrenceInterval : 1;
+      return (numericAmount * (365 / days)) / 12;
+    }
+    case 'ONCE':
+    default:
+      return 0;
+  }
+}
 import {
   Dialog,
   DialogContent,
@@ -194,6 +225,9 @@ export default function BillsPage() {
     'Asia/Kolkata';
 
   const activeObligations = obligations.filter((o) => o.isActive && !o.isArchived);
+  const activeRecurringObligations = activeObligations.filter(
+    (o) => o.recurrenceType && o.recurrenceType !== 'ONCE'
+  );
   const displayedObligations = filter === 'UPCOMING'
     ? activeObligations.sort((a, b) => new Date(a.nextDueAt).getTime() - new Date(b.nextDueAt).getTime())
     : obligations;
@@ -204,7 +238,7 @@ export default function BillsPage() {
   ];
 
   const totalMonthlyRecurring = activeObligations.reduce(
-    (sum, o) => sum + (parseFloat(o.amount) || 0),
+    (sum, o) => sum + calculateMonthlyRecurringAmount(o.amount, o.recurrenceType, (o as any).recurrenceInterval),
     0
   );
 
@@ -269,7 +303,7 @@ export default function BillsPage() {
               label="Total Monthly Recurring"
               value={`₹${formatIndianRupees(totalMonthlyRecurring)}`}
               tone="purple"
-              helperText={`${activeObligations.length} active recurring obligations`}
+              helperText={`${activeRecurringObligations.length} active recurring obligations`}
             />
             <MetricCard
               label="Due This Week"
