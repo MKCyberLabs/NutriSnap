@@ -34,7 +34,9 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import { useToast } from '@/hooks/use-toast';
+import { getAuthSession } from '@/lib/auth-mock';
 
 interface ObligationRowProps {
   obligation: {
@@ -48,7 +50,9 @@ interface ObligationRowProps {
     lastCompletedAt?: string | Date | null;
     isActive?: boolean;
     account?: { id: string; name: string } | null;
+    user?: { timezone?: string | null } | null;
   };
+  userTimezone?: string;
   accounts: { id: string; name: string }[];
   onMarkPaid: (params: {
     obligationId: string;
@@ -66,6 +70,7 @@ interface ObligationRowProps {
 
 export function ObligationRow({
   obligation,
+  userTimezone,
   accounts,
   onMarkPaid,
   onPaidSuccess,
@@ -186,21 +191,36 @@ export function ObligationRow({
     }
   };
 
+  const effectiveTimezone =
+    obligation.user?.timezone ||
+    userTimezone ||
+    (typeof window !== 'undefined' ? (getAuthSession() as any)?.timezone : undefined) ||
+    'Asia/Kolkata';
+
   let dueDate: Date;
   try {
     dueDate = typeof obligation.nextDueAt === 'string'
       ? parseISO(obligation.nextDueAt)
-      : obligation.nextDueAt;
+      : new Date(obligation.nextDueAt);
+    if (isNaN(dueDate.getTime())) {
+      dueDate = new Date();
+    }
   } catch {
     dueDate = new Date();
   }
 
   const isPast = dueDate.getTime() < Date.now();
   const relativeText = formatDistanceToNow(dueDate, { addSuffix: true });
-  const formattedDate = format(dueDate, 'dd MMM yyyy');
 
-  // Compute occurrence key (YYYY-MM-DD in local or UTC)
-  const occurrenceKey = format(dueDate, 'yyyy-MM-dd');
+  let formattedDate: string;
+  let occurrenceKey: string;
+  try {
+    formattedDate = formatInTimeZone(dueDate, effectiveTimezone, 'dd MMM yyyy');
+    occurrenceKey = formatInTimeZone(dueDate, effectiveTimezone, 'yyyy-MM-dd');
+  } catch {
+    formattedDate = format(dueDate, 'dd MMM yyyy');
+    occurrenceKey = format(dueDate, 'yyyy-MM-dd');
+  }
 
   const handleConfirmPaid = async () => {
     setSubmitting(true);
@@ -216,10 +236,19 @@ export function ObligationRow({
         throw new Error(res.error);
       }
 
-      toast({
-        title: 'Marked as Paid',
-        description: `Obligation "${obligation.title}" marked paid for ${occurrenceKey}.`,
-      });
+      if (res?.alreadyCompleted || res?.alreadyProcessed) {
+        toast({
+          title: 'Already Marked as Paid',
+          description: res?.occurrenceId
+            ? `Occurrence (${occurrenceKey}) for "${obligation.title}" was already marked as paid.`
+            : `No pending occurrence found or already completed for "${obligation.title}".`,
+        });
+      } else {
+        toast({
+          title: 'Marked as Paid',
+          description: `Obligation "${obligation.title}" marked paid for ${occurrenceKey}.`,
+        });
+      }
       setModalOpen(false);
       onPaidSuccess();
     } catch (err: any) {
