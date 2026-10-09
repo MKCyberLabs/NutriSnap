@@ -133,3 +133,7 @@
 ## 2024-11-20 - [Accessible Custom Segmented Controls]
 **Learning:** Found custom segmented controls in `TransactionForm.tsx` and `DebtForm.tsx` (using buttons to switch between EXPENSE/INCOME/TRANSFER and RECEIVABLE/PAYABLE) that lacked accessibility grouping, active state indication, and keyboard focus visibility.
 **Action:** When creating custom interactive UI elements used as toggles or single-select groups in React/Next.js, wrap the group in a container with `role="group"` and `aria-label`. Ensure individual buttons have `type="button"`, explicit `aria-pressed` attributes matching their active state, and explicit `focus-visible` classes (e.g., `focus-visible:ring-2`) for keyboard and screen reader accessibility. Also, ensure any decorative icons inside these buttons have `aria-hidden="true"`.
+
+## 2025-02-18 - [Accessibility: Confirmation Dialogs for Destructive Actions]
+**Learning:** Found custom delete buttons for health reminders in `reminders/page.tsx` that relied on a native `confirm()` dialog. Native confirms block the main thread, cannot be styled, and often present confusing accessibility patterns for screen readers compared to custom accessible modal components.
+**Action:** Replace native `confirm()` checks for destructive actions (like deletions) with accessible custom dialogs, such as Shadcn UI's `AlertDialog`. Ensure the trigger button uses `asChild` if wrapping a `<Button>`, has a clear `aria-label`, and that any internal decorative icons use `aria-hidden="true"`.
