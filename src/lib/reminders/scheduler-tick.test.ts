@@ -683,3 +683,213 @@ test('V2-6004: Deduplication prevents repeat delivery of debt and loan reminders
   assert.equal(result2.wealthRemindersSent, 0, 'Zero reminders sent on tick 2 (durable dedupe)');
   assert.equal(mockBot.sentMessages.length, 2, 'Total sent messages remained 2');
 });
+
+test('SOL-R001-008: Schedule change under target lock invalidates claim and suppresses obsolete send', async () => {
+  const mockBot = createMockBot();
+  const now = new Date('2026-10-10T10:00:00.000Z');
+
+  const staleDue = new Date('2026-10-10T10:00:00.000Z');
+  const advancedDue = new Date('2026-11-10T10:00:00.000Z');
+
+  const mockDb = {
+    reminder: { findMany: async () => [] },
+    hydrationSetting: { findMany: async () => [] },
+    obligation: {
+      findMany: async () => [
+        {
+          id: 'ob-stale-test',
+          userId: 'usr-stale',
+          title: 'Electricity Bill',
+          amount: new Prisma.Decimal('1500.00'),
+          dueAt: staleDue,
+          nextDueAt: staleDue,
+          reminderOffsetsMin: [0],
+          isActive: true,
+          isArchived: false,
+          user: { id: 'usr-stale', telegramId: 'tg-stale', timezone: 'UTC' },
+          reminders: [],
+        },
+      ],
+      findUnique: async () => ({
+        id: 'ob-stale-test',
+        nextDueAt: advancedDue,
+        isActive: true,
+      }),
+    },
+    reminderDelivery: {
+      findFirst: async () => null,
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'ob-stale-test' }],
+      obligation: {
+        findUnique: async () => ({
+          id: 'ob-stale-test',
+          nextDueAt: advancedDue,
+          isActive: true,
+        }),
+      },
+    }),
+    personalDebt: { findMany: async () => [] },
+    loan: { findMany: async () => [] },
+  };
+
+  const result = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(result.wealthRemindersSent, 0, 'Zero reminders sent because schedule was advanced under lock');
+  assert.equal(mockBot.sentMessages.length, 0, 'No Telegram messages dispatched');
+});
+
+test('SOL-R003-001: Future and stale debt and unlinked loan schedules do NOT create SENDING claims', async () => {
+  const mockBot = createMockBot();
+  const now = new Date('2026-10-10T10:00:00.000Z');
+
+  let deliveryCreatedCount = 0;
+
+  const mockDb = {
+    reminder: { findMany: async () => [] },
+    hydrationSetting: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    personalDebt: {
+      findMany: async () => [
+        {
+          id: 'debt-future',
+          userId: 'usr-future',
+          counterpartyName: 'Future Debt',
+          title: 'Future Repayment',
+          originalAmount: new Prisma.Decimal('5000.00'),
+          dueAt: new Date('2026-10-25T10:00:00.000Z'),
+          status: 'PENDING',
+          direction: 'RECEIVABLE',
+          user: { id: 'usr-future', telegramId: 'tg-future', timezone: 'UTC' },
+          transactions: [],
+        },
+      ],
+    },
+    loan: {
+      findMany: async () => [
+        {
+          id: 'loan-future',
+          userId: 'usr-future',
+          name: 'Future Loan',
+          lender: 'Future Lender',
+          emiAmount: new Prisma.Decimal('3000.00'),
+          nextEmiDate: new Date('2026-10-25T10:00:00.000Z'),
+          obligationId: null,
+          status: 'ACTIVE',
+          user: { id: 'usr-future', telegramId: 'tg-future', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => null,
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [],
+      personalDebt: {
+        findUnique: async () => ({
+          id: 'debt-future',
+          status: 'PENDING',
+          dueAt: new Date('2026-10-25T10:00:00.000Z'),
+        }),
+      },
+      loan: {
+        findUnique: async () => ({
+          id: 'loan-future',
+          status: 'ACTIVE',
+          nextEmiDate: new Date('2026-10-25T10:00:00.000Z'),
+          obligationId: null,
+        }),
+      },
+      reminder: { findFirst: async () => null },
+      reminderDelivery: {
+        findFirst: async () => null,
+        create: async (args: any) => {
+          deliveryCreatedCount++;
+          return { id: 'del-future', ...args.data };
+        },
+      },
+    }),
+  };
+
+  const result = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(result.wealthRemindersSent, 0, 'No reminders sent for future schedules');
+  assert.equal(deliveryCreatedCount, 0, 'Zero delivery claims created for future schedules');
+  assert.equal(mockBot.sentMessages.length, 0);
+});
+
+test('SOL-R003-004: Delivery completion update matches claimedAttemptCount fencing token', async () => {
+  const mockBot = createMockBot();
+  const now = new Date('2026-10-10T10:00:00.000Z');
+
+  let updatedAttemptCounts: number[] = [];
+
+  const mockDb = {
+    reminder: { findMany: async () => [] },
+    hydrationSetting: { findMany: async () => [] },
+    obligation: {
+      findMany: async () => [
+        {
+          id: 'ob-fencing',
+          userId: 'usr-fence',
+          title: 'Fencing Test Obligation',
+          amount: new Prisma.Decimal('2000.00'),
+          dueAt: now,
+          nextDueAt: now,
+          reminderOffsetsMin: [0],
+          isActive: true,
+          isArchived: false,
+          user: { id: 'usr-fence', telegramId: 'tg-fence', timezone: 'UTC' },
+          reminders: [{ id: 'rem-fence' }],
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => null,
+      updateMany: async (args: any) => {
+        assert.ok(args.where.attemptCount !== undefined, 'where clause must require attemptCount');
+        updatedAttemptCounts.push(args.where.attemptCount);
+        return { count: 1 };
+      },
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'ob-fencing' }],
+      obligation: {
+        findUnique: async () => ({
+          id: 'ob-fencing',
+          nextDueAt: now,
+          isActive: true,
+        }),
+      },
+      reminder: { findFirst: async () => null },
+      reminderDelivery: {
+        findFirst: async () => null,
+        create: async (args: any) => ({
+          id: 'del-fence-1',
+          attemptCount: 1,
+          ...args.data,
+        }),
+      },
+    }),
+    personalDebt: { findMany: async () => [] },
+    loan: { findMany: async () => [] },
+  };
+
+  const result = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(result.wealthRemindersSent, 1);
+  assert.equal(updatedAttemptCounts.length, 1);
+  assert.equal(updatedAttemptCounts[0], 1, 'Completion update matched claimedAttemptCount = 1');
+});

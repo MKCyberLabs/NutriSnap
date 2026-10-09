@@ -1394,6 +1394,124 @@ export async function archiveObligation(
 
 
 /**
+ * SOL-R001-007: Helper to match an obligation occurrence without fuzzy substring comparisons.
+ * Supports exact key, exact scheduled instant, timezone-aware local/UTC occurrence keys,
+ * and date-only calendar date matching in the user's timezone.
+ * Eliminates false matches between adjacent daily occurrences in extreme timezones.
+ */
+export function matchesOccurrence(
+  occ: { occurrenceKey?: string | null; dueDate?: Date | null },
+  reqKey: string,
+  tz: string = 'UTC'
+): boolean {
+  if (!reqKey || !occ) return false;
+
+  // 1. Exact key match
+  if (occ.occurrenceKey === reqKey) return true;
+
+  // 2. Exact instant match if reqKey contains 'T' and dueDate is valid
+  const occTime = occ.dueDate ? new Date(occ.dueDate).getTime() : NaN;
+  if (reqKey.includes('T') && !isNaN(occTime)) {
+    const reqDate = new Date(reqKey);
+    if (!isNaN(reqDate.getTime()) && reqDate.getTime() === occTime) {
+      return true;
+    }
+  }
+
+  // 3. Timezone-aware local and UTC key matches against occ.dueDate
+  if (occ.dueDate && !isNaN(occTime)) {
+    const occLocalKey = getOccurrenceKey(occ.dueDate, tz);
+    const occUtcKey = getOccurrenceKey(occ.dueDate, 'UTC');
+    if (reqKey === occLocalKey || reqKey === occUtcKey) {
+      return true;
+    }
+
+    // 4. Date-only request match against occ's local calendar date in tz
+    const occLocalDate = occLocalKey.substring(0, 10);
+    const trimmedReq = reqKey.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedReq)) {
+      if (trimmedReq === occLocalDate) {
+        return true;
+      }
+    }
+  }
+
+  // 5. If occ.occurrenceKey was stored as date-only (e.g. '2026-10-10') and reqKey is timestamp
+  const trimmedOccKey = (occ.occurrenceKey || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedOccKey)) {
+    if (reqKey.includes('T')) {
+      const reqDate = new Date(reqKey);
+      if (!isNaN(reqDate.getTime())) {
+        const reqLocalDate = getOccurrenceKey(reqDate, tz).substring(0, 10);
+        if (trimmedOccKey === reqLocalDate) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * SOL-R001-004: Helper to resolve callback occurrenceKey against locked loan's active nextEmiDate.
+ * Matches local key, UTC key, local date, and exact instant across timezones.
+ * Identifies overtaken (past) and future occurrences to prevent corrupting loan state.
+ */
+export function matchesLoanActiveEmi(
+  occurrenceKey: string,
+  loanNextEmiDate: Date,
+  tz: string = 'UTC'
+): { isMatch: boolean; isOvertaken: boolean; isFuture: boolean } {
+  const loanInstant = loanNextEmiDate.getTime();
+  const loanLocalKey = getOccurrenceKey(loanNextEmiDate, tz);
+  const loanUtcKey = getOccurrenceKey(loanNextEmiDate, 'UTC');
+  const loanLocalDate = loanLocalKey.substring(0, 10);
+  const loanUtcDate = loanUtcKey.substring(0, 10);
+
+  // 1. Exact string matches against active loan EMI representations
+  if (
+    occurrenceKey === loanLocalKey ||
+    occurrenceKey === loanUtcKey ||
+    occurrenceKey === loanLocalDate ||
+    occurrenceKey === loanUtcDate
+  ) {
+    return { isMatch: true, isOvertaken: false, isFuture: false };
+  }
+
+  // 2. Timestamp comparison
+  if (occurrenceKey.includes('T')) {
+    const parsed = new Date(occurrenceKey);
+    if (!isNaN(parsed.getTime())) {
+      const parsedTime = parsed.getTime();
+      if (parsedTime === loanInstant) {
+        return { isMatch: true, isOvertaken: false, isFuture: false };
+      }
+      return {
+        isMatch: false,
+        isOvertaken: parsedTime < loanInstant,
+        isFuture: parsedTime > loanInstant,
+      };
+    }
+  }
+
+  // 3. Date-only comparison YYYY-MM-DD against local calendar date in loan's timezone
+  const trimmed = occurrenceKey.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    if (trimmed === loanLocalDate) {
+      return { isMatch: true, isOvertaken: false, isFuture: false };
+    }
+    return {
+      isMatch: false,
+      isOvertaken: trimmed < loanLocalDate,
+      isFuture: trimmed > loanLocalDate,
+    };
+  }
+
+  return { isMatch: false, isOvertaken: false, isFuture: false };
+}
+
+/**
  * Marks an obligation occurrence as Paid with transactional idempotency.
  * Repeated calls with identical (obligationId, occurrenceKey) return the existing result
  * without creating a second expense or double-advancing recurrence.
@@ -1449,12 +1567,16 @@ export async function markObligationPaid(
   // SOL-R001-007: Canonicalize occurrence key using user timezone
   const canonicalActiveKey = getOccurrenceKey(obligation.nextDueAt, tz);
   const utcKey = getOccurrenceKey(obligation.nextDueAt, 'UTC');
+  const localDate = canonicalActiveKey.substring(0, 10);
 
-  const isCurrentOccurrence =
-    occurrenceKey === canonicalActiveKey ||
-    occurrenceKey === canonicalActiveKey.substring(0, 10) ||
-    occurrenceKey === utcKey ||
-    occurrenceKey === utcKey.substring(0, 10);
+  const isCurrentOccurrence = (() => {
+    if (occurrenceKey === canonicalActiveKey || occurrenceKey === utcKey) return true;
+    if (occurrenceKey.includes('T')) {
+      const d = new Date(occurrenceKey);
+      return !isNaN(d.getTime()) && d.getTime() === obligation.nextDueAt.getTime();
+    }
+    return occurrenceKey.trim() === localDate;
+  })();
 
   // If caller provided a timestamp with time (e.g. from scheduler UTC payload), canonicalize to user timezone;
   // If caller provided a date-only key (e.g. YYYY-MM-DD), preserve the caller's date key format.
@@ -1470,15 +1592,12 @@ export async function markObligationPaid(
     canonicalKey,
     canonicalActiveKey,
     utcKey,
-    canonicalActiveKey.substring(0, 10),
-    utcKey.substring(0, 10)
+    localDate,
   ]));
 
-  // 4. Check if occurrence is already completed (idempotency check)
+  // 4. Early check if occurrence is already completed (fast idempotency check)
   let existingCompletion: any = null;
 
-  // SOL-R001-007: Search all existing completions for this obligation to identify if the supplied occurrenceKey
-  // (UTC, local, or date-only alias) corresponds to an already completed occurrence, ensuring idempotent retries across timezones.
   if (typeof db.obligationOccurrence?.findMany === 'function') {
     const pastCompletions = await db.obligationOccurrence.findMany({
       where: {
@@ -1490,23 +1609,7 @@ export async function markObligationPaid(
     });
 
     for (const occ of pastCompletions) {
-      const occKey = occ.occurrenceKey;
-      const occDueIso = occ.dueDate ? new Date(occ.dueDate).toISOString() : '';
-      const occLocalDateKey = getOccurrenceKey(occ.dueDate, tz);
-      const occUtcDateKey = getOccurrenceKey(occ.dueDate, 'UTC');
-
-      const isMatch =
-        occKey === occurrenceKey ||
-        candidateKeys.includes(occKey) ||
-        (occurrenceKey.length >= 10 && occKey.startsWith(occurrenceKey.substring(0, 10))) ||
-        (occKey.length >= 10 && occurrenceKey.startsWith(occKey.substring(0, 10))) ||
-        (occDueIso.length >= 10 && occurrenceKey.startsWith(occDueIso.substring(0, 10))) ||
-        occLocalDateKey === occurrenceKey ||
-        occUtcDateKey === occurrenceKey ||
-        occLocalDateKey.substring(0, 10) === occurrenceKey.substring(0, 10) ||
-        occUtcDateKey.substring(0, 10) === occurrenceKey.substring(0, 10);
-
-      if (isMatch) {
+      if (matchesOccurrence(occ, occurrenceKey, tz)) {
         existingCompletion = occ;
         break;
       }
@@ -1572,15 +1675,7 @@ export async function markObligationPaid(
   // SOL-R001-004: Linked loan obligation guard - verify occurrence against loan state before advancing schedule
   if (obligation.loan) {
     const isLoanClosed = obligation.loan.status === 'CLOSED' || !obligation.loan.nextEmiDate;
-    const loanDateStr = obligation.loan.nextEmiDate ? getOccurrenceKey(obligation.loan.nextEmiDate, tz).substring(0, 10) : '';
-    const occDateStr = occurrenceKey.length >= 10 ? occurrenceKey.substring(0, 10) : '';
-    const isLoanOvertaken = Boolean(
-      obligation.loan.nextEmiDate &&
-      loanDateStr &&
-      occDateStr &&
-      occDateStr < loanDateStr
-    );
-    if ((!isCurrentOccurrence && isLoanOvertaken) || isLoanClosed) {
+    if (isLoanClosed) {
       return {
         success: true,
         alreadyCompleted: true,
@@ -1588,6 +1683,17 @@ export async function markObligationPaid(
         occurrenceId: null,
         transactionId: null,
         nextDueAt: obligation.nextDueAt ? obligation.nextDueAt.toISOString() : null,
+      };
+    }
+    const earlyLoanMatch = matchesLoanActiveEmi(occurrenceKey, obligation.loan.nextEmiDate, tz);
+    if (!earlyLoanMatch.isMatch) {
+      return {
+        success: true,
+        alreadyCompleted: true,
+        alreadyProcessed: true,
+        occurrenceId: null,
+        transactionId: null,
+        nextDueAt: obligation.loan.nextEmiDate.toISOString(),
       };
     }
   }
@@ -1699,18 +1805,60 @@ export async function markObligationPaid(
     ? getNextOccurrence(rule, obligation.dueAt, obligation.nextDueAt)
     : obligation.nextDueAt;
 
-  // 5. Execute atomically
+  // 5. Execute atomically with row locks (SOL-R001-007, SOL-R001-004)
   const executeInTransaction = async (tx: any) => {
     let createdTxId: string | null = null;
     let emiRes: any = null;
 
-    // Linked EMI Obligation delegation under loan row lock (SOL-R001-004)
-    if (obligation.loan) {
-      if (typeof tx.$queryRaw === 'function') {
+    // Acquire row locks inside transaction
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "Obligation" WHERE id = ${obligation.id} FOR UPDATE`;
+      if (obligation.loan?.id) {
         await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${obligation.loan.id} FOR UPDATE`;
       }
+    }
+
+    const currentObligation = await tx.obligation.findUnique({
+      where: { id: obligation.id },
+      include: {
+        loan: true,
+        creditCardStatements: true,
+      }
+    });
+
+    if (!currentObligation || currentObligation.userId !== userId) {
+      throw new Error('Obligation not found or unauthorized');
+    }
+
+    // SOL-R001-007: Re-verify idempotency under obligation row lock
+    if (typeof tx.obligationOccurrence?.findMany === 'function') {
+      const lockedPastCompletions = await tx.obligationOccurrence.findMany({
+        where: {
+          obligationId: currentObligation.id,
+          status: 'COMPLETED',
+        },
+        include: { transaction: true },
+        orderBy: { dueDate: 'desc' },
+      });
+
+      const lockedMatch = lockedPastCompletions.find((occ: any) =>
+        matchesOccurrence(occ, occurrenceKey, tz)
+      );
+      if (lockedMatch) {
+        return {
+          alreadyCompleted: true,
+          alreadyProcessed: true,
+          occurrenceId: lockedMatch.id,
+          transactionId: lockedMatch.transactionId,
+          nextDueAt: currentObligation.nextDueAt.toISOString(),
+        };
+      }
+    }
+
+    // Linked EMI Obligation delegation under loan row lock (SOL-R001-004)
+    if (currentObligation.loan) {
       const currentLoan = await tx.loan.findUnique({
-        where: { id: obligation.loan.id },
+        where: { id: currentObligation.loan.id },
         select: {
           id: true,
           status: true,
@@ -1727,20 +1875,13 @@ export async function markObligationPaid(
           alreadyProcessed: true,
           occurrenceId: null,
           transactionId: null,
-          nextDueAt: currentLoan?.nextEmiDate ? currentLoan.nextEmiDate.toISOString() : (obligation.nextDueAt?.toISOString() ?? null),
+          nextDueAt: currentLoan?.nextEmiDate ? currentLoan.nextEmiDate.toISOString() : (currentObligation.nextDueAt?.toISOString() ?? null),
         };
       }
 
-      // Check if callback was overtaken by another payment under lock
-      const currentLoanDateStr = currentLoan.nextEmiDate ? getOccurrenceKey(currentLoan.nextEmiDate, tz).substring(0, 10) : '';
-      const occDateStr = occurrenceKey.length >= 10 ? occurrenceKey.substring(0, 10) : '';
-      const isOvertakenUnderLock = Boolean(
-        currentLoan.nextEmiDate &&
-        currentLoanDateStr &&
-        occDateStr &&
-        occDateStr < currentLoanDateStr
-      );
-      if (isOvertakenUnderLock) {
+      // SOL-R001-004: Validate occurrence against currently locked loan's active nextEmiDate
+      const loanMatch = matchesLoanActiveEmi(occurrenceKey, currentLoan.nextEmiDate, tz);
+      if (!loanMatch.isMatch) {
         return {
           alreadyCompleted: true,
           alreadyProcessed: true,
@@ -1754,28 +1895,28 @@ export async function markObligationPaid(
       const occurrence = await tx.obligationOccurrence.create({
         data: {
           userId,
-          obligationId: obligation.id,
+          obligationId: currentObligation.id,
           occurrenceKey: canonicalKey,
-          dueDate: obligation.nextDueAt,
+          dueDate: currentObligation.nextDueAt,
           status: 'COMPLETED',
           paidAt: new Date(),
           transactionId: null,
         }
       });
 
-      const targetAccountId = accountId || currentLoan.paymentAccountId || obligation.accountId;
+      const targetAccountId = accountId || currentLoan.paymentAccountId || currentObligation.accountId;
       if (!targetAccountId) {
         throw new Error('Payment account required for linked loan EMI');
       }
 
       emiRes = await recordEmiPayment(userId, {
-        loanId: obligation.loan.id,
-        amount: obligation.amount || currentLoan.emiAmount || '0',
+        loanId: currentObligation.loan.id,
+        amount: currentObligation.amount || currentLoan.emiAmount || '0',
         accountId: targetAccountId,
         obligationOccurrenceId: occurrence.id,
         obligationPaymentId: canonicalKey,
         occurredAt: occurrenceScheduledDate,
-        note: `EMI: ${obligation.title}`,
+        note: `EMI: ${currentObligation.title}`,
       }, tx);
 
       if (emiRes.alreadyProcessed) {
@@ -1784,7 +1925,7 @@ export async function markObligationPaid(
           alreadyProcessed: true,
           occurrenceId: occurrence.id,
           transactionId: emiRes.transactionId || null,
-          nextDueAt: emiRes.nextEmiDate ? (emiRes.nextEmiDate instanceof Date ? emiRes.nextEmiDate.toISOString() : new Date(emiRes.nextEmiDate).toISOString()) : (obligation.nextDueAt?.toISOString() ?? null),
+          nextDueAt: emiRes.nextEmiDate ? (emiRes.nextEmiDate instanceof Date ? emiRes.nextEmiDate.toISOString() : new Date(emiRes.nextEmiDate).toISOString()) : (currentObligation.nextDueAt?.toISOString() ?? null),
         };
       }
 
@@ -1807,9 +1948,9 @@ export async function markObligationPaid(
     const occurrence = await tx.obligationOccurrence.create({
       data: {
         userId,
-        obligationId: obligation.id,
+        obligationId: currentObligation.id,
         occurrenceKey: canonicalKey,
-        dueDate: obligation.nextDueAt,
+        dueDate: currentObligation.nextDueAt,
         status: 'COMPLETED',
         paidAt: new Date(),
         transactionId: null,
@@ -1817,8 +1958,8 @@ export async function markObligationPaid(
     });
 
     // Optional expense creation for non-loan obligations
-    if (createExpense && obligation.amount) {
-      const targetAccountId = accountId || obligation.accountId;
+    if (createExpense && currentObligation.amount) {
+      const targetAccountId = accountId || currentObligation.accountId;
       if (targetAccountId) {
         const acc = await tx.financialAccount.findUnique({
           where: { id: targetAccountId },
@@ -1829,12 +1970,12 @@ export async function markObligationPaid(
             data: {
               userId,
               type: 'EXPENSE',
-              amount: obligation.amount,
-              category: obligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
+              amount: currentObligation.amount,
+              category: currentObligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
               occurredAt: new Date(),
               accountId: targetAccountId,
-              obligationId: obligation.id,
-              note: `Paid: ${obligation.title}`,
+              obligationId: currentObligation.id,
+              note: `Paid: ${currentObligation.title}`,
             }
           });
           createdTxId = expenseTx.id;
@@ -1846,19 +1987,47 @@ export async function markObligationPaid(
       }
     }
 
+    // SOL-R001-007: Check if occurrence is current under lock
+    const lockActiveKey = getOccurrenceKey(currentObligation.nextDueAt, tz);
+    const lockUtcKey = getOccurrenceKey(currentObligation.nextDueAt, 'UTC');
+    const lockLocalDate = lockActiveKey.substring(0, 10);
+    const isCurrentUnderLock = (() => {
+      if (occurrenceKey === lockActiveKey || occurrenceKey === lockUtcKey) return true;
+      if (occurrenceKey.includes('T')) {
+        const d = new Date(occurrenceKey);
+        return !isNaN(d.getTime()) && d.getTime() === currentObligation.nextDueAt.getTime();
+      }
+      return occurrenceKey.trim() === lockLocalDate;
+    })();
+
+    const targetDay = currentObligation.recurrenceType === 'MONTHLY'
+      ? (currentObligation.loan?.dueDay ?? new TZDate(currentObligation.dueAt, tz).getDate())
+      : undefined;
+
+    const rule: RecurrenceRule = {
+      type: currentObligation.recurrenceType as any,
+      interval: currentObligation.recurrenceInterval,
+      targetDayOfMonth: targetDay,
+      timezone: tz,
+    };
+
+    const nextDue = isCurrentUnderLock
+      ? getNextOccurrence(rule, currentObligation.dueAt, currentObligation.nextDueAt)
+      : currentObligation.nextDueAt;
+
     // Advance obligation nextDueAt ONLY if this occurrence matches the current active due date
-    if (isCurrentOccurrence) {
+    if (isCurrentUnderLock) {
       await tx.obligation.update({
-        where: { id: obligation.id },
+        where: { id: currentObligation.id },
         data: {
           lastCompletedAt: new Date(),
-          nextDueAt: nextDue || obligation.nextDueAt,
+          nextDueAt: nextDue || currentObligation.nextDueAt,
           isActive: nextDue !== null,
         }
       });
     } else {
       await tx.obligation.update({
-        where: { id: obligation.id },
+        where: { id: currentObligation.id },
         data: {
           lastCompletedAt: new Date(),
         }
@@ -1868,7 +2037,7 @@ export async function markObligationPaid(
     // Acknowledge any pending deliveries for this occurrence
     await tx.reminderDelivery.updateMany({
       where: {
-        obligationId: obligation.id,
+        obligationId: currentObligation.id,
         occurrenceKey: { in: candidateKeys },
         status: { in: ['PENDING', 'SENT', 'SNOOZED', 'FAILED'] }
       },
@@ -1879,7 +2048,7 @@ export async function markObligationPaid(
       }
     });
 
-    const finalNextDueAtStr = (isCurrentOccurrence && nextDue ? nextDue : obligation.nextDueAt).toISOString();
+    const finalNextDueAtStr = (isCurrentUnderLock && nextDue ? nextDue : currentObligation.nextDueAt).toISOString();
 
     return {
       occurrenceId: occurrence.id,
@@ -1980,16 +2149,19 @@ export async function revertObligationPayment(
     throw new Error('Obligation not found or unauthorized');
   }
 
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true }
+  });
+  const tz = user?.timezone || 'UTC';
+
   // Find target occurrence
   let targetOccurrence: any = null;
   if (occurrenceId) {
     targetOccurrence = obligation.occurrences.find((o: any) => o.id === occurrenceId);
   } else if (occurrenceKey) {
-    targetOccurrence = obligation.occurrences.find(
-      (o: any) =>
-        o.occurrenceKey === occurrenceKey ||
-        o.occurrenceKey.startsWith(occurrenceKey) ||
-        occurrenceKey.startsWith(o.occurrenceKey)
+    targetOccurrence = obligation.occurrences.find((o: any) =>
+      matchesOccurrence(o, occurrenceKey, tz)
     );
   } else {
     // Latest completed occurrence

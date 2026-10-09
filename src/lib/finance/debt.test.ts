@@ -397,6 +397,80 @@ test('V2-200: Personal Debt (Friends & Family) Test Suite (V2-T020..V2-T030)', a
       /Debt not found or unauthorized/
     );
 
+    // -------------------------------------------------------------------------
+    // SOL-R002-008: Debt read models expose user.timezone
+    // -------------------------------------------------------------------------
+    const debtReadList = await debtService.getDebts(userA.id, {}, db);
+    assert.ok(debtReadList.length > 0);
+    assert.equal(debtReadList[0].timezone, 'Asia/Kolkata');
+    assert.equal(debtReadList[0].user?.timezone, 'Asia/Kolkata');
+
+    const singleDebtRead = await debtService.getDebtById(userA.id, debtReadList[0].id, db);
+    assert.ok(singleDebtRead);
+    assert.equal(singleDebtRead?.timezone, 'Asia/Kolkata');
+    assert.equal(singleDebtRead?.user?.timezone, 'Asia/Kolkata');
+
+    // -------------------------------------------------------------------------
+    // SOL-R003-007: Concurrent debt repayments idempotency and limits under row lock
+    // -------------------------------------------------------------------------
+    const limitDebt = await debtService.createDebt(userA.id, {
+      direction: 'PAYABLE',
+      counterpartyName: 'Deepak Lock Test',
+      title: 'Concurrency Limit Debt',
+      originalAmount: '3000.00',
+    }, db);
+    const limitDebtId = limitDebt.debt.id;
+
+    // Test 1: Duplicate idempotency key concurrent calls
+    const idempKey = `idemp_debt_${timestamp}`;
+    const [idempRes1, idempRes2] = await Promise.all([
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1000.00',
+        accountId: bankAId,
+        idempotencyKey: idempKey,
+      }, db),
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1000.00',
+        accountId: bankAId,
+        idempotencyKey: idempKey,
+      }, db),
+    ]);
+
+    assert.equal(idempRes1.success, true);
+    assert.equal(idempRes2.success, true);
+    const alreadyProcessedCount = (idempRes1.alreadyProcessed ? 1 : 0) + (idempRes2.alreadyProcessed ? 1 : 0);
+    assert.equal(alreadyProcessedCount, 1, 'Exactly one concurrent call is marked alreadyProcessed');
+
+    // Debt outstanding should now be 2000
+    const debtMid = await debtService.getDebtById(userA.id, limitDebtId, db);
+    assert.equal(debtMid?.outstandingAmount, '2000');
+
+    // Test 2: Concurrent overpayment rejected against remaining balance under row lock
+    // Remaining is 2000. Submit two concurrent payments of 1500 each (total 3000 > 2000).
+    const results = await Promise.allSettled([
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1500.00',
+        accountId: bankAId,
+      }, db),
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1500.00',
+        accountId: bankAId,
+      }, db),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    assert.equal(fulfilled.length, 1, 'Exactly one concurrent repayment succeeds');
+    assert.equal(rejected.length, 1, 'Overpayment rejected under lock');
+    assert.match((rejected[0] as PromiseRejectedResult).reason.message, /Cannot repay more than outstanding balance/);
+
+    const debtFinal = await debtService.getDebtById(userA.id, limitDebtId, db);
+    assert.equal(debtFinal?.outstandingAmount, '500', 'Outstanding balance protected under lock');
+
   } finally {
     await db.$disconnect();
   }

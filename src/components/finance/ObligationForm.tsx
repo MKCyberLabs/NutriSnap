@@ -122,14 +122,14 @@ export function ObligationForm({
 
       if (isEdit) {
         if (isDueAtEdited && dueAt) {
-          payload.dueAt = new Date(dueAt).toISOString();
+          payload.dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueAt.trim()) ? dueAt.trim() : new Date(dueAt).toISOString();
         } else if (obligation?.dueAt) {
           // Finding 4: Preserve initialData.dueAt as the anchor date
           payload.dueAt = typeof obligation.dueAt === 'string' ? obligation.dueAt : new Date(obligation.dueAt).toISOString();
         }
       } else {
         if (dueAt) {
-          payload.dueAt = new Date(dueAt).toISOString();
+          payload.dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueAt.trim()) ? dueAt.trim() : new Date(dueAt).toISOString();
         }
       }
 
