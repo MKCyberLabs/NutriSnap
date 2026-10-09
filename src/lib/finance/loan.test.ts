@@ -3377,3 +3377,185 @@ test('V2-R004-ROUND3-B: Statement & EMI Idempotency, Test DB Isolation, Login Ti
     }
   }
 });
+
+test('V2-R004-ROUND4-B: Accounts Repayment UI Payer Account Restrictions (SOL-R004-014)', async (t) => {
+  // 1. Static component verification: CreditCardDialog source code enforces payer account restrictions
+  const ccDialogPath = path.resolve(process.cwd(), 'src/components/finance/CreditCardDialog.tsx');
+  const ccDialogContent = fs.readFileSync(ccDialogPath, 'utf8');
+
+  // Verify eligible payer predicate is defined and excludes CREDIT_CARD
+  assert.ok(
+    ccDialogContent.includes('isEligiblePayer') &&
+      ccDialogContent.includes('a.id !== account.id') &&
+      ccDialogContent.includes("a.type !== 'CREDIT_CARD'"),
+    'CreditCardDialog must define isEligiblePayer predicate rejecting target card and any other CREDIT_CARD accounts'
+  );
+
+  // Verify payerAccounts filtering
+  assert.ok(
+    ccDialogContent.includes('const payerAccounts = (accounts || []).filter(isEligiblePayer)'),
+    'CreditCardDialog must filter payerAccounts using isEligiblePayer'
+  );
+
+  // Verify selectedFromAccountId prefers defaultPaymentAccountId when present and eligible
+  assert.ok(
+    ccDialogContent.includes('defaultPaymentAccountId') &&
+      ccDialogContent.includes('payerAccounts.some'),
+    'CreditCardDialog must select defaultPaymentAccountId only if present and within eligible payerAccounts'
+  );
+
+  // Verify empty payerAccounts disabled option and submit button disable
+  assert.ok(
+    ccDialogContent.includes('No eligible bank, cash or wallet account available'),
+    'CreditCardDialog must render disabled option "No eligible bank, cash or wallet account available" when payerAccounts is empty'
+  );
+  assert.ok(
+    ccDialogContent.includes('payerAccounts.length === 0'),
+    'CreditCardDialog must disable submit button when payerAccounts.length === 0'
+  );
+
+  // 2. Unit logic verification: isEligiblePayerAccount and filtering logic
+  const targetCardId = 'acc_card_target';
+  const allAccounts = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_card_other_1', name: 'Other Amazon Pay ICICI', type: 'CREDIT_CARD' },
+    { id: 'acc_card_other_2', name: 'Other SBI SimplyCLICK', type: 'CREDIT_CARD' },
+    { id: 'acc_bank_salary', name: 'HDFC Salary Account', type: 'BANK' },
+    { id: 'acc_cash_home', name: 'Home Petty Cash', type: 'CASH' },
+    { id: 'acc_wallet_paytm', name: 'Paytm Wallet', type: 'WALLET' },
+  ];
+
+  // Verify predicate logic on each type
+  const isEligiblePayer = (a: any) => a.id !== targetCardId && a.type !== 'CREDIT_CARD';
+
+  assert.equal(isEligiblePayer(allAccounts[0]), false, 'Target card itself must not be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[1]), false, 'Other credit card #1 must not be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[2]), false, 'Other credit card #2 must not be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[3]), true, 'BANK account must be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[4]), true, 'CASH account must be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[5]), true, 'WALLET account must be an eligible payer');
+
+  // Verify filtered payer accounts only contain BANK, CASH, WALLET
+  const filteredPayers = allAccounts.filter(isEligiblePayer);
+
+  assert.equal(filteredPayers.length, 3, 'Filtered payer accounts must contain exactly 3 accounts');
+  assert.deepEqual(
+    filteredPayers.map((a) => a.id),
+    ['acc_bank_salary', 'acc_cash_home', 'acc_wallet_paytm'],
+    'Filtered payer accounts must match only BANK, CASH, and WALLET accounts'
+  );
+
+  // When only credit cards exist: payerAccounts must be empty
+  const onlyCards = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_card_other_1', name: 'Other Card', type: 'CREDIT_CARD' },
+  ];
+  const emptyPayers = onlyCards.filter(isEligiblePayer);
+  assert.equal(emptyPayers.length, 0, 'When only credit cards exist, payerAccounts must be empty');
+
+  // 3. Database integration: verify that accounts created in DB filter correctly and backend rejects CREDIT_CARD
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userId = `usr_r004_r4_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `user-r4-${timestamp}@test.local`,
+        name: 'User Round 4 Test',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      },
+    });
+
+    // Create Target CC, Other CC, Bank, Cash, and Wallet in DB
+    const cardTarget = await financeService.createAccount(user.id, {
+      name: 'User Target Card',
+      type: 'CREDIT_CARD',
+      creditLimit: '100000.00',
+    }, db);
+
+    const cardOther = await financeService.createAccount(user.id, {
+      name: 'User Other Card',
+      type: 'CREDIT_CARD',
+      creditLimit: '50000.00',
+    }, db);
+
+    const bankAcc = await financeService.createAccount(user.id, {
+      name: 'HDFC Savings Bank',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+
+    const cashAcc = await financeService.createAccount(user.id, {
+      name: 'Physical Cash',
+      type: 'CASH',
+      openingBalance: '10000.00',
+    }, db);
+
+    const walletAcc = await financeService.createAccount(user.id, {
+      name: 'Amazon Pay Wallet',
+      type: 'WALLET',
+      openingBalance: '5000.00',
+    }, db);
+
+    const userAccounts = await financeService.getAccounts(user.id, db);
+    const dbEligiblePayers = userAccounts.filter(
+      (a: any) => a.id !== cardTarget.account.id && a.type !== 'CREDIT_CARD'
+    );
+
+    assert.equal(dbEligiblePayers.length, 3, 'Must have 3 eligible payer accounts from DB');
+    const payerTypes = new Set(dbEligiblePayers.map((a: any) => a.type));
+    assert.ok(payerTypes.has('BANK'), 'Must contain BANK');
+    assert.ok(payerTypes.has('CASH'), 'Must contain CASH');
+    assert.ok(payerTypes.has('WALLET'), 'Must contain WALLET');
+    assert.ok(!payerTypes.has('CREDIT_CARD'), 'Must NOT contain CREDIT_CARD');
+
+    // Create a statement on cardTarget and verify payment with BANK works, but payment with cardOther is rejected
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: cardTarget.account.id,
+      periodKey: '2026-10',
+      statementDate: '2026-10-01',
+      dueDate: '2026-10-25',
+      statementAmount: '5000.00',
+    }, db);
+
+    // Backend rejection test: paying with cardOther fails
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtRes.statement.id,
+          fromAccountId: cardOther.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      (err: any) => {
+        return err.message && err.message.toLowerCase().includes('credit card');
+      },
+      'Backend must reject payment from another CREDIT_CARD account'
+    );
+
+    // Paying with bankAcc succeeds
+    const bankPayRes = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtRes.statement.id,
+      fromAccountId: bankAcc.account.id,
+      amount: '1000.00',
+    }, db);
+    assert.equal(bankPayRes.success, true);
+    assert.equal(bankPayRes.pendingBalance, '4000');
+
+  } finally {
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND4-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});

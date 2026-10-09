@@ -38,6 +38,7 @@ interface CreditCardDialogProps {
     type: string;
     creditLimit?: string | number | null;
     currentBalance: string | number;
+    defaultPaymentAccountId?: string | null;
   };
   accounts: { id: string; name: string; type: string }[];
   trigger?: React.ReactNode;
@@ -49,6 +50,13 @@ export function generateRepaymentIdempotencyKey(): string {
     return `cc-repay-${crypto.randomUUID()}`;
   }
   return `cc-repay-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+export function isEligiblePayerAccount(
+  candidate: { id: string; type?: string | null },
+  targetAccountId: string
+): boolean {
+  return candidate.id !== targetAccountId && candidate.type !== 'CREDIT_CARD';
 }
 
 export function CreditCardDialog({
@@ -77,11 +85,40 @@ export function CreditCardDialog({
   // Record Payment Form State
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
-  const [selectedFromAccountId, setSelectedFromAccountId] = useState(
-    accounts.find((a) => a.id !== account.id)?.id || ''
-  );
+  const isEligiblePayer = (a: any) => a.id !== account.id && a.type !== 'CREDIT_CARD';
+  const payerAccounts = (accounts || []).filter(isEligiblePayer);
+
+  const [selectedFromAccountId, setSelectedFromAccountId] = useState<string>(() => {
+    const defaultId =
+      cardData?.account?.defaultPaymentAccountId ||
+      cardData?.defaultPaymentAccount?.id ||
+      account.defaultPaymentAccountId;
+    if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+      return defaultId;
+    }
+    return payerAccounts[0]?.id || '';
+  });
   const [paymentNote, setPaymentNote] = useState('');
   const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState<string>('');
+
+  useEffect(() => {
+    const defaultId =
+      cardData?.account?.defaultPaymentAccountId ||
+      cardData?.defaultPaymentAccount?.id ||
+      account.defaultPaymentAccountId;
+    if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+      setSelectedFromAccountId(defaultId);
+    } else {
+      setSelectedFromAccountId((current: string) =>
+        payerAccounts.some((a) => a.id === current) ? current : (payerAccounts[0]?.id || '')
+      );
+    }
+  }, [
+    cardData?.account?.defaultPaymentAccountId,
+    cardData?.defaultPaymentAccount?.id,
+    account.defaultPaymentAccountId,
+    payerAccounts,
+  ]);
 
   const loadDetails = useCallback(async () => {
     const session = getAuthSession();
@@ -90,6 +127,17 @@ export function CreditCardDialog({
     try {
       const details = await getCreditCardDetails(session.id, account.id);
       setCardData(details);
+      const defaultId =
+        (details as any)?.account?.defaultPaymentAccountId ||
+        details?.defaultPaymentAccount?.id ||
+        account.defaultPaymentAccountId;
+      if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+        setSelectedFromAccountId(defaultId);
+      } else {
+        setSelectedFromAccountId((current: string) =>
+          payerAccounts.some((a) => a.id === current) ? current : (payerAccounts[0]?.id || '')
+        );
+      }
     } catch (err: any) {
       toast({
         title: 'Error loading credit card',
@@ -99,7 +147,7 @@ export function CreditCardDialog({
     } finally {
       setLoading(false);
     }
-  }, [account.id, toast]);
+  }, [account.id, account.defaultPaymentAccountId, payerAccounts, toast]);
 
   useEffect(() => {
     if (open) {
@@ -217,7 +265,6 @@ export function CreditCardDialog({
   };
 
   const activeStatement = cardData?.activeStatement;
-  const payerAccounts = accounts.filter((a) => a.id !== account.id);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -334,6 +381,15 @@ export function CreditCardDialog({
                       onClick={() => {
                         setPayAmount(activeStatement.pendingBalance);
                         setPaymentIdempotencyKey(generateRepaymentIdempotencyKey());
+                        const defaultId =
+                          cardData?.account?.defaultPaymentAccountId ||
+                          cardData?.defaultPaymentAccount?.id ||
+                          account.defaultPaymentAccountId;
+                        if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+                          setSelectedFromAccountId(defaultId);
+                        } else if (!payerAccounts.some((a) => a.id === selectedFromAccountId)) {
+                          setSelectedFromAccountId(payerAccounts[0]?.id || '');
+                        }
                         setPaymentModalOpen(true);
                       }}
                       className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
@@ -480,14 +536,26 @@ export function CreditCardDialog({
                   onValueChange={setSelectedFromAccountId}
                 >
                   <SelectTrigger className="h-10 text-sm">
-                    <SelectValue placeholder="Select Bank/Cash Account" />
+                    <SelectValue
+                      placeholder={
+                        payerAccounts.length === 0
+                          ? 'No eligible bank, cash or wallet account available'
+                          : 'Select Bank/Cash Account'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
-                    {payerAccounts.map((a) => (
-                      <SelectItem key={a.id} value={a.id} className="text-sm">
-                        {a.name}
+                    {payerAccounts.length === 0 ? (
+                      <SelectItem value="none" disabled className="text-sm text-[#667085]">
+                        No eligible bank, cash or wallet account available
                       </SelectItem>
-                    ))}
+                    ) : (
+                      payerAccounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id} className="text-sm">
+                          {a.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -520,7 +588,7 @@ export function CreditCardDialog({
 
               <Button
                 type="submit"
-                disabled={submitting || !selectedFromAccountId}
+                disabled={submitting || !selectedFromAccountId || payerAccounts.length === 0}
                 className="w-full h-10 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
               >
                 {submitting ? 'Recording...' : 'Confirm Bill Payment'}
