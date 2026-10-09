@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { formatIndianRupees } from '../../components/design-system/MoneyAmount';
 import { getNextOccurrence, getOccurrenceKey } from '../recurrence/recurrence';
 import { isValidAccountType, isValidTransactionType, isValidObligationKind } from '../finance/finance';
-import { calculateMonthlyRecurringAmount } from '../../app/finance/bills/page';
+import { calculateMonthlyRecurringAmount } from '../finance/recurring-budget';
 import { formatInTimeZone } from 'date-fns-tz';
 
 // UI-T010 & UI-T011: Desktop sidebar active state logic
