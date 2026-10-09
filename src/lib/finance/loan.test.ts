@@ -4291,3 +4291,191 @@ test('SOL-R006-003 regression: Rejecting explicit revertToDate override when sch
     }
   }
 });
+
+test('SOL-R008-003 regression: Reversing payment on ARCHIVED loan preserves ARCHIVED status and keeps linked obligation deactivated and purged', async () => {
+  const db = new PrismaClient();
+  const userId = `usr_r008_arch_${Date.now()}`;
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `${userId}@example.com`,
+        name: 'SOL-R008-003 User',
+        timezone: 'UTC',
+        password: 'password123',
+      },
+    });
+
+    const bankAccount = await db.financialAccount.create({
+      data: {
+        userId: user.id,
+        name: 'Salary Account',
+        type: 'BANK',
+        openingBalance: 100000,
+      },
+    });
+
+    // 1. Create linked obligation that is archived
+    const ob = await db.obligation.create({
+      data: {
+        userId: user.id,
+        title: 'Archived Loan EMI',
+        kind: 'LOAN_EMI',
+        amount: 5000,
+        dueAt: new Date('2026-05-10T10:00:00.000Z'),
+        nextDueAt: new Date('2026-05-10T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: false,
+        isArchived: true,
+      },
+    });
+
+    // 2. Create an ARCHIVED loan linked to obligation
+    const loan = await db.loan.create({
+      data: {
+        userId: user.id,
+        name: 'Archived Personal Loan',
+        loanType: 'PERSONAL',
+        lender: 'Test Bank',
+        originalPrincipal: 100000,
+        openingOutstanding: 50000,
+        outstandingPrincipal: 50000,
+        emiAmount: 5000,
+        status: 'ARCHIVED',
+        obligationId: ob.id,
+        nextEmiDate: new Date('2026-05-10T10:00:00.000Z'),
+      },
+    });
+
+    // 3. Create a payment for this loan
+    const payment = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId: loan.id,
+        accountId: bankAccount.id,
+        amount: 5000,
+        principalPaid: 4000,
+        interestPaid: 1000,
+        occurredAt: new Date('2026-04-10T10:00:00.000Z'),
+        note: '[scheduledDate:2026-04-10T10:00:00.000Z]',
+      },
+    });
+
+    // Also create a dummy delivery record that should be purged
+    const reminder = await db.reminder.create({
+      data: {
+        userId: user.id,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob.title,
+        obligationId: ob.id,
+        isActive: false,
+      },
+    });
+    await db.reminderDelivery.create({
+      data: {
+        userId: user.id,
+        reminderId: reminder.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-05-10T10:00',
+        scheduledFor: new Date('2026-05-10T10:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      },
+    });
+
+    // 4. Revert payment on the ARCHIVED loan
+    const revertResult = await loanService.revertEmiPayment(user.id, {
+      loanPaymentId: payment.id,
+    }, db);
+
+    assert.equal(revertResult.success, true);
+    assert.equal(revertResult.restoredStatus, 'ARCHIVED', 'Reverting payment on ARCHIVED loan must preserve ARCHIVED status');
+
+    // 5. Verify loan status is still ARCHIVED
+    const updatedLoan = await db.loan.findUnique({ where: { id: loan.id } });
+    assert.equal(updatedLoan?.status, 'ARCHIVED');
+
+    // 6. Verify linked obligation remains deactivated and archived
+    const updatedOb = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(updatedOb?.isActive, false, 'Linked obligation must NOT be reactivated for ARCHIVED loan');
+    assert.equal(updatedOb?.isArchived, true, 'Linked obligation must remain archived');
+
+    // 7. Verify pending deliveries were purged
+    const remainingDeliveries = await db.reminderDelivery.findMany({
+      where: { obligationId: ob.id, status: { in: ['PENDING', 'SNOOZED', 'SENDING'] } },
+    });
+    assert.equal(remainingDeliveries.length, 0, 'Pending deliveries must be purged');
+
+    // 8. Test reversing payment on a CLOSED loan reopens to ACTIVE
+    const closedOb = await db.obligation.create({
+      data: {
+        user: { connect: { id: user.id } },
+        title: 'Closed Loan EMI',
+        kind: 'LOAN_EMI',
+        amount: 5000,
+        dueAt: new Date('2026-05-10T10:00:00.000Z'),
+        nextDueAt: new Date('2026-05-10T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: false,
+        isArchived: false,
+      },
+    });
+    const closedLoan = await db.loan.create({
+      data: {
+        userId: user.id,
+        name: 'Closed Car Loan',
+        loanType: 'AUTO',
+        lender: 'Car Finance',
+        originalPrincipal: 50000,
+        openingOutstanding: 0,
+        outstandingPrincipal: 0,
+        emiAmount: 5000,
+        status: 'CLOSED',
+        obligationId: closedOb.id,
+        nextEmiDate: null,
+      },
+    });
+    const closedPayment = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId: closedLoan.id,
+        accountId: bankAccount.id,
+        amount: 5000,
+        principalPaid: 5000,
+        interestPaid: 0,
+        occurredAt: new Date('2026-04-10T10:00:00.000Z'),
+        note: '[scheduledDate:2026-04-10T10:00:00.000Z]',
+      },
+    });
+
+    const revertClosedResult = await loanService.revertEmiPayment(user.id, {
+      loanPaymentId: closedPayment.id,
+    }, db);
+    assert.equal(revertClosedResult.success, true);
+    assert.equal(revertClosedResult.restoredStatus, 'ACTIVE', 'Reverting final payment on CLOSED loan must reopen to ACTIVE');
+
+    const reopenedLoan = await db.loan.findUnique({ where: { id: closedLoan.id } });
+    assert.equal(reopenedLoan?.status, 'ACTIVE');
+
+    const reopenedOb = await db.obligation.findUnique({ where: { id: closedOb.id } });
+    assert.equal(reopenedOb?.isActive, true, 'Linked obligation must be reactivated for reopened loan');
+    assert.equal(reopenedOb?.isArchived, false);
+
+  } finally {
+    try {
+      await db.reminderDelivery.deleteMany({ where: { userId } });
+      await db.reminder.deleteMany({ where: { userId } });
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.obligation.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('SOL-R008-003 cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});

@@ -1658,11 +1658,18 @@ function createSharedMemoryStore() {
       findUnique: async (args: any) => obligations.find(o => o.id === args.where.id) || null,
     },
     obligationOccurrence: {
-      findFirst: async (args: any) => occurrences.find(o =>
-        o.obligationId === args.where?.obligationId &&
-        (!args.where?.occurrenceKey || o.occurrenceKey === args.where.occurrenceKey) &&
-        (!args.where?.status || o.status === args.where.status)
-      ) || null,
+      findFirst: async (args: any) => occurrences.find(o => {
+        if (args.where?.obligationId && o.obligationId !== args.where.obligationId) return false;
+        if (args.where?.occurrenceKey && o.occurrenceKey !== args.where.occurrenceKey) return false;
+        if (args.where?.status) {
+          if (typeof args.where.status === 'object' && Array.isArray(args.where.status.in)) {
+            if (!args.where.status.in.includes(o.status)) return false;
+          } else if (o.status !== args.where.status) {
+            return false;
+          }
+        }
+        return true;
+      }) || null,
     },
     personalDebt: {
       findMany: async () => debts,
@@ -2015,4 +2022,243 @@ test('SOL-R006-004-R6: Pre-dispatch business eligibility recheck suppresses disp
 
   assert.equal(res.wealthRemindersSent, 0, 'Must suppress reminder if bill was completed before dispatch');
   assert.equal(mockBot.sentMessages.length, 0, 'No Telegram message dispatched for completed bill');
+});
+
+// ============================================================================
+// SOL-R008 Regressions: Tickets A, B, C
+// ============================================================================
+
+test('SOL-R008-001: Unlinked Loan queries use schema-valid selection and isolate per-target errors', async () => {
+  // 1. Error isolation test
+  const store = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+
+  // Loan 1 has a broken state that throws during findUnique
+  store.loans.push({
+    id: 'loan-faulty',
+    userId: 'usr-faulty',
+    name: 'Faulty Loan',
+    lender: 'Faulty Lender',
+    emiAmount: new Prisma.Decimal('1000.00'),
+    nextEmiDate: startTime,
+    status: 'ACTIVE',
+    obligationId: null,
+    user: { id: 'usr-faulty', telegramId: 'tg-faulty', timezone: 'UTC' },
+  });
+
+  // Loan 2 is valid and must succeed despite Loan 1's failure
+  store.loans.push({
+    id: 'loan-valid',
+    userId: 'usr-valid',
+    name: 'Valid Loan',
+    lender: 'Good Lender',
+    emiAmount: new Prisma.Decimal('2000.00'),
+    nextEmiDate: startTime,
+    status: 'ACTIVE',
+    obligationId: null,
+    user: { id: 'usr-valid', telegramId: 'tg-valid', timezone: 'UTC' },
+  });
+
+  // Custom findUnique that throws specifically for loan-faulty
+  const originalFindUnique = store.db.loan.findUnique;
+  store.db.loan.findUnique = async (args: any) => {
+    if (args.where?.id === 'loan-faulty') {
+      throw new Error('Database connection reset on faulty loan target');
+    }
+    return originalFindUnique(args);
+  };
+
+  const mockBot = createMockBot();
+  const res = await processSchedulerTick({
+    prismaClient: store.db as any,
+    botClient: mockBot,
+    clock: () => startTime,
+  });
+
+  assert.equal(res.loansChecked, 2, 'Checked both loans');
+  assert.equal(res.wealthRemindersSent, 1, 'Valid loan reminder dispatched despite faulty loan error');
+  assert.equal(mockBot.sentMessages.length, 1);
+  assert.match(mockBot.sentMessages[0].text, /Valid Loan/);
+
+  // 2. Real PostgreSQL regression: verify valid Loan select executes without PrismaClientValidationError
+  const { prisma: realPrisma } = await import('../prisma');
+  try {
+    const testLoan = await realPrisma.loan.findFirst({
+      select: {
+        id: true,
+        status: true,
+        nextEmiDate: true,
+        obligationId: true,
+      },
+    });
+    // Query must execute without throwing validation error
+    assert.ok(testLoan === null || typeof testLoan.id === 'string');
+  } catch (err: any) {
+    assert.fail(`Prisma loan query failed: ${err?.message}`);
+  }
+});
+
+test('SOL-R006-004 & SOL-R008-001 (Ticket B): Pre-dispatch atomic renewal when remaining lease < 45s margin and rejection when expired', async () => {
+  const store = createSharedMemoryStore();
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+
+  // Obligation 1: Near expiry (remaining lease 40s < 45s margin), must be atomically renewed and sent
+  store.obligations.push({
+    id: 'ob-renew-margin',
+    userId: 'usr-renew',
+    title: 'Near Expiry Bill',
+    kind: 'BILL',
+    amount: new Prisma.Decimal('1500.00'),
+    nextDueAt: startTime,
+    reminderOffsetsMin: [0],
+    isActive: true,
+    isArchived: false,
+    user: { id: 'usr-renew', telegramId: 'tg-renew', timezone: 'UTC' },
+    reminders: [],
+  });
+
+  const mockBot = createMockBot();
+
+  const res = await processSchedulerTick({
+    prismaClient: store.db as any,
+    botClient: mockBot,
+    clock: () => startTime,
+    beforeDispatch: async (delivery: any) => {
+      // Simulate that delivery had already aged in queue so remaining lease is 40s
+      // LEASE_TIMEOUT_MS = 300,000ms. Aged = 260,000ms -> remaining = 40,000ms (< 45,000ms margin)
+      delivery.lastAttemptAt = new Date(startTime.getTime() - 260_000);
+      const inStore = store.deliveries.find(d => d.id === delivery.id);
+      if (inStore) inStore.lastAttemptAt = new Date(startTime.getTime() - 260_000);
+    },
+  });
+
+  assert.equal(res.wealthRemindersSent, 1, 'Near-expiry delivery must renew and send');
+  assert.equal(mockBot.sentMessages.length, 1);
+  const sentDelivery = store.deliveries.find(d => d.obligationId === 'ob-renew-margin');
+  assert.ok(sentDelivery);
+  // lastAttemptAt was renewed to startTime (or later), not remaining at 260s ago
+  assert.ok(new Date(sentDelivery.lastAttemptAt).getTime() >= startTime.getTime());
+
+  // Obligation 2: Fully expired lease (>= 300s), must be aborted
+  const store2 = createSharedMemoryStore();
+  store2.obligations.push({
+    id: 'ob-expired-lease',
+    userId: 'usr-exp',
+    title: 'Expired Lease Bill',
+    kind: 'BILL',
+    amount: new Prisma.Decimal('1500.00'),
+    nextDueAt: startTime,
+    reminderOffsetsMin: [0],
+    isActive: true,
+    isArchived: false,
+    user: { id: 'usr-exp', telegramId: 'tg-exp', timezone: 'UTC' },
+    reminders: [],
+  });
+
+  const mockBot2 = createMockBot();
+  const res2 = await processSchedulerTick({
+    prismaClient: store2.db as any,
+    botClient: mockBot2,
+    clock: () => startTime,
+    beforeDispatch: async (delivery: any) => {
+      // Lease aged 305s (>= 300s LEASE_TIMEOUT_MS)
+      delivery.lastAttemptAt = new Date(startTime.getTime() - 305_000);
+      const inStore = store2.deliveries.find(d => d.id === delivery.id);
+      if (inStore) inStore.lastAttemptAt = new Date(startTime.getTime() - 305_000);
+    },
+  });
+
+  assert.equal(res2.wealthRemindersSent, 0, 'Expired lease delivery must be aborted before dispatch');
+  assert.equal(mockBot2.sentMessages.length, 0);
+});
+
+test('SOL-R008-002 (Ticket C): Pre-dispatch schedule revalidation suppresses dispatch for rescheduled obligation, debt, and loan', async () => {
+  const startTime = new Date('2026-10-15T09:00:00.000Z');
+
+  // 1. Obligation rescheduled before dispatch
+  const obStore = createSharedMemoryStore();
+  const ob = {
+    id: 'ob-resched-c',
+    userId: 'usr-ob-c',
+    title: 'Rescheduled Bill C',
+    kind: 'BILL',
+    amount: new Prisma.Decimal('3000.00'),
+    nextDueAt: startTime,
+    reminderOffsetsMin: [0],
+    isActive: true,
+    isArchived: false,
+    user: { id: 'usr-ob-c', telegramId: 'tg-ob-c', timezone: 'UTC' },
+    reminders: [],
+  };
+  obStore.obligations.push(ob);
+
+  const mockBotOb = createMockBot();
+  const resOb = await processSchedulerTick({
+    prismaClient: obStore.db as any,
+    botClient: mockBotOb,
+    clock: () => startTime,
+    beforeDispatch: async () => {
+      // Obligation nextDueAt is rescheduled
+      ob.nextDueAt = new Date('2026-11-15T09:00:00.000Z');
+    },
+  });
+  assert.equal(resOb.wealthRemindersSent, 0, 'Rescheduled obligation must be suppressed');
+  assert.equal(mockBotOb.sentMessages.length, 0);
+
+  // 2. Personal Debt rescheduled before dispatch
+  const debtStore = createSharedMemoryStore();
+  const debt = {
+    id: 'debt-resched-c',
+    userId: 'usr-debt-c',
+    counterpartyName: 'Bob Lender',
+    direction: 'PAYABLE',
+    originalAmount: new Prisma.Decimal('5000.00'),
+    dueAt: startTime,
+    reminderOffsetsMin: [0],
+    status: 'OPEN',
+    user: { id: 'usr-debt-c', telegramId: 'tg-debt-c', timezone: 'UTC' },
+    transactions: [],
+  };
+  debtStore.debts.push(debt);
+
+  const mockBotDebt = createMockBot();
+  const resDebt = await processSchedulerTick({
+    prismaClient: debtStore.db as any,
+    botClient: mockBotDebt,
+    clock: () => startTime,
+    beforeDispatch: async () => {
+      // Debt dueAt is rescheduled
+      debt.dueAt = new Date('2026-12-01T09:00:00.000Z');
+    },
+  });
+  assert.equal(resDebt.wealthRemindersSent, 0, 'Rescheduled debt must be suppressed');
+  assert.equal(mockBotDebt.sentMessages.length, 0);
+
+  // 3. Loan rescheduled before dispatch
+  const loanStore = createSharedMemoryStore();
+  const loan = {
+    id: 'loan-resched-c',
+    userId: 'usr-loan-c',
+    name: 'Rescheduled Loan C',
+    lender: 'HDFC Bank',
+    emiAmount: new Prisma.Decimal('8000.00'),
+    nextEmiDate: startTime,
+    status: 'ACTIVE',
+    obligationId: null,
+    user: { id: 'usr-loan-c', telegramId: 'tg-loan-c', timezone: 'UTC' },
+  };
+  loanStore.loans.push(loan);
+
+  const mockBotLoan = createMockBot();
+  const resLoan = await processSchedulerTick({
+    prismaClient: loanStore.db as any,
+    botClient: mockBotLoan,
+    clock: () => startTime,
+    beforeDispatch: async () => {
+      // Loan nextEmiDate is rescheduled
+      loan.nextEmiDate = new Date('2026-11-15T09:00:00.000Z');
+    },
+  });
+  assert.equal(resLoan.wealthRemindersSent, 0, 'Rescheduled loan must be suppressed');
+  assert.equal(mockBotLoan.sentMessages.length, 0);
 });

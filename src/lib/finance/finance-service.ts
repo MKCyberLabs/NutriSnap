@@ -2434,24 +2434,35 @@ export async function revertObligationPayment(
       );
       const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
 
-      // Restore obligation schedule
+      // Restore obligation schedule (SOL-R008-003: preserve ARCHIVED loan suppression)
+      const shouldReactivate = (loanRes as any)?.loanRes?.restoredStatus === 'ACTIVE' || (loanRes as any)?.restoredStatus === 'ACTIVE';
       await tx.obligation.update({
         where: { id: obligation.id },
         data: {
           nextDueAt: lockedTarget.dueDate,
           lastCompletedAt,
-          isActive: true,
+          isActive: shouldReactivate,
+          isArchived: !shouldReactivate,
         }
       });
 
       // Cancel future unsent delivery claims
-      await tx.reminderDelivery.deleteMany({
-        where: {
-          obligationId: obligation.id,
-          status: 'PENDING',
-          scheduledFor: { gte: lockedTarget.dueDate },
-        }
-      });
+      if (shouldReactivate) {
+        await tx.reminderDelivery.deleteMany({
+          where: {
+            obligationId: obligation.id,
+            status: 'PENDING',
+            scheduledFor: { gte: lockedTarget.dueDate },
+          }
+        });
+      } else {
+        await tx.reminderDelivery.deleteMany({
+          where: {
+            obligationId: obligation.id,
+            status: { in: ['PENDING', 'SNOOZED', 'SENDING'] },
+          }
+        });
+      }
 
       return {
         alreadyReversed: false,

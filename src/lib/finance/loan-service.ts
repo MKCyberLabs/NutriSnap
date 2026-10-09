@@ -1798,10 +1798,14 @@ export async function revertEmiPayment(
         },
         orderBy: { dueDate: 'desc' },
       });
+      // SOL-R008-003: Derive linked obligation lifecycle from parent loan status.
+      // If the loan is ARCHIVED, preserve obligation suppression (isActive: false, isArchived: true).
+      // Only reactivate obligation if loan is restored to ACTIVE.
+      const shouldReactivate = restoredStatus === 'ACTIVE';
       const obUpdateData: any = {
         lastCompletedAt: previousCompletion?.paidAt || null,
-        isActive: true,
-        isArchived: false,
+        isActive: shouldReactivate,
+        isArchived: !shouldReactivate,
       };
       if (restoredNextEmiDate) {
         obUpdateData.nextDueAt = restoredNextEmiDate;
@@ -1810,6 +1814,15 @@ export async function revertEmiPayment(
         where: { id: currentLoan.obligationId },
         data: obUpdateData
       });
+
+      if (!shouldReactivate) {
+        await tx.reminderDelivery.deleteMany({
+          where: {
+            obligationId: currentLoan.obligationId,
+            status: { in: ['PENDING', 'SNOOZED', 'SENDING'] }
+          }
+        });
+      }
     }
 
     return {
