@@ -3978,3 +3978,316 @@ test('SOL-R005-001: Direct EMI reversal enforces latest-only completion order an
     }
   }
 });
+
+test('SOL-R005-001 regression: Crossed-order payments (Jan recorded Mar 1, Feb recorded Feb 1) reversing Feb then Jan', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test',
+  });
+  const timestamp = Date.now() + Math.floor(Math.random() * 100000);
+  const userId = `usr_crossed_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `crossed_${timestamp}@example.com`,
+        name: 'Crossed Order User',
+        password: 'password123',
+        timezone: 'UTC',
+      }
+    });
+
+    const bank = await db.financialAccount.create({
+      data: {
+        userId: user.id,
+        name: 'Crossed Bank',
+        type: 'BANK',
+        openingBalance: new Prisma.Decimal('200000.00'),
+      }
+    });
+
+    // Create loan starting Jan 15, 2026
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Crossed Order Loan',
+      loanType: 'PERSONAL',
+      lender: 'SBI',
+      openingOutstanding: '60000.00',
+      emiAmount: '10000.00',
+      nextEmiDate: '2026-01-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bank.id,
+      createLinkedObligation: false,
+    }, db);
+
+    const loanId = loanRes.loan.id;
+
+    // Create Jan 15 installment recorded on March 1 (occurredAt > Feb installment occurredAt)
+    const payJan = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('10000.00'),
+        principalPaid: new Prisma.Decimal('5000.00'),
+        interestPaid: new Prisma.Decimal('5000.00'),
+        occurredAt: new Date('2026-03-01T10:00:00.000Z'),
+        accountId: bank.id,
+        note: 'SBI EMI paid [scheduledDate:2026-01-15T12:00:00.000Z]',
+      }
+    });
+
+    // Advance loan to Feb 15
+    await db.loan.update({
+      where: { id: loanId },
+      data: {
+        outstandingPrincipal: new Prisma.Decimal('55000.00'),
+        nextEmiDate: new Date('2026-02-15T12:00:00.000Z'),
+      }
+    });
+
+    // Create Feb 15 installment recorded on February 1 (occurredAt < Jan installment occurredAt)
+    const payFeb = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('10000.00'),
+        principalPaid: new Prisma.Decimal('5000.00'),
+        interestPaid: new Prisma.Decimal('5000.00'),
+        occurredAt: new Date('2026-02-01T10:00:00.000Z'),
+        accountId: bank.id,
+        note: 'SBI EMI paid [scheduledDate:2026-02-15T12:00:00.000Z]',
+      }
+    });
+
+    // Advance loan to Mar 15
+    await db.loan.update({
+      where: { id: loanId },
+      data: {
+        outstandingPrincipal: new Prisma.Decimal('50000.00'),
+        nextEmiDate: new Date('2026-03-15T12:00:00.000Z'),
+      }
+    });
+
+    // 1. Direct reversal of earlier scheduled installment (payJan) while later installment (payFeb) is completed MUST be rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, { loanPaymentId: payJan.id }, db);
+      },
+      /Cannot revert an earlier payment while a later payment remains completed/,
+      'Reversing Jan must reject while Feb is completed, even though Jan was recorded later in calendar time'
+    );
+
+    // 2. Direct reversal of Feb (payFeb) MUST succeed because it is the latest scheduled installment
+    const revFeb = await loanService.revertEmiPayment(user.id, { loanPaymentId: payFeb.id }, db);
+    assert.equal(revFeb.success, true);
+    assert.equal(revFeb.alreadyReversed, false);
+    assert.equal(revFeb.restoredNextEmiDate, '2026-02-15T12:00:00.000Z');
+
+    const loanAfterFebRev = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(loanAfterFebRev?.nextEmiDate?.toISOString(), '2026-02-15T12:00:00.000Z');
+    assert.equal(loanAfterFebRev?.outstandingPrincipal.toString(), '55000');
+
+    // 3. Now that Feb is reverted, Jan (payJan) CAN be reversed
+    const revJan = await loanService.revertEmiPayment(user.id, { loanPaymentId: payJan.id }, db);
+    assert.equal(revJan.success, true);
+    assert.equal(revJan.alreadyReversed, false);
+    assert.equal(revJan.restoredNextEmiDate, '2026-01-15T12:00:00.000Z');
+
+    const loanAfterJanRev = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(loanAfterJanRev?.nextEmiDate?.toISOString(), '2026-01-15T12:00:00.000Z');
+    assert.equal(loanAfterJanRev?.outstandingPrincipal.toString(), '60000');
+
+    // 4. Repeated undo reports alreadyReversed: true
+    const repeatJan = await loanService.revertEmiPayment(user.id, { loanPaymentId: payJan.id }, db);
+    assert.equal(repeatJan.alreadyReversed, true);
+
+    // 5. Test loanId-only fallback with crossed order
+    // Re-create crossed payments: Jan recorded Mar 1, Feb recorded Feb 1
+    const p1 = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('10000.00'),
+        principalPaid: new Prisma.Decimal('5000.00'),
+        interestPaid: new Prisma.Decimal('5000.00'),
+        occurredAt: new Date('2026-03-01T10:00:00.000Z'),
+        accountId: bank.id,
+        note: 'Crossed 1 [scheduledDate:2026-01-15T12:00:00.000Z]',
+      }
+    });
+    const p2 = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('10000.00'),
+        principalPaid: new Prisma.Decimal('5000.00'),
+        interestPaid: new Prisma.Decimal('5000.00'),
+        occurredAt: new Date('2026-02-01T10:00:00.000Z'),
+        accountId: bank.id,
+        note: 'Crossed 2 [scheduledDate:2026-02-15T12:00:00.000Z]',
+      }
+    });
+
+    // First loanId fallback must pick p2 (Feb installment)
+    const fb1 = await loanService.revertEmiPayment(user.id, { loanId }, db);
+    assert.equal(fb1.success, true);
+    assert.equal(fb1.revertedPaymentId, p2.id, 'loanId fallback must pick latest scheduled installment p2');
+
+    // Second loanId fallback must pick p1 (Jan installment)
+    const fb2 = await loanService.revertEmiPayment(user.id, { loanId }, db);
+    assert.equal(fb2.success, true);
+    assert.equal(fb2.revertedPaymentId, p1.id, 'loanId fallback must pick remaining installment p1');
+
+    // Third loanId fallback reports alreadyReversed: true
+    const fb3 = await loanService.revertEmiPayment(user.id, { loanId }, db);
+    assert.equal(fb3.alreadyReversed, true);
+
+  } finally {
+    try {
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('Crossed order cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});
+
+test('SOL-R006-003 regression: Rejecting explicit revertToDate override when scheduled identity is known', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test',
+  });
+  const timestamp = Date.now() + Math.floor(Math.random() * 100000);
+  const userId = `usr_sched_override_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `sched_override_${timestamp}@example.com`,
+        name: 'Sched Override User',
+        password: 'password123',
+        timezone: 'UTC',
+      }
+    });
+
+    const bank = await db.financialAccount.create({
+      data: {
+        userId: user.id,
+        name: 'Sched Bank',
+        type: 'BANK',
+        openingBalance: new Prisma.Decimal('100000.00'),
+      }
+    });
+
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Sched Identity Loan',
+      loanType: 'PERSONAL',
+      lender: 'ICICI Bank',
+      openingOutstanding: '40000.00',
+      emiAmount: '10000.00',
+      nextEmiDate: '2026-04-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bank.id,
+      createLinkedObligation: false,
+    }, db);
+
+    const loanId = loanRes.loan.id;
+
+    // Create installment with known scheduled identity in note
+    const payWithSched = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('10000.00'),
+        principalPaid: new Prisma.Decimal('10000.00'),
+        interestPaid: new Prisma.Decimal('0.00'),
+        occurredAt: new Date('2026-04-16T10:00:00.000Z'),
+        accountId: bank.id,
+        note: 'ICICI EMI paid [scheduledDate:2026-04-15T12:00:00.000Z]',
+      }
+    });
+
+    // 1. Attempting explicit revertToDate override with a different date MUST be rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanPaymentId: payWithSched.id,
+          revertToDate: '2026-01-01T12:00:00.000Z',
+        }, db);
+      },
+      /Cannot override authoritative scheduled date with explicit revertToDate/,
+      'Must reject caller attempting to override known scheduled identity'
+    );
+
+    // 2. Reversal without revertToDate restores authoritative schedule
+    const okRevert = await loanService.revertEmiPayment(user.id, {
+      loanPaymentId: payWithSched.id,
+    }, db);
+    assert.equal(okRevert.success, true);
+    assert.equal(okRevert.restoredNextEmiDate, '2026-04-15T12:00:00.000Z');
+
+    // 3. For legacy unlinked payment, validate that revertToDate cannot rewind across retained completed installment
+    const inst1 = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('5000.00'),
+        principalPaid: new Prisma.Decimal('5000.00'),
+        occurredAt: new Date('2026-05-15T12:00:00.000Z'),
+        accountId: bank.id,
+        note: 'Inst 1 [scheduledDate:2026-05-15T12:00:00.000Z]',
+      }
+    });
+
+    // Legacy unlinked payment (no note scheduledDate, no occurrence)
+    const legPay = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('5000.00'),
+        principalPaid: new Prisma.Decimal('5000.00'),
+        occurredAt: new Date('2026-06-15T12:00:00.000Z'),
+        accountId: bank.id,
+        note: null,
+        obligationOccurrenceId: null,
+      }
+    });
+
+    // Supplying revertToDate before or on retained inst1 (2026-05-15) must be rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanPaymentId: legPay.id,
+          revertToDate: '2026-05-10T12:00:00.000Z',
+        }, db);
+      },
+      /Cannot rewind schedule across retained completed installments/,
+      'Must reject explicit revertToDate that rewinds before retained completed installment'
+    );
+
+    // Supplying valid revertToDate (2026-06-15) succeeds
+    const legRevertOk = await loanService.revertEmiPayment(user.id, {
+      loanPaymentId: legPay.id,
+      revertToDate: '2026-06-15T12:00:00.000Z',
+    }, db);
+    assert.equal(legRevertOk.success, true);
+    assert.equal(legRevertOk.restoredNextEmiDate, '2026-06-15T12:00:00.000Z');
+
+  } finally {
+    try {
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('Sched override cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});

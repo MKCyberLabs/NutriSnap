@@ -21,11 +21,47 @@ let isStarted = false;
 
 export const lastHydrationMessageMap = new Map<string, number>();
 export const LEASE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes crash recovery lease timeout (SOL-R002-004)
+export const OUTBOUND_SEND_TIMEOUT_MS = 30_000; // 30 seconds strict outbound timeout, well below 5m LEASE_TIMEOUT_MS (SOL-R006-004)
+
+/**
+ * ============================================================================
+ * SOL-R006-004: Telegram Outbound Timeout & Safe Delivery Semantics
+ * ============================================================================
+ *
+ * 1. Bounded Outbound Request Lifetime:
+ *    Telegram API calls via grammY default to a 500-second request timeout if no
+ *    abort signal is provided. Because crash recovery leases expire after 5 minutes
+ *    (LEASE_TIMEOUT_MS = 300,000ms), a slow or hung network request could still be
+ *    in flight when a subsequent scheduler tick (e.g. at 6 minutes) considers the
+ *    lease expired. This caused duplicate outbound notifications to be dispatched
+ *    simultaneously while the first was still live.
+ *    We enforce an explicit 30-second timeout (OUTBOUND_SEND_TIMEOUT_MS) via
+ *    AbortSignal and Promise.race on all outbound Telegram requests. Hung requests
+ *    abort and fail cleanly within 30s, long before lease expiration.
+ *
+ * 2. Duplicate Delivery Limitations in Distributed Systems:
+ *    External messaging APIs (like Telegram Bot API) follow at-least-once delivery
+ *    semantics. If a network partition occurs after Telegram receives and delivers
+ *    a message to the user but before the HTTP response reaches NutriSnap, the
+ *    client-side timeout fires and the attempt is marked as failed. In such edge
+ *    cases, duplicate delivery cannot be 100% prevented by the client alone without
+ *    upstream idempotent message deduplication.
+ *
+ * 3. Safe Retry & Fencing Semantics:
+ *    To minimize duplicate delivery risk while guaranteeing recovery:
+ *    - All state transitions use optimistic concurrency fencing tokens
+ *      (attemptCount and lastAttemptAt matching the acquired lease).
+ *    - Bounded retry limits: maximum MAX_DELIVERY_ATTEMPTS (3) attempts.
+ *    - Exponential retry backoff avoids immediate storming.
+ *    - Inline callback actions (e.g. Telegram /paid) are strictly occurrence-idempotent.
+ * ============================================================================
+ */
 
 export interface ProcessSchedulerTickOptions {
   prismaClient?: any;
   botClient?: any;
   now?: Date;
+  outboundTimeoutMs?: number;
 }
 
 export interface SchedulerTickResult {
@@ -37,6 +73,39 @@ export interface SchedulerTickResult {
   debtsChecked?: number;
   loansChecked?: number;
   wealthRemindersSent: number;
+}
+
+/**
+ * Safe outbound Telegram message sender with strict bounded timeout (SOL-R006-004).
+ * Guarantees outbound requests abort long before the 5-minute lease timeout (LEASE_TIMEOUT_MS),
+ * preventing dual-tick duplicate sends while a slow request is in flight.
+ */
+async function sendTelegramMessageWithTimeout(
+  bot: any,
+  chatId: string | number,
+  text: string,
+  options?: any,
+  timeoutMs: number = OUTBOUND_SEND_TIMEOUT_MS
+) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error(`Telegram sendMessage timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+  timer.unref?.();
+
+  try {
+    const signal = controller.signal;
+    return await Promise.race([
+      bot.api.sendMessage(chatId, text, { ...options, signal }, signal),
+      new Promise<never>((_, reject) => {
+        signal.addEventListener('abort', () => {
+          reject(signal.reason || new Error(`Telegram sendMessage timed out after ${timeoutMs}ms`));
+        }, { once: true });
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -56,6 +125,7 @@ export async function processSchedulerTick(
   const db = options?.prismaClient || prisma;
   const bot = options?.botClient || new Bot(process.env.TELEGRAM_BOT_TOKEN || 'mock');
   const now = options?.now || new Date();
+  const outboundTimeoutMs = options?.outboundTimeoutMs ?? OUTBOUND_SEND_TIMEOUT_MS;
 
   const result: SchedulerTickResult = {
     healthRemindersChecked: 0,
@@ -116,10 +186,12 @@ export async function processSchedulerTick(
 
           if (!existingMeal) {
             try {
-              await bot.api.sendMessage(
+              await sendTelegramMessageWithTimeout(
+                bot,
                 reminder.user.telegramId,
                 `🕒 **Reminder:** It's time for your ${reminder.category}!\n\nSend a photo or type what you're eating to log it.`,
-                { parse_mode: 'Markdown' }
+                { parse_mode: 'Markdown' },
+                outboundTimeoutMs
               );
               result.healthRemindersSent++;
               console.log(`Sent ${reminder.category} reminder to user ${reminder.user.id}`);
@@ -185,13 +257,15 @@ export async function processSchedulerTick(
               bot.api.deleteMessage(setting.user.telegramId, oldMessageId).catch(() => {});
             }
 
-            const msg = await bot.api.sendMessage(
+            const msg = await sendTelegramMessageWithTimeout(
+              bot,
               setting.user.telegramId,
               `💧 **Time to hydrate!**\n\nTake a quick break and drink some water.`,
               {
                 parse_mode: 'Markdown',
                 reply_markup: { inline_keyboard },
-              }
+              },
+              outboundTimeoutMs
             );
             result.hydrationRemindersSent++;
             console.log(`Sent hydration reminder to user ${setting.user.id}`);
@@ -273,7 +347,9 @@ export async function processSchedulerTick(
           nextRetryAt: existingDelivery?.nextRetryAt ?? null,
         });
 
-        if (!eligibility.shouldSend && !isClaimExpired) {
+        // SOL-R006-002: Separate lease exclusivity from delivery eligibility.
+        // Business eligibility (non-stale, not snoozed, active target) must confirm delivery is eligible.
+        if (!eligibility.shouldSend) {
           continue;
         }
 
@@ -361,7 +437,9 @@ export async function processSchedulerTick(
               lastAttemptAt: del.lastAttemptAt ?? null,
               nextRetryAt: del.nextRetryAt ?? null,
             });
-            if (!recheck.shouldSend && !isDelClaimExpired) {
+            // SOL-R006-002: Expired leases may ONLY be renewed if business recheck confirms eligibility.
+            // Stale occurrences (> 7 days past due) are suppressed and NOT resent upon lease expiration.
+            if (!recheck.shouldSend) {
               return null;
             }
 
@@ -461,10 +539,16 @@ export async function processSchedulerTick(
         });
 
         try {
-          const sent = await bot.api.sendMessage(ob.user.telegramId, payload.text, {
-            parse_mode: 'Markdown',
-            reply_markup: payload.reply_markup,
-          });
+          const sent = await sendTelegramMessageWithTimeout(
+            bot,
+            ob.user.telegramId,
+            payload.text,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: payload.reply_markup,
+            },
+            outboundTimeoutMs
+          );
 
           const claimedAttemptCount = delivery.attemptCount || 1;
           const successState = evaluateDeliverySuccess({
@@ -702,7 +786,9 @@ export async function processSchedulerTick(
                 lastAttemptAt: del.lastAttemptAt ?? null,
                 nextRetryAt: del.nextRetryAt ?? null,
               });
-              if (!recheck.shouldSend && !isDelClaimExpired) {
+              // SOL-R006-002: Expired leases may ONLY be renewed if business recheck confirms eligibility.
+              // Stale occurrences (> 7 days past due) are suppressed and NOT resent upon lease expiration.
+              if (!recheck.shouldSend) {
                 return null;
               }
 
@@ -778,10 +864,16 @@ export async function processSchedulerTick(
           });
 
           try {
-            const sent = await bot.api.sendMessage(debt.user.telegramId, payload.text, {
-              parse_mode: 'Markdown',
-              reply_markup: payload.reply_markup,
-            });
+            const sent = await sendTelegramMessageWithTimeout(
+              bot,
+              debt.user.telegramId,
+              payload.text,
+              {
+                parse_mode: 'Markdown',
+                reply_markup: payload.reply_markup,
+              },
+              outboundTimeoutMs
+            );
 
             const claimedAttemptCount = delivery.attemptCount || 1;
             const successState = evaluateDeliverySuccess({
@@ -1003,7 +1095,9 @@ export async function processSchedulerTick(
                 lastAttemptAt: del.lastAttemptAt ?? null,
                 nextRetryAt: del.nextRetryAt ?? null,
               });
-              if (!recheck.shouldSend && !isDelClaimExpired) {
+              // SOL-R006-002: Expired leases may ONLY be renewed if business recheck confirms eligibility.
+              // Stale occurrences (> 7 days past due) are suppressed and NOT resent upon lease expiration.
+              if (!recheck.shouldSend) {
                 return null;
               }
 
@@ -1079,10 +1173,16 @@ export async function processSchedulerTick(
           });
 
           try {
-            const sent = await bot.api.sendMessage(loan.user.telegramId, payload.text, {
-              parse_mode: 'Markdown',
-              reply_markup: payload.reply_markup,
-            });
+            const sent = await sendTelegramMessageWithTimeout(
+              bot,
+              loan.user.telegramId,
+              payload.text,
+              {
+                parse_mode: 'Markdown',
+                reply_markup: payload.reply_markup,
+              },
+              outboundTimeoutMs
+            );
 
             const claimedAttemptCount = delivery.attemptCount || 1;
             const successState = evaluateDeliverySuccess({

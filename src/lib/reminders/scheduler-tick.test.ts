@@ -1325,3 +1325,301 @@ test('SOL-R005-002: Expired delivery leases enforce MAX_DELIVERY_ATTEMPTS across
   assert.ok(renewUpdate);
   assert.equal(renewUpdate.data.attemptCount, 3, 'attemptCount incremented to 3');
 });
+
+test('SOL-R006-002: Stale expired delivery suppression (> 7 days past due)', async () => {
+  const now = new Date('2026-10-25T10:00:00.000Z');
+  // 14 days ago (> 7-day stale threshold)
+  const staleDueAt = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const expiredLastAttempt = new Date(now.getTime() - 10 * 60 * 1000); // 10 mins ago (> 5m LEASE_TIMEOUT_MS)
+
+  const updatedDeliveries: any[] = [];
+  const mockBot = createMockBot();
+
+  // Test 1: Obligation with expired SENDING delivery lease but stale schedule (> 7 days past due)
+  const mockDbStaleOb = {
+    reminder: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: {
+      findMany: async () => [
+        {
+          id: 'ob-stale-14d',
+          userId: 'usr-stale-ob',
+          title: 'Stale 14-day Obligation',
+          kind: 'BILL',
+          amount: new Prisma.Decimal('500.00'),
+          nextDueAt: staleDueAt,
+          reminderOffsetsMin: [0],
+          isActive: true,
+          isArchived: false,
+          user: { id: 'usr-stale-ob', telegramId: 'tg-stale-ob', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => ({
+        id: 'del-stale-ob',
+        status: 'SENDING',
+        attemptCount: 1,
+        lastAttemptAt: expiredLastAttempt,
+      }),
+      update: async (args: any) => {
+        updatedDeliveries.push(args);
+        return { id: args.where.id, ...args.data };
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'ob-stale-14d' }],
+      obligation: {
+        findUnique: async () => ({
+          id: 'ob-stale-14d',
+          nextDueAt: staleDueAt,
+          isActive: true,
+          isArchived: false,
+        }),
+      },
+      reminder: { findFirst: async () => ({ id: 'rem-stale-ob' }) },
+      reminderDelivery: {
+        findFirst: async () => ({
+          id: 'del-stale-ob',
+          status: 'SENDING',
+          attemptCount: 1,
+          lastAttemptAt: expiredLastAttempt,
+        }),
+        update: async (args: any) => {
+          updatedDeliveries.push(args);
+          return { id: args.where.id, ...args.data };
+        },
+      },
+    }),
+    personalDebt: { findMany: async () => [] },
+    loan: { findMany: async () => [] },
+  };
+
+  const resStale = await processSchedulerTick({
+    prismaClient: mockDbStaleOb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  // Stale expired delivery must be suppressed: 0 reminders sent, 0 messages sent
+  assert.equal(resStale.wealthRemindersSent, 0, 'Stale expired obligation must NOT be resent');
+  assert.equal(mockBot.sentMessages.length, 0, 'No Telegram messages should be dispatched for stale occurrence');
+  // It should NOT have updated delivery to SENDING (no renewal)
+  const sendingUpdate = updatedDeliveries.find((u) => u.where.id === 'del-stale-ob' && u.data.status === 'SENDING');
+  assert.equal(sendingUpdate, undefined, 'Stale delivery must not be renewed to SENDING');
+
+  // Test 2: Personal Debt with expired SENDING lease but stale schedule
+  const mockDbStaleDebt = {
+    reminder: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    personalDebt: {
+      findMany: async () => [
+        {
+          id: 'debt-stale-14d',
+          userId: 'usr-stale-debt',
+          direction: 'PAYABLE',
+          counterpartyName: 'Alice',
+          originalAmount: new Prisma.Decimal('1000.00'),
+          dueAt: staleDueAt,
+          status: 'OPEN',
+          reminderOffsetsMin: [0],
+          transactions: [],
+          user: { id: 'usr-stale-debt', telegramId: 'tg-stale-debt', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => ({
+        id: 'del-stale-debt',
+        status: 'SENDING',
+        attemptCount: 1,
+        lastAttemptAt: expiredLastAttempt,
+      }),
+      update: async (args: any) => {
+        updatedDeliveries.push(args);
+        return { id: args.where.id, ...args.data };
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'debt-stale-14d' }],
+      personalDebt: {
+        findUnique: async () => ({
+          id: 'debt-stale-14d',
+          status: 'OPEN',
+          dueAt: staleDueAt,
+          reminderOffsetsMin: [0],
+          transactions: [],
+        }),
+      },
+      reminder: { findFirst: async () => ({ id: 'rem-stale-debt' }) },
+      reminderDelivery: {
+        findFirst: async () => ({
+          id: 'del-stale-debt',
+          status: 'SENDING',
+          attemptCount: 1,
+          lastAttemptAt: expiredLastAttempt,
+        }),
+        update: async (args: any) => {
+          updatedDeliveries.push(args);
+          return { id: args.where.id, ...args.data };
+        },
+      },
+    }),
+    loan: { findMany: async () => [] },
+  };
+
+  const resStaleDebt = await processSchedulerTick({
+    prismaClient: mockDbStaleDebt as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(resStaleDebt.wealthRemindersSent, 0, 'Stale expired debt must NOT be resent');
+  assert.equal(mockBot.sentMessages.length, 0, 'No Telegram messages should be dispatched for stale debt');
+});
+
+test('SOL-R006-004: Bounded outbound send timeout preventing dual-tick duplicate sends', async () => {
+  const nowTick1 = new Date('2026-10-15T10:00:00.000Z');
+  const updatedDeliveries: any[] = [];
+
+  let abortedSignalReceived = false;
+
+  // Mock bot whose sendMessage hangs until aborted
+  const hungMockBot = {
+    sentMessages: [] as any[],
+    api: {
+      sendMessage: async (chatId: string, text: string, options?: any, signal?: AbortSignal) => {
+        return new Promise<any>((resolve, reject) => {
+          const sig = signal || options?.signal;
+          if (sig) {
+            sig.addEventListener('abort', () => {
+              abortedSignalReceived = true;
+              reject(sig.reason || new Error('Request aborted by signal'));
+            }, { once: true });
+          }
+        });
+      },
+    },
+  };
+
+  let deliveryRecord: any = null;
+
+  const mockDb = {
+    reminder: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: {
+      findMany: async () => [
+        {
+          id: 'ob-hang-test',
+          userId: 'usr-hang',
+          title: 'Hung Message Bill',
+          kind: 'BILL',
+          amount: new Prisma.Decimal('1200.00'),
+          nextDueAt: nowTick1,
+          reminderOffsetsMin: [0],
+          isActive: true,
+          isArchived: false,
+          user: { id: 'usr-hang', telegramId: 'tg-hang', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => deliveryRecord,
+      create: async (args: any) => {
+        deliveryRecord = { id: 'del-hang-test', ...args.data };
+        return deliveryRecord;
+      },
+      update: async (args: any) => {
+        deliveryRecord = { ...deliveryRecord, ...args.data };
+        updatedDeliveries.push(args);
+        return deliveryRecord;
+      },
+      updateMany: async (args: any) => {
+        if (deliveryRecord && deliveryRecord.id === args.where.id) {
+          deliveryRecord = { ...deliveryRecord, ...args.data };
+          updatedDeliveries.push(args);
+          return { count: 1 };
+        }
+        return { count: 0 };
+      },
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'ob-hang-test' }],
+      obligation: {
+        findUnique: async () => ({
+          id: 'ob-hang-test',
+          nextDueAt: nowTick1,
+          isActive: true,
+          isArchived: false,
+          reminderOffsetsMin: [0],
+        }),
+      },
+      reminder: {
+        findFirst: async () => ({ id: 'rem-hang' }),
+        create: async () => ({ id: 'rem-hang' }),
+      },
+      reminderDelivery: {
+        findFirst: async () => deliveryRecord,
+        create: async (args: any) => {
+          deliveryRecord = { id: 'del-hang-test', ...args.data };
+          return deliveryRecord;
+        },
+        update: async (args: any) => {
+          deliveryRecord = { ...deliveryRecord, ...args.data };
+          updatedDeliveries.push(args);
+          return deliveryRecord;
+        },
+      },
+    }),
+    personalDebt: { findMany: async () => [] },
+    loan: { findMany: async () => [] },
+  };
+
+  // Tick 1: Outbound send times out via bounded timeout (50ms)
+  const resTick1 = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: hungMockBot,
+    now: nowTick1,
+    outboundTimeoutMs: 50, // Short timeout for test
+  });
+
+  assert.equal(resTick1.wealthRemindersSent, 0, 'Tick 1 must not count timed out message as sent');
+  assert.equal(abortedSignalReceived, true, 'AbortSignal must have been triggered to cancel outbound request');
+
+  // Verify delivery was marked FAILED with retry backoff set
+  assert.ok(deliveryRecord);
+  assert.equal(deliveryRecord.status, 'FAILED');
+  assert.equal(deliveryRecord.attemptCount, 1);
+  assert.ok(deliveryRecord.nextRetryAt, 'nextRetryAt must be set for backoff');
+  assert.ok(deliveryRecord.nextRetryAt.getTime() > nowTick1.getTime(), 'nextRetryAt must be in the future');
+
+  // Tick 2: Subsequent tick at 2 minutes later (before nextRetryAt)
+  const nowTick2 = new Date(nowTick1.getTime() + 2 * 60 * 1000);
+  const resTick2 = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: hungMockBot,
+    now: nowTick2,
+    outboundTimeoutMs: 50,
+  });
+
+  // Tick 2 must NOT attempt send because retry backoff is active
+  assert.equal(resTick2.wealthRemindersSent, 0, 'Tick 2 must respect retry backoff and not duplicate send');
+
+  // Tick 3: After backoff expires (e.g. 6 minutes later), with responsive bot
+  const responsiveMockBot = createMockBot();
+  const nowTick3 = new Date(nowTick1.getTime() + 6 * 60 * 1000);
+  const resTick3 = await processSchedulerTick({
+    prismaClient: mockDb as any,
+    botClient: responsiveMockBot,
+    now: nowTick3,
+    outboundTimeoutMs: 50,
+  });
+
+  assert.equal(resTick3.wealthRemindersSent, 1, 'Tick 3 successfully retries after backoff');
+  assert.equal(responsiveMockBot.sentMessages.length, 1, 'Exactly one message dispatched on retry');
+  assert.equal(deliveryRecord.status, 'SENT');
+  assert.equal(deliveryRecord.attemptCount, 2, 'attemptCount incremented to 2 on retry');
+});

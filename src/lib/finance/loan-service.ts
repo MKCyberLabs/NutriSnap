@@ -1526,7 +1526,7 @@ export interface RevertEmiPaymentInput {
   revertToDate?: Date | string;
 }
 
-function getPaymentScheduledDate(payment: {
+export function getPaymentScheduledDate(payment: {
   note?: string | null;
   occurredAt: Date | string;
   obligationOccurrence?: { dueDate?: Date | string | null } | null;
@@ -1550,6 +1550,27 @@ function getPaymentScheduledDate(payment: {
 }
 
 /**
+ * Authoritative deterministic latest-installment ordering rule (SOL-R005-001).
+ * Primary: scheduled installment date using getPaymentScheduledDate.
+ * Secondary tie-breaker: occurredAt timestamp.
+ * Tertiary tie-breaker: payment id.
+ * Returns positive if a > b (a is later than b), negative if a < b, 0 if identical.
+ */
+export function compareLoanPayments(a: any, b: any): number {
+  const schedA = getPaymentScheduledDate(a).getTime();
+  const schedB = getPaymentScheduledDate(b).getTime();
+  if (schedA !== schedB) {
+    return schedA - schedB;
+  }
+  const occA = new Date(a.occurredAt).getTime();
+  const occB = new Date(b.occurredAt).getTime();
+  if (occA !== occB) {
+    return occA - occB;
+  }
+  return String(a.id || '').localeCompare(String(b.id || ''));
+}
+
+/**
  * Reverts an EMI payment atomically (V2-651 / Architecture Section 11):
  * - Removes the specific LoanPayment record
  * - Removes the linked EXPENSE transaction (if generated)
@@ -1570,12 +1591,12 @@ export async function revertEmiPayment(
   if (targetPaymentId) {
     payment = await db.loanPayment.findUnique({
       where: { id: targetPaymentId },
-      include: { loan: true, transaction: true }
+      include: { loan: true, transaction: true, obligationOccurrence: true }
     });
   } else if (input.obligationOccurrenceId) {
     payment = await db.loanPayment.findUnique({
       where: { obligationOccurrenceId: input.obligationOccurrenceId },
-      include: { loan: true, transaction: true }
+      include: { loan: true, transaction: true, obligationOccurrence: true }
     });
   } else if (input.loanId) {
     const payments = await db.loanPayment.findMany({
@@ -1583,12 +1604,7 @@ export async function revertEmiPayment(
       include: { loan: true, transaction: true, obligationOccurrence: true }
     });
     if (payments.length > 0) {
-      payments.sort((a: any, b: any) => {
-        const schedA = getPaymentScheduledDate(a).getTime();
-        const schedB = getPaymentScheduledDate(b).getTime();
-        if (schedB !== schedA) return schedB - schedA;
-        return new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
-      });
+      payments.sort((a: any, b: any) => compareLoanPayments(b, a));
       payment = payments[0];
     } else {
       payment = null;
@@ -1632,12 +1648,26 @@ export async function revertEmiPayment(
       throw new Error('Loan not found or unauthorized');
     }
 
-    const currentPayment = await tx.loanPayment.findUnique({
+    let currentPayment = await tx.loanPayment.findUnique({
       where: { id: payment.id },
       include: { obligationOccurrence: true }
     });
 
-    if (!currentPayment) {
+    // SOL-R005-001: Enforce latest-only completion reversal rule under loan lock
+    const allLoanPayments = typeof tx.loanPayment?.findMany === 'function'
+      ? await tx.loanPayment.findMany({
+          where: { loanId: currentLoan.id },
+          include: { obligationOccurrence: true }
+        })
+      : (currentPayment ? [currentPayment] : []);
+
+    // For loanId-only fallback, select the latest scheduled installment that the guard permits under lock
+    if (!targetPaymentId && !input.obligationOccurrenceId && input.loanId && allLoanPayments.length > 0) {
+      allLoanPayments.sort((a: any, b: any) => compareLoanPayments(b, a));
+      currentPayment = allLoanPayments[0];
+    }
+
+    if (!currentPayment || allLoanPayments.length === 0) {
       return {
         alreadyReversed: true,
         paymentId: payment.id,
@@ -1647,22 +1677,9 @@ export async function revertEmiPayment(
       };
     }
 
-    // SOL-R005-001: Enforce latest-only completion reversal rule under loan lock
-    const allLoanPayments = typeof tx.loanPayment?.findMany === 'function'
-      ? await tx.loanPayment.findMany({
-          where: { loanId: currentLoan.id },
-          include: { obligationOccurrence: true }
-        })
-      : [currentPayment];
-
-    const targetPaymentDate = new Date(currentPayment.occurredAt).getTime();
-    const targetScheduledDate = getPaymentScheduledDate(currentPayment).getTime();
-
     const hasLaterCompletedPayment = allLoanPayments.some((p: any) => {
       if (p.id === currentPayment.id) return false;
-      const pPaymentDate = new Date(p.occurredAt).getTime();
-      const pScheduledDate = getPaymentScheduledDate(p).getTime();
-      return pPaymentDate > targetPaymentDate || pScheduledDate > targetScheduledDate;
+      return compareLoanPayments(p, currentPayment) > 0;
     });
 
     if (hasLaterCompletedPayment) {
@@ -1692,7 +1709,7 @@ export async function revertEmiPayment(
       restoredOutstanding = currentLoan.outstandingPrincipal.plus(principalToRestore);
     }
 
-    // 4. Restore nextEmiDate (SOL-R002-006)
+    // 4. Restore nextEmiDate (SOL-R002-006, SOL-R006-003)
     let scheduledDateFromPayment: Date | null = null;
     if (currentPayment.note) {
       const match = currentPayment.note.match(/\[scheduledDate:([^\]]+)\]/);
@@ -1705,28 +1722,56 @@ export async function revertEmiPayment(
     }
 
     if (!scheduledDateFromPayment && currentPayment.obligationOccurrenceId) {
-      const occ = await tx.obligationOccurrence.findUnique({
-        where: { id: currentPayment.obligationOccurrenceId },
-        select: { dueDate: true }
-      });
-      if (occ?.dueDate) {
-        scheduledDateFromPayment = occ.dueDate;
+      if (currentPayment.obligationOccurrence?.dueDate) {
+        scheduledDateFromPayment = new Date(currentPayment.obligationOccurrence.dueDate);
+      } else {
+        const occ = await tx.obligationOccurrence.findUnique({
+          where: { id: currentPayment.obligationOccurrenceId },
+          select: { dueDate: true }
+        });
+        if (occ?.dueDate) {
+          scheduledDateFromPayment = occ.dueDate;
+        }
       }
     }
 
-    // For records without recoverable scheduled identity, do NOT silently substitute payment date or retain advanced schedule:
-    // restore dueDate from linked occurrence, or use explicit revertToDate, or reject if unlinked and no revertToDate (SOL-R002-006).
+    // SOL-R006-003: Authoritative recovered scheduled date (scheduledDate or linked occurrence dueDate)
+    // MUST take precedence over caller-supplied input.revertToDate.
+    // Reject explicit revertToDate override when scheduled identity is known.
     let restoredNextEmiDate: Date;
-    if (input.revertToDate) {
+    if (scheduledDateFromPayment) {
+      if (input.revertToDate) {
+        const parsedRevertDate = new Date(input.revertToDate);
+        if (isNaN(parsedRevertDate.getTime())) {
+          throw new Error('Invalid revertToDate');
+        }
+        if (parsedRevertDate.getTime() !== scheduledDateFromPayment.getTime()) {
+          throw new Error('Cannot override authoritative scheduled date with explicit revertToDate');
+        }
+      }
+      restoredNextEmiDate = scheduledDateFromPayment;
+    } else {
+      // For unrecoverable legacy records with no note scheduledDate or linked occurrence, require explicit revertToDate.
+      if (!input.revertToDate) {
+        throw new Error('Explicit revertToDate required to reverse legacy unlinked payment');
+      }
       const parsedRevertDate = new Date(input.revertToDate);
       if (isNaN(parsedRevertDate.getTime())) {
         throw new Error('Invalid revertToDate');
       }
+
+      // Validate that revertToDate does NOT rewind the schedule across retained completed installments
+      const hasRetainedInstallmentAfterRevert = allLoanPayments.some((p: any) => {
+        if (p.id === currentPayment.id) return false;
+        const pSched = getPaymentScheduledDate(p).getTime();
+        return parsedRevertDate.getTime() <= pSched;
+      });
+
+      if (hasRetainedInstallmentAfterRevert) {
+        throw new Error('Cannot rewind schedule across retained completed installments');
+      }
+
       restoredNextEmiDate = parsedRevertDate;
-    } else if (scheduledDateFromPayment) {
-      restoredNextEmiDate = scheduledDateFromPayment;
-    } else {
-      throw new Error('Explicit revertToDate required to reverse legacy unlinked payment');
     }
 
     const restoredStatus = currentLoan.status === 'CLOSED' ? 'ACTIVE' : currentLoan.status;
