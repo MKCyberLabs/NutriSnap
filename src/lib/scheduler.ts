@@ -464,16 +464,26 @@ export async function processSchedulerTick(
             nextRetryAt: successState.nextRetryAt,
           };
 
+          let updateRes: any = null;
           if (typeof db.reminderDelivery?.updateMany === 'function') {
-            await db.reminderDelivery.updateMany({
-              where: { id: delivery.id, status: 'SENDING', attemptCount: claimedAttemptCount },
+            updateRes = await db.reminderDelivery.updateMany({
+              where: {
+                id: delivery.id,
+                status: 'SENDING',
+                attemptCount: claimedAttemptCount,
+                ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+              },
               data: updateSuccessData,
             });
           } else if (typeof db.reminderDelivery?.update === 'function') {
-            await db.reminderDelivery.update({
+            updateRes = await db.reminderDelivery.update({
               where: { id: delivery.id },
               data: updateSuccessData,
             });
+          }
+          if (updateRes && typeof updateRes.count === 'number' && updateRes.count === 0) {
+            console.warn(`[Scheduler] Delivery ${delivery.id} was fenced out (0 rows updated)`);
+            continue;
           }
           result.wealthRemindersSent++;
           console.log(`[Scheduler] Sent bill reminder ${ob.title} to user ${ob.user.id}`);
@@ -495,7 +505,12 @@ export async function processSchedulerTick(
 
           if (typeof db.reminderDelivery?.updateMany === 'function') {
             await db.reminderDelivery.updateMany({
-              where: { id: delivery.id, status: 'SENDING', attemptCount: claimedAttemptCount },
+              where: {
+                id: delivery.id,
+                status: 'SENDING',
+                attemptCount: claimedAttemptCount,
+                ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+              },
               data: updateFailData,
             });
           } else if (typeof db.reminderDelivery?.update === 'function') {
@@ -749,16 +764,26 @@ export async function processSchedulerTick(
               nextRetryAt: successState.nextRetryAt,
             };
 
+            let updateRes: any = null;
             if (typeof db.reminderDelivery?.updateMany === 'function') {
-              await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING', attemptCount: claimedAttemptCount },
+              updateRes = await db.reminderDelivery.updateMany({
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateSuccessData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {
-              await db.reminderDelivery.update({
+              updateRes = await db.reminderDelivery.update({
                 where: { id: delivery.id },
                 data: updateSuccessData,
               });
+            }
+            if (updateRes && typeof updateRes.count === 'number' && updateRes.count === 0) {
+              console.warn(`[Scheduler] Debt delivery ${delivery.id} was fenced out (0 rows updated)`);
+              continue;
             }
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent debt reminder ${debt.id} to user ${debt.user.id}`);
@@ -780,7 +805,12 @@ export async function processSchedulerTick(
 
             if (typeof db.reminderDelivery?.updateMany === 'function') {
               await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING', attemptCount: claimedAttemptCount },
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateFailData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {
@@ -1018,16 +1048,26 @@ export async function processSchedulerTick(
               nextRetryAt: successState.nextRetryAt,
             };
 
+            let updateRes: any = null;
             if (typeof db.reminderDelivery?.updateMany === 'function') {
-              await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING', attemptCount: claimedAttemptCount },
+              updateRes = await db.reminderDelivery.updateMany({
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateSuccessData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {
-              await db.reminderDelivery.update({
+              updateRes = await db.reminderDelivery.update({
                 where: { id: delivery.id },
                 data: updateSuccessData,
               });
+            }
+            if (updateRes && typeof updateRes.count === 'number' && updateRes.count === 0) {
+              console.warn(`[Scheduler] Loan delivery ${delivery.id} was fenced out (0 rows updated)`);
+              continue;
             }
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent loan EMI reminder ${loan.id} to user ${loan.user.id}`);
@@ -1042,14 +1082,19 @@ export async function processSchedulerTick(
             const updateFailData = {
               status: failureState.status,
               failureReason: failureState.failureReason,
-              attemptCount: failureState.attemptCount,
+              attemptCount: claimedAttemptCount,
               lastAttemptAt: failureState.lastAttemptAt,
               nextRetryAt: failureState.nextRetryAt,
             };
 
             if (typeof db.reminderDelivery?.updateMany === 'function') {
               await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING', attemptCount: claimedAttemptCount },
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateFailData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {

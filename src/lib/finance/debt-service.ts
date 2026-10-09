@@ -357,6 +357,11 @@ export async function recordDebtCollection(
       }
     }
 
+    // SOL-R004-006: Under row lock, check if debt was archived concurrently
+    if (lockedDebt.status === 'ARCHIVED') {
+      throw new Error('Cannot record collection on an archived debt');
+    }
+
     // Re-calculate outstanding balance under lock
     const currentOutstanding = calculateDebtOutstanding(lockedDebt.direction, lockedDebt.originalAmount, lockedDebt.transactions || []);
     if (amountDecimal.greaterThan(currentOutstanding)) {
@@ -491,6 +496,11 @@ export async function recordDebtRepayment(
           settled: lockedDebt.status === 'SETTLED',
         };
       }
+    }
+
+    // SOL-R004-006: Under row lock, check if debt was archived concurrently
+    if (lockedDebt.status === 'ARCHIVED') {
+      throw new Error('Cannot record repayment on an archived debt');
     }
 
     // Re-calculate outstanding balance under lock

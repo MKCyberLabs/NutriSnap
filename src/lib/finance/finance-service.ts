@@ -1578,22 +1578,49 @@ export async function markObligationPaid(
     return occurrenceKey.trim() === localDate;
   })();
 
+  // Scheduled date/instant for this occurrence
+  const occurrenceScheduledDate = (() => {
+    if (isCurrentOccurrence) {
+      return obligation.nextDueAt;
+    }
+    if (occurrenceKey.includes('T')) {
+      const d = new Date(occurrenceKey);
+      if (!isNaN(d.getTime())) return d;
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(occurrenceKey.trim())) {
+      const [y, m, d] = occurrenceKey.trim().split('-').map(Number);
+      return new Date(new TZDate(y, m - 1, d, 12, 0, 0, 0, tz).getTime());
+    }
+    return obligation.nextDueAt;
+  })();
+
   // If caller provided a timestamp with time (e.g. from scheduler UTC payload), canonicalize to user timezone;
   // If caller provided a date-only key (e.g. YYYY-MM-DD), preserve the caller's date key format.
   let canonicalKey = occurrenceKey;
   if (occurrenceKey.includes('T')) {
     if (occurrenceKey === utcKey || isCurrentOccurrence) {
       canonicalKey = canonicalActiveKey;
+    } else {
+      canonicalKey = getOccurrenceKey(occurrenceScheduledDate, tz);
     }
   }
 
-  const candidateKeys = Array.from(new Set([
-    occurrenceKey,
-    canonicalKey,
-    canonicalActiveKey,
-    utcKey,
-    localDate,
-  ]));
+  // SOL-R001-007: Build candidate keys only for this resolved occurrence.
+  // Historical occurrences must NOT include active occurrence keys.
+  const candidateKeys = isCurrentOccurrence
+    ? Array.from(new Set([
+        occurrenceKey,
+        canonicalKey,
+        canonicalActiveKey,
+        utcKey,
+        localDate,
+      ]))
+    : Array.from(new Set([
+        occurrenceKey,
+        canonicalKey,
+        getOccurrenceKey(occurrenceScheduledDate, tz),
+        getOccurrenceKey(occurrenceScheduledDate, 'UTC'),
+        getOccurrenceKey(occurrenceScheduledDate, tz).substring(0, 10),
+      ]));
 
   // 4. Early check if occurrence is already completed (fast idempotency check)
   let existingCompletion: any = null;
@@ -1659,18 +1686,6 @@ export async function markObligationPaid(
       nextDueAt: obligation.nextDueAt.toISOString(),
     };
   }
-
-  // Scheduled date/instant for this occurrence
-  const occurrenceScheduledDate = (() => {
-    if (occurrenceKey.includes('T')) {
-      const d = new Date(occurrenceKey);
-      if (!isNaN(d.getTime())) return d;
-    } else if (/^\d{4}-\d{2}-\d{2}$/.test(occurrenceKey.trim())) {
-      const [y, m, d] = occurrenceKey.trim().split('-').map(Number);
-      return new Date(new TZDate(y, m - 1, d, 12, 0, 0, 0, tz).getTime());
-    }
-    return obligation.nextDueAt;
-  })();
 
   // SOL-R001-004: Linked loan obligation guard - verify occurrence against loan state before advancing schedule
   if (obligation.loan) {
@@ -1811,11 +1826,13 @@ export async function markObligationPaid(
     let emiRes: any = null;
 
     // Acquire row locks inside transaction
+    // SOL-R004-001: Acquire Loan lock first, then Obligation lock, to maintain consistent hierarchy
     if (typeof tx.$queryRaw === 'function') {
-      await tx.$queryRaw`SELECT id FROM "Obligation" WHERE id = ${obligation.id} FOR UPDATE`;
-      if (obligation.loan?.id) {
-        await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${obligation.loan.id} FOR UPDATE`;
+      const linkedLoanId = obligation.loan?.id || obligation.loanId;
+      if (linkedLoanId) {
+        await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${linkedLoanId} FOR UPDATE`;
       }
+      await tx.$queryRaw`SELECT id FROM "Obligation" WHERE id = ${obligation.id} FOR UPDATE`;
     }
 
     const currentObligation = await tx.obligation.findUnique({
@@ -1944,50 +1961,7 @@ export async function markObligationPaid(
       };
     }
 
-    // Record occurrence completion with canonicalKey for standard obligation
-    const occurrence = await tx.obligationOccurrence.create({
-      data: {
-        userId,
-        obligationId: currentObligation.id,
-        occurrenceKey: canonicalKey,
-        dueDate: currentObligation.nextDueAt,
-        status: 'COMPLETED',
-        paidAt: new Date(),
-        transactionId: null,
-      }
-    });
-
-    // Optional expense creation for non-loan obligations
-    if (createExpense && currentObligation.amount) {
-      const targetAccountId = accountId || currentObligation.accountId;
-      if (targetAccountId) {
-        const acc = await tx.financialAccount.findUnique({
-          where: { id: targetAccountId },
-          select: { userId: true }
-        });
-        if (acc && acc.userId === userId) {
-          const expenseTx = await tx.financialTransaction.create({
-            data: {
-              userId,
-              type: 'EXPENSE',
-              amount: currentObligation.amount,
-              category: currentObligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
-              occurredAt: new Date(),
-              accountId: targetAccountId,
-              obligationId: currentObligation.id,
-              note: `Paid: ${currentObligation.title}`,
-            }
-          });
-          createdTxId = expenseTx.id;
-          await tx.obligationOccurrence.update({
-            where: { id: occurrence.id },
-            data: { transactionId: createdTxId }
-          });
-        }
-      }
-    }
-
-    // SOL-R001-007: Check if occurrence is current under lock
+    // SOL-R001-007: Check if occurrence is current under lock and resolve actual scheduled dueDate
     const lockActiveKey = getOccurrenceKey(currentObligation.nextDueAt, tz);
     const lockUtcKey = getOccurrenceKey(currentObligation.nextDueAt, 'UTC');
     const lockLocalDate = lockActiveKey.substring(0, 10);
@@ -1999,6 +1973,58 @@ export async function markObligationPaid(
       }
       return occurrenceKey.trim() === lockLocalDate;
     })();
+
+    const resolvedDueDate = isCurrentUnderLock ? currentObligation.nextDueAt : occurrenceScheduledDate;
+
+    // Record occurrence completion with canonicalKey for standard obligation
+    const occurrence = await tx.obligationOccurrence.create({
+      data: {
+        userId,
+        obligationId: currentObligation.id,
+        occurrenceKey: canonicalKey,
+        dueDate: resolvedDueDate,
+        status: 'COMPLETED',
+        paidAt: new Date(),
+        transactionId: null,
+      }
+    });
+
+    // SOL-R004-007: Expense creation validation for non-loan obligations
+    const hasAmount = currentObligation.amount && Number(currentObligation.amount) > 0;
+    if (createExpense && hasAmount) {
+      const targetAccountId = accountId || currentObligation.accountId;
+      if (!targetAccountId) {
+        throw new Error('Payment account required to record expense');
+      }
+      const acc = await tx.financialAccount.findUnique({
+        where: { id: targetAccountId },
+        select: { userId: true, isActive: true }
+      });
+      if (!acc || acc.userId !== userId) {
+        throw new Error('Payment account not found or unauthorized');
+      }
+      if (acc.isActive === false) {
+        throw new Error('Cannot create expense with an inactive payment account');
+      }
+
+      const expenseTx = await tx.financialTransaction.create({
+        data: {
+          userId,
+          type: 'EXPENSE',
+          amount: currentObligation.amount,
+          category: currentObligation.kind === 'RECHARGE' ? 'Recharge' : 'Utilities',
+          occurredAt: new Date(),
+          accountId: targetAccountId,
+          obligationId: currentObligation.id,
+          note: `Paid: ${currentObligation.title}`,
+        }
+      });
+      createdTxId = expenseTx.id;
+      await tx.obligationOccurrence.update({
+        where: { id: occurrence.id },
+        data: { transactionId: createdTxId }
+      });
+    }
 
     const targetDay = currentObligation.recurrenceType === 'MONTHLY'
       ? (currentObligation.loan?.dueDay ?? new TZDate(currentObligation.dueAt, tz).getDate())
@@ -2034,11 +2060,29 @@ export async function markObligationPaid(
       });
     }
 
+    // SOL-R001-007: Build acknowledgement aliases only for this resolved occurrence.
+    // Prevent old callbacks from acknowledging or suppressing current day's reminder deliveries.
+    const ackCandidateKeys = isCurrentUnderLock
+      ? Array.from(new Set([
+          occurrenceKey,
+          canonicalKey,
+          lockActiveKey,
+          lockUtcKey,
+          lockLocalDate,
+        ]))
+      : Array.from(new Set([
+          occurrenceKey,
+          canonicalKey,
+          getOccurrenceKey(resolvedDueDate, tz),
+          getOccurrenceKey(resolvedDueDate, 'UTC'),
+          getOccurrenceKey(resolvedDueDate, tz).substring(0, 10),
+        ]));
+
     // Acknowledge any pending deliveries for this occurrence
     await tx.reminderDelivery.updateMany({
       where: {
         obligationId: currentObligation.id,
-        occurrenceKey: { in: candidateKeys },
+        occurrenceKey: { in: ackCandidateKeys },
         status: { in: ['PENDING', 'SENT', 'SNOOZED', 'FAILED'] }
       },
       data: {
@@ -2242,7 +2286,7 @@ export async function revertObligationPayment(
     };
   }
 
-  // Enforce latest-only revert rule
+  // Enforce latest-only revert rule (preliminary check)
   const targetDueDate = new Date(targetOccurrence.dueDate).getTime();
   const laterOccurrence = obligation.occurrences.find(
     (o: any) => new Date(o.dueDate).getTime() > targetDueDate && o.status === 'COMPLETED'
@@ -2256,24 +2300,54 @@ export async function revertObligationPayment(
   // SOL-R001-010: If linked to Loan, delegate in a single interactive transaction
   if (obligation.loan) {
     const executeLoanReversal = async (tx: any) => {
+      // SOL-R004-001 & SOL-R004-002: Row locks in consistent order: Loan -> Obligation
+      if (typeof tx.$queryRaw === 'function') {
+        await tx.$queryRaw`SELECT id FROM "Loan" WHERE id = ${obligation.loan.id} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "Obligation" WHERE id = ${obligation.id} FOR UPDATE`;
+      }
+
+      // SOL-R004-002: Reread all occurrences for obligation under lock
+      const lockedOccurrences = typeof tx.obligationOccurrence?.findMany === 'function'
+        ? await tx.obligationOccurrence.findMany({
+            where: { obligationId: obligation.id },
+            orderBy: { dueDate: 'desc' }
+          })
+        : obligation.occurrences;
+
+      const lockedTarget = lockedOccurrences.find((o: any) => o.id === targetOccurrence.id);
+      if (!lockedTarget) {
+        return { alreadyReversed: true };
+      }
+
+      // Enforce latest-only revert rule under lock
+      const lockedTargetDueDate = new Date(lockedTarget.dueDate).getTime();
+      const lockedLaterOccurrence = lockedOccurrences.find(
+        (o: any) => o.status === 'COMPLETED' && new Date(o.dueDate).getTime() > lockedTargetDueDate
+      );
+      if (lockedLaterOccurrence) {
+        throw new Error(
+          'Cannot revert an earlier occurrence while a later occurrence remains completed. Please revert occurrences in reverse chronological order.'
+        );
+      }
+
       const loanRes = await revertEmiPayment(
         userId,
         {
-          obligationOccurrenceId: targetOccurrence.id,
+          obligationOccurrenceId: lockedTarget.id,
           loanId: obligation.loan.id,
-          revertToDate: targetOccurrence.dueDate,
+          revertToDate: lockedTarget.dueDate,
         },
         tx
       );
 
       // Delete occurrence record
       await tx.obligationOccurrence.deleteMany({
-        where: { id: targetOccurrence.id }
+        where: { id: lockedTarget.id }
       });
 
       // Find previous completed occurrence
-      const prevOccurrences = obligation.occurrences.filter(
-        (o: any) => o.id !== targetOccurrence.id && o.status === 'COMPLETED'
+      const prevOccurrences = lockedOccurrences.filter(
+        (o: any) => o.id !== lockedTarget.id && o.status === 'COMPLETED'
       );
       const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
 
@@ -2281,7 +2355,7 @@ export async function revertObligationPayment(
       await tx.obligation.update({
         where: { id: obligation.id },
         data: {
-          nextDueAt: targetOccurrence.dueDate,
+          nextDueAt: lockedTarget.dueDate,
           lastCompletedAt,
           isActive: true,
         }
@@ -2292,16 +2366,31 @@ export async function revertObligationPayment(
         where: {
           obligationId: obligation.id,
           status: 'PENDING',
-          scheduledFor: { gte: targetOccurrence.dueDate },
+          scheduledFor: { gte: lockedTarget.dueDate },
         }
       });
 
-      return loanRes;
+      return {
+        alreadyReversed: false,
+        revertedOccurrenceId: lockedTarget.id,
+        restoredNextDueAt: lockedTarget.dueDate,
+        loanRes,
+      };
     };
 
     const loanRes = typeof db.$transaction === 'function'
       ? await db.$transaction(executeLoanReversal)
       : await executeLoanReversal(db);
+
+    if (loanRes.alreadyReversed) {
+      return {
+        success: true,
+        alreadyReversed: true,
+        revertedOccurrenceId: targetOccurrence.id,
+        restoredNextDueAt: obligation.nextDueAt ? obligation.nextDueAt.toISOString() : null,
+        message: 'Obligation occurrence not found or already reversed',
+      };
+    }
 
     return {
       success: true,
@@ -2309,27 +2398,56 @@ export async function revertObligationPayment(
       revertedOccurrenceId: targetOccurrence.id,
       restoredNextDueAt: new Date(targetOccurrence.dueDate).toISOString(),
       loanReversed: true,
-      loanDetails: loanRes,
+      loanDetails: loanRes.loanRes,
     };
   }
 
   // Standard obligation reversal
   const executeInTransaction = async (tx: any) => {
+    // SOL-R004-002: Acquire row lock on Obligation inside transaction
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "Obligation" WHERE id = ${obligation.id} FOR UPDATE`;
+    }
+
+    // SOL-R004-002: Reread all occurrences for obligation under lock
+    const lockedOccurrences = typeof tx.obligationOccurrence?.findMany === 'function'
+      ? await tx.obligationOccurrence.findMany({
+          where: { obligationId: obligation.id },
+          orderBy: { dueDate: 'desc' }
+        })
+      : obligation.occurrences;
+
+    const lockedTarget = lockedOccurrences.find((o: any) => o.id === targetOccurrence.id);
+    if (!lockedTarget) {
+      return { alreadyReversed: true };
+    }
+
+    // Enforce latest-only revert rule under lock
+    const lockedTargetDueDate = new Date(lockedTarget.dueDate).getTime();
+    const lockedLaterOccurrence = lockedOccurrences.find(
+      (o: any) => o.status === 'COMPLETED' && new Date(o.dueDate).getTime() > lockedTargetDueDate
+    );
+    if (lockedLaterOccurrence) {
+      throw new Error(
+        'Cannot revert an earlier occurrence while a later occurrence remains completed. Please revert occurrences in reverse chronological order.'
+      );
+    }
+
     // 1. Delete linked FinancialTransaction if created
-    if (targetOccurrence.transactionId) {
+    if (lockedTarget.transactionId) {
       await tx.financialTransaction.delete({
-        where: { id: targetOccurrence.transactionId }
+        where: { id: lockedTarget.transactionId }
       });
     }
 
     // 2. Delete the occurrence record
     await tx.obligationOccurrence.delete({
-      where: { id: targetOccurrence.id }
+      where: { id: lockedTarget.id }
     });
 
     // 3. Find previous completion (if any)
-    const prevOccurrences = obligation.occurrences.filter(
-      (o: any) => o.id !== targetOccurrence.id && o.status === 'COMPLETED'
+    const prevOccurrences = lockedOccurrences.filter(
+      (o: any) => o.id !== lockedTarget.id && o.status === 'COMPLETED'
     );
     const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
 
@@ -2337,7 +2455,7 @@ export async function revertObligationPayment(
     await tx.obligation.update({
       where: { id: obligation.id },
       data: {
-        nextDueAt: targetOccurrence.dueDate,
+        nextDueAt: lockedTarget.dueDate,
         lastCompletedAt,
         isActive: true,
       }
@@ -2348,19 +2466,30 @@ export async function revertObligationPayment(
       where: {
         obligationId: obligation.id,
         status: 'PENDING',
-        scheduledFor: { gte: targetOccurrence.dueDate },
+        scheduledFor: { gte: lockedTarget.dueDate },
       }
     });
 
     return {
-      revertedOccurrenceId: targetOccurrence.id,
-      restoredNextDueAt: targetOccurrence.dueDate,
+      alreadyReversed: false,
+      revertedOccurrenceId: lockedTarget.id,
+      restoredNextDueAt: lockedTarget.dueDate,
     };
   };
 
   const result = typeof db.$transaction === 'function'
     ? await db.$transaction(executeInTransaction)
     : await executeInTransaction(db);
+
+  if (result.alreadyReversed) {
+    return {
+      success: true,
+      alreadyReversed: true,
+      revertedOccurrenceId: targetOccurrence.id,
+      restoredNextDueAt: obligation.nextDueAt ? obligation.nextDueAt.toISOString() : null,
+      message: 'Obligation occurrence not found or already reversed',
+    };
+  }
 
   return {
     success: true,

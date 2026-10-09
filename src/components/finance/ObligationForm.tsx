@@ -24,6 +24,7 @@ import {
 } from '@/lib/finance/finance';
 import { Loader2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { TZDate } from '@date-fns/tz';
 
 interface ObligationFormProps {
   accounts: { id: string; name: string }[];
@@ -31,9 +32,32 @@ interface ObligationFormProps {
   onSubmitAction: (data: any) => Promise<any>;
   trigger?: React.ReactNode;
   obligation?: any;
+  timezone?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onSuccess?: () => void;
+}
+
+export function formatDateForInput(d: any, userTz?: string): string {
+  if (!d) return '';
+  const tz = userTz || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Kolkata') || 'UTC';
+  try {
+    const date = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(date.getTime())) return '';
+    const tzDate = new TZDate(date, tz);
+    const year = tzDate.getFullYear();
+    const month = String(tzDate.getMonth() + 1).padStart(2, '0');
+    const day = String(tzDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    try {
+      const date = new Date(d);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  }
 }
 
 export function ObligationForm({
@@ -42,6 +66,7 @@ export function ObligationForm({
   onSubmitAction,
   trigger,
   obligation,
+  timezone,
   open: controlledOpen,
   onOpenChange,
   onSuccess,
@@ -57,16 +82,7 @@ export function ObligationForm({
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const formatDateForInput = (d: any) => {
-    if (!d) return '';
-    try {
-      const date = new Date(d);
-      if (isNaN(date.getTime())) return '';
-      return date.toISOString().split('T')[0];
-    } catch {
-      return '';
-    }
-  };
+  const userTz = obligation?.user?.timezone || obligation?.timezone || timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Kolkata');
 
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<ObligationKind>('BILL');
@@ -82,7 +98,7 @@ export function ObligationForm({
       setKind(obligation.kind || 'BILL');
       setAmount(obligation.amount ? String(obligation.amount) : '');
       // Finding 4: Preserve initialData.dueAt as the anchor date (do NOT overwrite dueAt with nextDueAt)
-      setDueAt(formatDateForInput(obligation.dueAt));
+      setDueAt(formatDateForInput(obligation.dueAt, userTz));
       setRecurrence(obligation.recurrenceType || 'MONTHLY');
       setInterval(obligation.recurrenceInterval ? String(obligation.recurrenceInterval) : '84');
       setAccountId(obligation.accountId || obligation.account?.id || 'none');
@@ -95,7 +111,7 @@ export function ObligationForm({
       setInterval('84');
       setAccountId('');
     }
-  }, [obligation, open]);
+  }, [obligation, open, userTz]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +133,7 @@ export function ObligationForm({
         recurrenceInterval: recurrence === 'EVERY_N_DAYS' ? parseInt(interval, 10) || 1 : undefined,
       };
 
-      const initialDueAtStr = formatDateForInput(obligation?.dueAt);
+      const initialDueAtStr = formatDateForInput(obligation?.dueAt, userTz);
       const isDueAtEdited = dueAt !== initialDueAtStr;
 
       if (isEdit) {

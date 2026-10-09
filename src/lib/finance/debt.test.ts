@@ -471,6 +471,63 @@ test('V2-200: Personal Debt (Friends & Family) Test Suite (V2-T020..V2-T030)', a
     const debtFinal = await debtService.getDebtById(userA.id, limitDebtId, db);
     assert.equal(debtFinal?.outstandingAmount, '500', 'Outstanding balance protected under lock');
 
+    // -------------------------------------------------------------------------
+    // SOL-R004-006: Debt payment archival status check under row lock
+    // -------------------------------------------------------------------------
+    const archPayDebt = await debtService.createDebt(userA.id, {
+      direction: 'PAYABLE',
+      counterpartyName: 'Archival Check Pay',
+      title: 'Archival Lock Test Payable',
+      originalAmount: '2000.00',
+    }, db);
+    const archPayId = archPayDebt.debt.id;
+
+    // Archive the debt
+    await db.personalDebt.update({
+      where: { id: archPayId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    // Repayment on archived debt must be rejected
+    await assert.rejects(
+      async () => {
+        await debtService.recordDebtRepayment(userA.id, {
+          debtId: archPayId,
+          amount: '500.00',
+          accountId: bankAId,
+        }, db);
+      },
+      /archived debt/i,
+      'Repayment on archived debt is strictly rejected under lock'
+    );
+
+    const archRecDebt = await debtService.createDebt(userA.id, {
+      direction: 'RECEIVABLE',
+      counterpartyName: 'Archival Check Rec',
+      title: 'Archival Lock Test Receivable',
+      originalAmount: '3000.00',
+      accountId: bankAId,
+    }, db);
+    const archRecId = archRecDebt.debt.id;
+
+    // Archive the debt
+    await db.personalDebt.update({
+      where: { id: archRecId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    // Collection on archived debt must be rejected
+    await assert.rejects(
+      async () => {
+        await debtService.recordDebtCollection(userA.id, {
+          debtId: archRecId,
+          amount: '1000.00',
+          accountId: bankAId,
+        }, db);
+      },
+      /archived debt/i,
+      'Collection on archived debt is strictly rejected under lock'
+    );
   } finally {
     await db.$disconnect();
   }
