@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusPill } from '@/components/design-system/StatusPill';
 import { MoneyAmount } from '@/components/design-system/MoneyAmount';
 import {
@@ -85,6 +85,12 @@ export function ObligationRow({
   const [selectedAccountId, setSelectedAccountId] = useState(
     obligation.account?.id || accounts[0]?.id || ''
   );
+
+  useEffect(() => {
+    if (!selectedAccountId && (obligation.account?.id || accounts[0]?.id)) {
+      setSelectedAccountId(obligation.account?.id || accounts[0]?.id || '');
+    }
+  }, [obligation.account?.id, accounts, selectedAccountId]);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
