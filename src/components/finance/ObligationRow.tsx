@@ -232,33 +232,36 @@ export function ObligationRow({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-[#E5ECE8] bg-white hover:border-[#16A34A]/50 transition-colors gap-3">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-[#E2E8F0] bg-white hover:border-[#8B5CF6] shadow-[0_1px_3px_0_rgba(15,23,42,0.05),0_1px_2px_-1px_rgba(15,23,42,0.03)] transition-all gap-4">
       <div className="flex items-start gap-3.5 min-w-0">
         <div
-          className="h-10 w-10 rounded-xl bg-[#FFF4DF] text-[#F59E0B] flex items-center justify-center shrink-0 mt-0.5"
+          className="h-10 w-10 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE] text-[#6D28D9] flex items-center justify-center shrink-0 mt-0.5"
           aria-hidden="true"
         >
           {getKindIcon(obligation.kind)}
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="text-sm font-semibold text-[#111827] truncate">
+            <h4 className="text-sm font-semibold text-[#1E293B] truncate">
               {obligation.title}
             </h4>
             <StatusPill
               label={isPast ? 'Overdue' : relativeText}
               tone={isPast ? 'red' : 'amber'}
             />
+            {!obligation.isActive && (
+              <StatusPill label="Paused" tone="neutral" />
+            )}
           </div>
 
-          <div className="text-xs text-[#667085] mt-1 flex items-center gap-2 flex-wrap">
+          <div className="text-xs text-[#64748B] mt-1 flex items-center gap-2 flex-wrap">
             <span className="flex items-center gap-1">
-              <Calendar className="h-3 w-3 text-[#667085]" />
+              <Calendar className="h-3 w-3 text-[#64748B]" />
               <span>Due {formattedDate}</span>
             </span>
             <span>•</span>
             <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3 text-[#667085]" />
+              <Clock className="h-3 w-3 text-[#64748B]" />
               <span>{getRecurrenceText()}</span>
             </span>
             {obligation.account && (
@@ -271,14 +274,14 @@ export function ObligationRow({
         </div>
       </div>
 
-      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#E5ECE8]/60">
+      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#E2E8F0]">
         <div className="text-left sm:text-right">
           <MoneyAmount
             amount={obligation.amount}
             type="NEUTRAL"
             size="md"
           />
-          <div className="text-[10px] text-[#667085] uppercase tracking-wider">
+          <div className="text-[10px] text-[#64748B] uppercase tracking-wider">
             {obligation.kind.replace('_', ' ')}
           </div>
         </div>
@@ -290,7 +293,7 @@ export function ObligationRow({
               size="sm"
               disabled={submitting}
               onClick={() => onEdit(obligation)}
-              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+              className="h-9 w-9 p-0 rounded-xl text-[#64748B] hover:text-[#6D28D9] hover:bg-[#F5F3FF]"
               title="Edit obligation"
             >
               <Pencil className="h-4 w-4" />
@@ -303,7 +306,7 @@ export function ObligationRow({
               size="sm"
               disabled={submitting}
               onClick={handleToggle}
-              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+              className="h-9 w-9 p-0 rounded-xl text-[#64748B] hover:text-[#1E293B] hover:bg-[#F1F5F9]"
               title={obligation.isActive ? 'Pause obligation' : 'Resume obligation'}
             >
               {obligation.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -316,7 +319,7 @@ export function ObligationRow({
               size="sm"
               disabled={submitting}
               onClick={handleUndoPaid}
-              className="h-9 px-2.5 rounded-[10px] text-xs font-semibold text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] flex items-center gap-1"
+              className="h-9 px-2.5 rounded-xl text-xs font-semibold text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2] flex items-center gap-1"
               title="Undo last payment"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -328,12 +331,81 @@ export function ObligationRow({
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                className="h-9 px-3 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                className="h-9 px-3 rounded-xl bg-[#059669] text-white hover:bg-[#047857] text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 <span>Paid</span>
               </Button>
             </DialogTrigger>
+
+            <DialogContent className="sm:max-w-[400px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+              <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+                <DialogTitle className="text-base font-semibold text-[#1E293B]">
+                  Mark as Paid: {obligation.title}
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4 pt-3">
+                <p className="text-xs text-[#64748B]">
+                  Confirming will mark this due occurrence as paid and advance the next due date.
+                </p>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id={`create-exp-${obligation.id}`}
+                    checked={createExpense}
+                    onChange={(e) => setCreateExpense(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#E2E8F0] text-[#6D28D9] focus:ring-[#6D28D9]"
+                  />
+                  <label
+                    htmlFor={`create-exp-${obligation.id}`}
+                    className="text-xs font-medium text-[#1E293B] cursor-pointer"
+                  >
+                    Create linked Expense transaction (exactly once)
+                  </label>
+                </div>
+
+                {createExpense && accounts.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-[#1E293B]">
+                      Debit Account
+                    </Label>
+                    <Select
+                      value={selectedAccountId}
+                      onValueChange={setSelectedAccountId}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl border-[#E2E8F0] text-sm">
+                        <SelectValue placeholder="Select account" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
+                        {accounts.map((acc) => (
+                          <SelectItem key={acc.id} value={acc.id} className="text-sm">
+                            {acc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleConfirmPaid}
+                  className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Confirm Paid'
+                  )}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {onDelete && (
             <Button
@@ -341,7 +413,7 @@ export function ObligationRow({
               size="sm"
               disabled={submitting}
               onClick={handleDelete}
-              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+              className="h-9 w-9 p-0 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
               title="Delete obligation"
             >
               <Trash2 className="h-4 w-4" />
@@ -353,82 +425,14 @@ export function ObligationRow({
               variant="ghost"
               size="sm"
               onClick={() => onArchive(obligation.id)}
-              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+              className="h-9 w-9 p-0 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
               title="Archive obligation"
             >
               <Archive className="h-4 w-4" />
             </Button>
           )}
-          <DialogContent className="sm:max-w-[400px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-            <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-              <DialogTitle className="text-base font-semibold text-[#111827]">
-                Mark as Paid: {obligation.title}
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-4 pt-3">
-              <p className="text-xs text-[#667085]">
-                Confirming will mark this due occurrence as paid and advance the next due date.
-              </p>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id={`create-exp-${obligation.id}`}
-                  checked={createExpense}
-                  onChange={(e) => setCreateExpense(e.target.checked)}
-                  className="h-4 w-4 rounded border-[#E5ECE8] text-[#16A34A] focus:ring-[#16A34A]"
-                />
-                <label
-                  htmlFor={`create-exp-${obligation.id}`}
-                  className="text-xs font-medium text-[#344054] cursor-pointer"
-                >
-                  Create linked Expense transaction (exactly once)
-                </label>
-              </div>
-
-              {createExpense && accounts.length > 0 && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-[#344054]">
-                    Debit Account
-                  </Label>
-                  <Select
-                    value={selectedAccountId}
-                    onValueChange={setSelectedAccountId}
-                  >
-                    <SelectTrigger className="h-10 rounded-[10px] border-[#E5ECE8] text-sm">
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id} className="text-sm">
-                          {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <Button
-                onClick={handleConfirmPaid}
-                className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  'Confirm Paid'
-                )}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        </div>
       </div>
     </div>
-  </div>
   );
 }

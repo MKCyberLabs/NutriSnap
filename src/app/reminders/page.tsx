@@ -315,28 +315,28 @@ export default function RemindersPage() {
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+                className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold shadow-xs flex items-center gap-1.5"
               >
                 <Plus className="h-4 w-4" />
                 <span>Add Health Reminder</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[400px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-              <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-                <DialogTitle className="text-base font-semibold text-[#111827]">
+            <DialogContent className="sm:max-w-[400px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+              <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+                <DialogTitle className="text-base font-semibold text-[#1E293B]">
                   Add Daily Health Reminder
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-[#344054]">
+                  <Label className="text-xs font-semibold text-[#475569]">
                     Reminder Category
                   </Label>
                   <Select value={newCategory} onValueChange={setNewCategory}>
-                    <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                    <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                    <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                       <SelectItem value="Breakfast">Breakfast</SelectItem>
                       <SelectItem value="Lunch">Lunch</SelectItem>
                       <SelectItem value="Dinner">Dinner</SelectItem>
@@ -347,7 +347,7 @@ export default function RemindersPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="rem-time" className="text-xs font-semibold text-[#344054]">
+                  <Label htmlFor="rem-time" className="text-xs font-semibold text-[#475569]">
                     Time of Day
                   </Label>
                   <Input
@@ -355,13 +355,13 @@ export default function RemindersPage() {
                     type="time"
                     value={newTime}
                     onChange={(e) => setNewTime(e.target.value)}
-                    className="h-11 rounded-[10px] border-[#E5ECE8] text-base font-semibold"
+                    className="h-11 rounded-xl border-[#E2E8F0] text-base font-semibold"
                   />
                 </div>
                 <Button
                   disabled={submitting || !newTime}
                   onClick={handleAddHealthReminder}
-                  className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+                  className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
                 >
                   {submitting ? (
                     <>
@@ -399,22 +399,35 @@ export default function RemindersPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Filter Chips */}
-          <SegmentedFilter
-            options={filterOptions}
-            selected={filter}
-            onChange={setFilter}
-            size="md"
-          />
+          {/* Filter Bar & Active Channels */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <SegmentedFilter
+              options={filterOptions}
+              selected={filter}
+              onChange={setFilter}
+              size="md"
+            />
+            <div className="flex items-center gap-2 text-xs text-[#64748B]">
+              <span className="text-[#94A3B8]">Active Channels:</span>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs text-[#1E293B]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]"></span>
+                <span>Telegram Alerts</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs text-[#1E293B]">
+                <Bell className="h-3 w-3 text-[#6D28D9]" />
+                <span>In-App</span>
+              </div>
+            </div>
+          </div>
 
           {/* Health Reminders Section */}
           {showHealth && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-[#111827]">
+                <h2 className="text-base font-semibold text-[#1E293B]">
                   Health &amp; Nutrition Reminders
                 </h2>
-                <span className="text-xs text-[#667085]">
+                <span className="text-xs text-[#64748B]">
                   {healthReminders.length} scheduled
                 </span>
               </div>
@@ -424,24 +437,24 @@ export default function RemindersPage() {
                   icon={<Utensils className="h-5 w-5" />}
                   title="No health reminders configured"
                   description="Set daily reminders for meals, snacks, or hydration checks."
-                  className="py-8 bg-white"
+                  className="py-8 bg-white border border-[#E2E8F0] rounded-2xl"
                 />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {healthReminders.map((rem) => (
                     <div
                       key={rem.id}
-                      className="rounded-[14px] border border-[#E5ECE8] bg-white p-4 shadow-[0_1px_3px_rgba(16,24,40,0.04)] flex items-center justify-between gap-3 hover:border-[#16A34A]/40 transition-colors"
+                      className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-xs flex items-center justify-between gap-3 hover:border-[#6D28D9]/40 transition-colors"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-10 w-10 rounded-xl bg-[#EAF8EF] text-[#16A34A] flex items-center justify-center shrink-0">
+                        <div className="h-10 w-10 rounded-xl bg-[#F5F3FF] text-[#6D28D9] flex items-center justify-center shrink-0">
                           <Utensils className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-[#111827] truncate">
+                          <div className="text-sm font-semibold text-[#1E293B] truncate">
                             {rem.category || rem.title}
                           </div>
-                          <div className="text-xs text-[#667085] flex items-center gap-1 mt-0.5">
+                          <div className="text-xs text-[#64748B] flex items-center gap-1 mt-0.5">
                             <Clock className="h-3 w-3" />
                             <span>Daily at {rem.time || rem.timeOfDay}</span>
                           </div>
@@ -453,7 +466,7 @@ export default function RemindersPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleStartEdit(rem)}
-                          className="h-8 w-8 p-0 rounded-lg text-[#667085] hover:text-[#16A34A] hover:bg-[#F0F5F2]"
+                          className="h-8 w-8 p-0 rounded-lg text-[#64748B] hover:text-[#6D28D9] hover:bg-[#F5F3FF]"
                           title="Edit reminder"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -462,7 +475,7 @@ export default function RemindersPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDeleteHealthReminder(rem)}
-                          className="h-8 w-8 p-0 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+                          className="h-8 w-8 p-0 rounded-lg text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
                           title="Delete reminder"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -471,7 +484,7 @@ export default function RemindersPage() {
                           checked={rem.isActive}
                           onCheckedChange={(checked) => handleToggleReminder(rem, checked)}
                           aria-label={`Toggle ${rem.category || rem.title} reminder`}
-                          className="data-[state=checked]:bg-[#16A34A]"
+                          className="data-[state=checked]:bg-[#6D28D9]"
                         />
                       </div>
                     </div>
@@ -485,12 +498,12 @@ export default function RemindersPage() {
           {showBills && (
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-[#111827]">
+                <h2 className="text-base font-semibold text-[#1E293B]">
                   Wealth &amp; Bill Obligations
                 </h2>
                 <Link
                   href="/finance/bills"
-                  className="text-xs font-semibold text-[#16A34A] hover:text-[#0F7A38]"
+                  className="text-xs font-semibold text-[#6D28D9] hover:text-[#5B21B6]"
                 >
                   Manage bills →
                 </Link>
@@ -501,7 +514,7 @@ export default function RemindersPage() {
                   icon={<ReceiptText className="h-5 w-5" />}
                   title="No bills scheduled"
                   description="Schedule mobile recharges, utility bills, or credit card dues to get notified."
-                  className="py-8 bg-white"
+                  className="py-8 bg-white border border-[#E2E8F0] rounded-2xl"
                 />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -518,18 +531,18 @@ export default function RemindersPage() {
                     return (
                       <div
                         key={ob.id}
-                        className="rounded-[14px] border border-[#E5ECE8] bg-white p-4 shadow-[0_1px_3px_rgba(16,24,40,0.04)] flex flex-col justify-between gap-3 hover:border-[#F59E0B]/50 transition-colors"
+                        className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-xs flex flex-col justify-between gap-3 hover:border-[#6D28D9]/40 transition-colors"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="h-10 w-10 rounded-xl bg-[#FFF4DF] text-[#F59E0B] flex items-center justify-center shrink-0">
+                            <div className="h-10 w-10 rounded-xl bg-[#FFFBEB] text-[#D97706] flex items-center justify-center shrink-0">
                               {getKindIcon(ob.kind)}
                             </div>
                             <div className="min-w-0">
-                              <div className="text-sm font-semibold text-[#111827] truncate">
+                              <div className="text-sm font-semibold text-[#1E293B] truncate">
                                 {ob.title}
                               </div>
-                              <div className="text-xs text-[#667085] flex items-center gap-1 mt-0.5">
+                              <div className="text-xs text-[#64748B] flex items-center gap-1 mt-0.5">
                                 <Calendar className="h-3 w-3" />
                                 <span>Due {format(d, 'dd MMM yyyy')}</span>
                               </div>
@@ -541,14 +554,14 @@ export default function RemindersPage() {
                           />
                         </div>
 
-                        <div className="flex items-center justify-between pt-2 border-t border-[#E5ECE8]/60">
+                        <div className="flex items-center justify-between pt-2 border-t border-[#E2E8F0]">
                           <div>
                             <MoneyAmount
                               amount={ob.amount}
                               type="NEUTRAL"
                               size="sm"
                             />
-                            <div className="text-[10px] text-[#667085]">
+                            <div className="text-[10px] text-[#64748B]">
                               {ob.recurrenceType === 'EVERY_N_DAYS'
                                 ? `Every ${ob.recurrenceInterval}d`
                                 : ob.recurrenceType}
@@ -560,7 +573,7 @@ export default function RemindersPage() {
                               size="sm"
                               disabled={submitting}
                               onClick={() => handleToggleObligation(ob.id, ob.isActive)}
-                              className="h-8 w-8 p-0 rounded-lg text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+                              className="h-8 w-8 p-0 rounded-lg text-[#64748B] hover:text-[#1E293B] hover:bg-[#F1F5F9]"
                               title={ob.isActive ? 'Pause bill reminder' : 'Resume bill reminder'}
                             >
                               {ob.isActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -572,7 +585,7 @@ export default function RemindersPage() {
                                 size="sm"
                                 disabled={submitting}
                                 onClick={() => handleUndoPaidObligation(ob.id)}
-                                className="h-8 px-2 rounded-lg text-[11px] font-semibold text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] flex items-center gap-1"
+                                className="h-8 px-2 rounded-lg text-[11px] font-semibold text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2] flex items-center gap-1"
                                 title="Undo last payment"
                               >
                                 <RotateCcw className="h-3 w-3" />
@@ -584,7 +597,7 @@ export default function RemindersPage() {
                               size="sm"
                               disabled={submitting}
                               onClick={() => handleMarkPaid(ob.id, ob.nextDueAt)}
-                              className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
+                              className="h-8 px-3 rounded-lg bg-[#059669] text-white hover:bg-[#047857] text-xs font-semibold shadow-xs flex items-center gap-1"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               <span>Paid</span>
@@ -603,22 +616,22 @@ export default function RemindersPage() {
 
       {/* Edit Health Reminder Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-[400px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-          <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-            <DialogTitle className="text-base font-semibold text-[#111827]">
+        <DialogContent className="sm:max-w-[400px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+          <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+            <DialogTitle className="text-base font-semibold text-[#1E293B]">
               Edit Health Reminder
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#344054]">
+              <Label className="text-xs font-semibold text-[#475569]">
                 Reminder Category
               </Label>
               <Select value={editCategory} onValueChange={setEditCategory}>
-                <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                   <SelectItem value="Breakfast">Breakfast</SelectItem>
                   <SelectItem value="Lunch">Lunch</SelectItem>
                   <SelectItem value="Dinner">Dinner</SelectItem>
@@ -629,7 +642,7 @@ export default function RemindersPage() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-rem-time" className="text-xs font-semibold text-[#344054]">
+              <Label htmlFor="edit-rem-time" className="text-xs font-semibold text-[#475569]">
                 Time of Day
               </Label>
               <Input
@@ -637,13 +650,13 @@ export default function RemindersPage() {
                 type="time"
                 value={editTime}
                 onChange={(e) => setEditTime(e.target.value)}
-                className="h-11 rounded-[10px] border-[#E5ECE8] text-base font-semibold"
+                className="h-11 rounded-xl border-[#E2E8F0] text-base font-semibold"
               />
             </div>
             <Button
               disabled={submitting || !editTime}
               onClick={handleSaveEdit}
-              className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+              className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
             >
               {submitting ? (
                 <>

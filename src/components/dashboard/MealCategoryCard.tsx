@@ -48,16 +48,16 @@ export const MealCategoryCard = memo(function MealCategoryCard({ category, onAna
   );
 
   return (
-    <Card className="glass-card border-white/60 rounded-3xl overflow-hidden group hover:scale-[1.02]">
+    <Card className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs hover:border-[#6D28D9] transition-all">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-2.5 rounded-2xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300 shadow-sm">
-              <Icon className="h-6 w-6" />
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-[#F5F3FF] text-[#6D28D9] transition-colors">
+              <Icon className="h-5 w-5" />
             </div>
             <div>
-              <CardTitle className="text-xl font-bold">{category}</CardTitle>
-              <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Nutrition Slot</p>
+              <CardTitle className="text-lg font-bold text-[#1E293B]">{category}</CardTitle>
+              <p className="text-[11px] font-semibold text-[#64748B]">Nutrition Slot</p>
             </div>
           </div>
 
@@ -68,15 +68,15 @@ export const MealCategoryCard = memo(function MealCategoryCard({ category, onAna
                   variant="ghost" 
                   size="icon" 
                   aria-label={`Log ${category}`}
-                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
+                  className="rounded-xl bg-[#F5F3FF] text-[#6D28D9] hover:bg-[#EDE9FE] h-9 w-9 transition-colors"
                 >
-                  <Plus className="h-5 w-5" aria-hidden="true" />
+                  <Plus className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="bottom" className="h-[90svh] rounded-t-[3rem] border-none glass-card p-8 flex flex-col">
-                <div className="w-12 h-1.5 bg-foreground/10 rounded-full mx-auto mb-8" />
+              <SheetContent side="bottom" className="h-[90svh] rounded-t-2xl border-t border-[#E2E8F0] bg-white p-6 flex flex-col">
+                <div className="w-12 h-1.5 bg-[#E2E8F0] rounded-full mx-auto mb-4" />
                 <SheetHeader className="mb-4">
-                  <SheetTitle className="text-3xl font-bold text-primary text-left">
+                  <SheetTitle className="text-2xl font-bold text-[#1E293B] text-left">
                     Log {category}
                   </SheetTitle>
                 </SheetHeader>
@@ -92,14 +92,14 @@ export const MealCategoryCard = memo(function MealCategoryCard({ category, onAna
                   variant="ghost" 
                   size="icon" 
                   aria-label={`Log ${category}`}
-                  className="rounded-full hover:bg-primary hover:text-primary-foreground h-10 w-10 transition-colors"
+                  className="rounded-xl bg-[#F5F3FF] text-[#6D28D9] hover:bg-[#EDE9FE] h-9 w-9 transition-colors"
                 >
-                  <Plus className="h-5 w-5" aria-hidden="true" />
+                  <Plus className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px] glass-card border-none rounded-[2.5rem] p-10">
-                <DialogHeader className="mb-6">
-                  <DialogTitle className="text-3xl font-bold text-primary">
+              <DialogContent className="sm:max-w-[500px] bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xl">
+                <DialogHeader className="mb-4">
+                  <DialogTitle className="text-2xl font-bold text-[#1E293B]">
                     Log {category}
                   </DialogTitle>
                 </DialogHeader>
@@ -111,12 +111,12 @@ export const MealCategoryCard = memo(function MealCategoryCard({ category, onAna
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline gap-1.5">
-          <span className="text-4xl font-bold text-primary">{totalCalories}</span>
-          <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest">kcal</span>
+          <span className="text-3xl font-bold text-[#1E293B]">{totalCalories}</span>
+          <span className="text-xs text-[#64748B] font-semibold">kcal</span>
         </div>
-        <div className="mt-5 w-full bg-black/5 dark:bg-white/5 rounded-full h-2 overflow-hidden">
+        <div className="mt-4 w-full bg-[#F1F5F9] rounded-full h-2 overflow-hidden">
           <div 
-            className="bg-primary h-full transition-all duration-700 ease-out shadow-[0_0_10px_rgba(var(--primary),0.3)]" 
+            className="bg-[#6D28D9] h-full transition-all duration-500 ease-out" 
             style={{ width: `${Math.min((totalCalories / 600) * 100, 100)}%` }}
           />
         </div>

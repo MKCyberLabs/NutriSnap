@@ -209,25 +209,25 @@ export function CreditCardDialog({
           <Button
             variant="outline"
             size="sm"
-            className="text-xs h-8 px-2.5 rounded-lg border-[#E5ECE8] hover:border-[#16A34A] text-[#344054]"
+            className="text-xs h-8 px-2.5 rounded-lg border-[#E2E8F0] hover:border-[#6D28D9] text-[#1E293B] hover:text-[#6D28D9] hover:bg-[#F5F3FF]"
           >
-            <CreditCard className="h-3.5 w-3.5 mr-1 text-[#16A34A]" />
+            <CreditCard className="h-3.5 w-3.5 mr-1 text-[#6D28D9]" />
             <span>Card Details</span>
           </Button>
         )}
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[620px] max-h-[85vh] overflow-y-auto rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-        <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
+      <DialogContent className="sm:max-w-[620px] max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+        <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-base font-semibold text-[#111827] flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-[#16A34A]" />
+            <DialogTitle className="text-base font-semibold text-[#1E293B] flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-[#6D28D9]" />
               <span>{account.name}</span>
             </DialogTitle>
             <Button
               size="sm"
               onClick={() => setStatementModalOpen(true)}
-              className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
+              className="h-8 px-3 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] text-xs font-semibold shadow-sm flex items-center gap-1"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>New Statement</span>
@@ -318,7 +318,7 @@ export function CreditCardDialog({
                         setPayAmount(activeStatement.pendingBalance);
                         setPaymentModalOpen(true);
                       }}
-                      className="h-8 px-3 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       <span>Record Payment</span>
@@ -374,53 +374,53 @@ export function CreditCardDialog({
 
         {/* Modal: New Statement */}
         <Dialog open={statementModalOpen} onOpenChange={setStatementModalOpen}>
-          <DialogContent className="sm:max-w-[420px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-            <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-              <DialogTitle className="text-base font-semibold text-[#111827]">
+          <DialogContent className="sm:max-w-[420px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+            <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+              <DialogTitle className="text-base font-semibold text-[#1E293B]">
                 New Credit Card Statement
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreateStatement} className="space-y-3.5 pt-3">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-[#344054]">Period (YYYY-MM)</Label>
+                <Label className="text-xs font-semibold text-[#1E293B]">Period (YYYY-MM)</Label>
                 <Input
                   value={newPeriodKey}
                   onChange={(e) => setNewPeriodKey(e.target.value)}
                   placeholder="2026-10"
-                  className="h-10 text-sm"
+                  className="h-10 text-sm rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9]"
                   required
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-[#344054]">Statement Amount (₹)</Label>
+                <Label className="text-xs font-semibold text-[#1E293B]">Statement Amount (₹)</Label>
                 <Input
                   type="number"
                   step="0.01"
                   value={newStatementAmount}
                   onChange={(e) => setNewStatementAmount(e.target.value)}
                   placeholder="25000.00"
-                  className="h-10 text-sm"
+                  className="h-10 text-sm rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9]"
                   required
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#344054]">Statement Date</Label>
+                  <Label className="text-xs font-semibold text-[#1E293B]">Statement Date</Label>
                   <Input
                     type="date"
                     value={newStatementDate}
                     onChange={(e) => setNewStatementDate(e.target.value)}
-                    className="h-10 text-xs"
+                    className="h-10 text-xs rounded-xl border-[#E2E8F0]"
                     required
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#344054]">Payment Due Date</Label>
+                  <Label className="text-xs font-semibold text-[#1E293B]">Payment Due Date</Label>
                   <Input
                     type="date"
                     value={newDueDate}
                     onChange={(e) => setNewDueDate(e.target.value)}
-                    className="h-10 text-xs"
+                    className="h-10 text-xs rounded-xl border-[#E2E8F0]"
                     required
                   />
                 </div>
@@ -428,7 +428,7 @@ export function CreditCardDialog({
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full h-10 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+                className="w-full h-10 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
               >
                 {submitting ? 'Creating...' : 'Create Statement'}
               </Button>
@@ -438,23 +438,23 @@ export function CreditCardDialog({
 
         {/* Modal: Record Payment */}
         <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
-          <DialogContent className="sm:max-w-[420px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-            <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-              <DialogTitle className="text-base font-semibold text-[#111827]">
+          <DialogContent className="sm:max-w-[420px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+            <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+              <DialogTitle className="text-base font-semibold text-[#1E293B]">
                 Pay Credit Card Bill
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleRecordPayment} className="space-y-3.5 pt-3">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-[#344054]">Pay From Account</Label>
+                <Label className="text-xs font-semibold text-[#1E293B]">Pay From Account</Label>
                 <Select
                   value={selectedFromAccountId}
                   onValueChange={setSelectedFromAccountId}
                 >
-                  <SelectTrigger className="h-10 text-sm">
+                  <SelectTrigger className="h-10 text-sm rounded-xl border-[#E2E8F0]">
                     <SelectValue placeholder="Select Bank/Cash Account" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white">
+                  <SelectContent className="bg-white rounded-xl border border-[#E2E8F0]">
                     {payerAccounts.map((a) => (
                       <SelectItem key={a.id} value={a.id} className="text-sm">
                         {a.name}
@@ -465,7 +465,7 @@ export function CreditCardDialog({
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-[#344054]">
+                <Label className="text-xs font-semibold text-[#1E293B]">
                   Amount (₹) [Max pending: ₹{cardData?.activeStatement?.pendingBalance}]
                 </Label>
                 <Input
@@ -474,26 +474,26 @@ export function CreditCardDialog({
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                   placeholder="Amount to pay"
-                  className="h-10 text-sm"
+                  className="h-10 text-sm rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9]"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-[#344054]">Note (Optional)</Label>
+                <Label className="text-xs font-semibold text-[#1E293B]">Note (Optional)</Label>
                 <Input
                   type="text"
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
                   placeholder="e.g. Paid via Netbanking"
-                  className="h-10 text-sm"
+                  className="h-10 text-sm rounded-xl border-[#E2E8F0]"
                 />
               </div>
 
               <Button
                 type="submit"
                 disabled={submitting || !selectedFromAccountId}
-                className="w-full h-10 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+                className="w-full h-10 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
               >
                 {submitting ? 'Recording...' : 'Confirm Bill Payment'}
               </Button>

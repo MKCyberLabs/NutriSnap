@@ -210,9 +210,25 @@ export default function SettingsPage() {
             title="Profile & Identity"
             description="Personal details and regional configuration"
           >
+            {/* User Profile Banner */}
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] mb-4">
+              <div className="w-14 h-14 rounded-full bg-[#F5F3FF] border border-[#DDD6FE] text-[#6D28D9] flex items-center justify-center font-bold text-xl uppercase shrink-0">
+                {name ? name[0] : 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-[#1E293B] truncate">{name || 'NutriSnap Member'}</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE]">
+                    {currentUser?.role === 'ADMIN' ? 'Admin' : 'Member'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#64748B] truncate mt-0.5">{email}</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="set-name" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-name" className="text-xs font-semibold text-[#475569]">
                   Full Name
                 </Label>
                 <Input
@@ -220,13 +236,13 @@ export default function SettingsPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+                  className="h-11 rounded-xl border-[#E2E8F0] text-sm"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="set-email" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-email" className="text-xs font-semibold text-[#475569]">
                   Email Address
                 </Label>
                 <Input
@@ -234,12 +250,12 @@ export default function SettingsPage() {
                   type="email"
                   value={email}
                   disabled
-                  className="h-11 rounded-[10px] border-[#E5ECE8] bg-[#F7FAF8] text-sm text-[#667085]"
+                  className="h-11 rounded-xl border-[#E2E8F0] bg-[#F8FAFC] text-sm text-[#64748B]"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="set-password" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-password" className="text-xs font-semibold text-[#475569]">
                   Change Password (Optional)
                 </Label>
                 <Input
@@ -248,19 +264,19 @@ export default function SettingsPage() {
                   placeholder="Leave blank to keep unchanged"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+                  className="h-11 rounded-xl border-[#E2E8F0] text-sm"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="set-tz" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-tz" className="text-xs font-semibold text-[#475569]">
                   Timezone
                 </Label>
                 <Select value={timezone} onValueChange={setTimezone}>
-                  <SelectTrigger id="set-tz" className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                  <SelectTrigger id="set-tz" className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="max-h-60 rounded-xl bg-white border border-[#E5ECE8]">
+                  <SelectContent className="max-h-60 rounded-xl bg-white border border-[#E2E8F0]">
                     <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
                     <SelectItem value="UTC">UTC</SelectItem>
                     <SelectItem value="America/New_York">America/New_York (EST)</SelectItem>
@@ -281,7 +297,7 @@ export default function SettingsPage() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="set-cal" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-cal" className="text-xs font-semibold text-[#475569]">
                   Calories Goal (kcal)
                 </Label>
                 <Input
@@ -291,13 +307,13 @@ export default function SettingsPage() {
                   max="10000"
                   value={calGoal}
                   onChange={(e) => setCalGoal(e.target.value)}
-                  className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+                  className="h-11 rounded-xl border-[#E2E8F0] text-sm tabular-nums"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="set-pro" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-pro" className="text-xs font-semibold text-[#475569]">
                   Protein Goal (grams)
                 </Label>
                 <Input
@@ -307,13 +323,13 @@ export default function SettingsPage() {
                   max="500"
                   value={proGoal}
                   onChange={(e) => setProGoal(e.target.value)}
-                  className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+                  className="h-11 rounded-xl border-[#E2E8F0] text-sm tabular-nums"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="set-water" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-water" className="text-xs font-semibold text-[#475569]">
                   Water Goal (ml)
                 </Label>
                 <Input
@@ -323,7 +339,7 @@ export default function SettingsPage() {
                   max="10000"
                   value={waterGoal}
                   onChange={(e) => setWaterGoal(e.target.value)}
-                  className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+                  className="h-11 rounded-xl border-[#E2E8F0] text-sm tabular-nums"
                   required
                 />
               </div>
@@ -337,7 +353,7 @@ export default function SettingsPage() {
           >
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="set-tg" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="set-tg" className="text-xs font-semibold text-[#475569]">
                   Telegram Chat / User ID
                 </Label>
                 <Input
@@ -346,12 +362,12 @@ export default function SettingsPage() {
                   placeholder="e.g. 123456789"
                   value={telegramId}
                   onChange={(e) => setTelegramId(e.target.value)}
-                  className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+                  className="h-11 rounded-xl border-[#E2E8F0] text-sm"
                 />
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[#F7FAF8] border border-[#E5ECE8] text-xs text-[#667085] space-y-1">
-                <div className="font-semibold text-[#111827]">How to link Telegram:</div>
+              <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#64748B] space-y-1">
+                <div className="font-semibold text-[#1E293B]">How to link Telegram:</div>
                 <p>
                   1. Message the NutriSnap bot on Telegram and send <code>/start</code>.
                 </p>
@@ -376,19 +392,19 @@ export default function SettingsPage() {
                 return (
                   <div
                     key={cat}
-                    className="p-3.5 rounded-xl border border-[#E5ECE8] bg-white flex items-center justify-between gap-3 shadow-xs"
+                    className="p-3.5 rounded-xl border border-[#E2E8F0] bg-white flex items-center justify-between gap-3 shadow-xs"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-[#EAF8EF] text-[#16A34A] flex items-center justify-center font-bold text-xs">
+                      <div className="h-9 w-9 rounded-lg bg-[#F5F3FF] text-[#6D28D9] flex items-center justify-center font-bold text-xs">
                         <Clock className="h-4 w-4" />
                       </div>
                       <div>
-                        <div className="text-sm font-semibold text-[#111827]">{cat}</div>
+                        <div className="text-sm font-semibold text-[#1E293B]">{cat}</div>
                         <input
                           type="time"
                           value={times[cat] || '08:00'}
                           onChange={(e) => handleTimeChange(cat, e.target.value)}
-                          className="text-xs text-[#667085] bg-transparent font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer"
+                          className="text-xs text-[#64748B] bg-transparent font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer"
                         />
                       </div>
                     </div>
@@ -397,7 +413,7 @@ export default function SettingsPage() {
                       checked={active}
                       onCheckedChange={(checked) => handleToggleMealReminder(cat, checked)}
                       aria-label={`Toggle ${cat} reminder`}
-                      className="data-[state=checked]:bg-[#16A34A]"
+                      className="data-[state=checked]:bg-[#6D28D9]"
                     />
                   </div>
                 );
@@ -409,7 +425,7 @@ export default function SettingsPage() {
           <div className="flex justify-end pt-2">
             <Button
               type="submit"
-              className="h-11 px-6 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm shadow-xs flex items-center gap-2"
+              className="h-11 px-6 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm shadow-xs flex items-center gap-2"
               disabled={saving}
             >
               {saving ? (

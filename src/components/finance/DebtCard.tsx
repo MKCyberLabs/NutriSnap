@@ -73,29 +73,29 @@ export function DebtCard({
   }
 
   return (
-    <div className="rounded-[14px] border border-[#E5ECE8] bg-white p-5 shadow-[0_1px_3px_rgba(16,24,40,0.04)] flex flex-col justify-between hover:shadow-[0_6px_18px_rgba(16,24,40,0.06)] transition-all">
+    <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_0_rgba(15,23,42,0.05),0_1px_2px_-1px_rgba(15,23,42,0.03)] flex flex-col justify-between hover:border-[#8B5CF6] transition-all">
       <div>
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex items-center gap-2.5">
             <div
-              className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 ${
+              className={`h-10 w-10 rounded-xl border flex items-center justify-center shrink-0 ${
                 isReceivable
-                  ? 'bg-[#EAF8EF] border-[#C3EBD0] text-[#16A34A]'
-                  : 'bg-[#FFF4DF] border-[#FDE5B3] text-[#F59E0B]'
+                  ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#059669]'
+                  : 'bg-[#FFFBEB] border-[#FDE68A] text-[#D97706]'
               }`}
             >
-              <User className="h-4 w-4" />
+              <User className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-[#111827] leading-tight">
+              <h3 className="text-sm font-semibold text-[#1E293B] leading-tight">
                 {debt.counterpartyName}
               </h3>
               {debt.title ? (
-                <p className="text-xs text-[#667085] mt-0.5 truncate max-w-[180px]">
+                <p className="text-xs text-[#64748B] mt-0.5 truncate max-w-[180px]">
                   {debt.title}
                 </p>
               ) : debt.notes ? (
-                <p className="text-xs text-[#667085] mt-0.5 truncate max-w-[180px]">
+                <p className="text-xs text-[#64748B] mt-0.5 truncate max-w-[180px]">
                   {debt.notes}
                 </p>
               ) : null}
@@ -116,11 +116,11 @@ export function DebtCard({
           </div>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-[#E5ECE8]/60">
-          <div className="text-xs text-[#667085]">
+        <div className="mt-4 pt-3 border-t border-[#E2E8F0]">
+          <div className="text-xs text-[#64748B]">
             {isOpen ? 'Outstanding Balance' : 'Settled Balance'}
           </div>
-          <div className="text-2xl font-bold tracking-tight text-[#111827] mt-1">
+          <div className="text-2xl font-bold tracking-tight text-[#1E293B] mt-1">
             <MoneyAmount
               amount={debt.outstandingAmount}
               type={isReceivable ? 'INCOME' : 'EXPENSE'}
@@ -128,13 +128,13 @@ export function DebtCard({
             />
           </div>
 
-          <div className="flex items-center justify-between text-xs text-[#667085] mt-2 pt-2 border-t border-[#E5ECE8]/40">
+          <div className="flex items-center justify-between text-xs text-[#64748B] mt-2 pt-2 border-t border-[#E2E8F0]">
             <span>Original: ₹{formatIndianRupees(debt.originalAmount)}</span>
             <span>Started {formattedStarted}</span>
           </div>
 
           {formattedDue && (
-            <div className={`text-xs mt-1.5 flex items-center gap-1.5 ${debt.isOverdue ? 'text-[#EF4444] font-medium' : 'text-[#667085]'}`}>
+            <div className={`text-xs mt-1.5 flex items-center gap-1.5 ${debt.isOverdue ? 'text-[#DC2626] font-medium' : 'text-[#64748B]'}`}>
               <Calendar className="h-3 w-3" />
               <span>Due: {formattedDue}</span>
             </div>
@@ -142,14 +142,14 @@ export function DebtCard({
         </div>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-[#E5ECE8]/60 flex items-center justify-between flex-wrap gap-2">
+      <div className="mt-4 pt-3 border-t border-[#E2E8F0] flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           {onEdit && (
             <Button
               size="sm"
               variant="outline"
               onClick={() => onEdit(debt)}
-              className="h-8 px-2.5 rounded-lg border-[#E5ECE8] text-[#344054] hover:bg-[#F7FAF8] text-xs font-medium flex items-center gap-1"
+              className="h-8 px-2.5 rounded-xl border-[#E2E8F0] text-[#1E293B] hover:bg-[#F5F3FF] hover:border-[#6D28D9] hover:text-[#6D28D9] text-xs font-medium flex items-center gap-1 transition-colors"
             >
               <Pencil className="h-3.5 w-3.5" />
               <span>Edit</span>
@@ -160,7 +160,7 @@ export function DebtCard({
             <Button
               size="sm"
               onClick={() => onCollect(debt)}
-              className="h-8 px-2.5 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
+              className="h-8 px-2.5 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] text-xs font-semibold shadow-sm flex items-center gap-1 transition-colors"
             >
               <ArrowDownLeft className="h-3.5 w-3.5" />
               <span>Collect</span>
@@ -172,7 +172,7 @@ export function DebtCard({
               variant="outline"
               size="sm"
               onClick={() => onLendMore(debt)}
-              className="h-8 px-2.5 rounded-lg border-[#E5ECE8] text-[#344054] hover:bg-[#F7FAF8] text-xs font-medium flex items-center gap-1"
+              className="h-8 px-2.5 rounded-xl border-[#E2E8F0] text-[#1E293B] hover:bg-[#F5F3FF] hover:border-[#6D28D9] hover:text-[#6D28D9] text-xs font-medium flex items-center gap-1 transition-colors"
             >
               <PlusCircle className="h-3.5 w-3.5" />
               <span>Lend More</span>
@@ -183,7 +183,7 @@ export function DebtCard({
             <Button
               size="sm"
               onClick={() => onRepay(debt)}
-              className="h-8 px-2.5 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
+              className="h-8 px-2.5 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] text-xs font-semibold shadow-sm flex items-center gap-1 transition-colors"
             >
               <ArrowUpRight className="h-3.5 w-3.5" />
               <span>Repay</span>
@@ -195,7 +195,7 @@ export function DebtCard({
               variant="outline"
               size="sm"
               onClick={() => onBorrowMore(debt)}
-              className="h-8 px-2.5 rounded-lg border-[#E5ECE8] text-[#344054] hover:bg-[#F7FAF8] text-xs font-medium flex items-center gap-1"
+              className="h-8 px-2.5 rounded-xl border-[#E2E8F0] text-[#1E293B] hover:bg-[#F5F3FF] hover:border-[#6D28D9] hover:text-[#6D28D9] text-xs font-medium flex items-center gap-1 transition-colors"
             >
               <PlusCircle className="h-3.5 w-3.5" />
               <span>Borrow More</span>
@@ -207,7 +207,7 @@ export function DebtCard({
               variant="ghost"
               size="sm"
               onClick={() => onSettle(debt.id)}
-              className="h-8 px-2 rounded-lg text-[#667085] hover:text-[#16A34A] hover:bg-[#EAF8EF] text-xs flex items-center gap-1"
+              className="h-8 px-2 rounded-xl text-[#64748B] hover:text-[#059669] hover:bg-[#ECFDF5] text-xs flex items-center gap-1 transition-colors"
               title="Mark as Settled"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
@@ -221,7 +221,7 @@ export function DebtCard({
             variant="ghost"
             size="sm"
             onClick={() => onArchive(debt.id)}
-            className="h-8 w-8 p-0 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+            className="h-8 w-8 p-0 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
             title="Archive record"
           >
             <Archive className="h-3.5 w-3.5" />

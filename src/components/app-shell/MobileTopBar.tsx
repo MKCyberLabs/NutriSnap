@@ -20,14 +20,14 @@ export function MobileTopBar({ user }: MobileTopBarProps) {
   };
 
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E5ECE8] px-4 h-14 flex items-center justify-between">
+    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-[#E2E8F0] px-4 h-14 flex items-center justify-between">
       <Brand size="sm" href="/today" />
 
       <div className="flex items-center gap-2">
         <QuickAddModal>
           <Button
             size="sm"
-            className="rounded-full gap-1 h-8 px-2.5 text-xs bg-[#16A34A] text-white hover:bg-[#0F7A38] shadow-xs"
+            className="rounded-full gap-1 h-8 px-2.5 text-xs bg-[#6D28D9] text-white hover:bg-[#5B21B6] shadow-xs"
             aria-label="Quick Add"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -36,7 +36,7 @@ export function MobileTopBar({ user }: MobileTopBarProps) {
         </QuickAddModal>
 
         <div
-          className="h-8 w-8 rounded-full bg-[#16A34A]/10 text-[#0F7A38] font-bold text-xs flex items-center justify-center shrink-0 border border-[#C3EAD0]"
+          className="h-8 w-8 rounded-full bg-[#F5F3FF] text-[#6D28D9] font-bold text-xs flex items-center justify-center shrink-0 border border-[#DDD6FE]"
           title={user?.name || 'User'}
           aria-label="User profile"
         >

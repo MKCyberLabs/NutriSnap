@@ -84,7 +84,7 @@ export function TodayFocusList({
       title: 'Log your meals',
       subtitle: foodSubtitle,
       icon: <Utensils className="h-4 w-4" />,
-      iconBg: 'bg-[#EAF8EF] text-[#16A34A]',
+      iconBg: 'bg-[#F5F3FF] text-[#6D28D9]',
       href: '/dashboard',
       isComplete: foodComplete,
     },
@@ -92,7 +92,7 @@ export function TodayFocusList({
       title: 'Drink water',
       subtitle: waterSubtitle,
       icon: <Droplets className="h-4 w-4" />,
-      iconBg: 'bg-[#EAF3FF] text-[#2F80ED]',
+      iconBg: 'bg-[#EFF6FF] text-[#2563EB]',
       href: '/hydration',
       isComplete: waterComplete,
     },
@@ -100,7 +100,7 @@ export function TodayFocusList({
       title: 'Review expenses',
       subtitle: moneySubtitle,
       icon: <WalletCards className="h-4 w-4" />,
-      iconBg: 'bg-[#FDECEC] text-[#EF4444]',
+      iconBg: 'bg-[#FEF2F2] text-[#DC2626]',
       href: '/finance/transactions',
       isComplete: false,
     },
@@ -108,7 +108,7 @@ export function TodayFocusList({
       title: wealth.nextDueObligation ? `Bill: ${billTitle}` : 'Upcoming bill',
       subtitle: billSubtitle,
       icon: <ReceiptText className="h-4 w-4" />,
-      iconBg: 'bg-[#FFF4DF] text-[#F59E0B]',
+      iconBg: 'bg-[#FFFBEB] text-[#D97706]',
       href: '/finance/bills',
       isComplete: !wealth.nextDueObligation,
     },
@@ -116,7 +116,7 @@ export function TodayFocusList({
       title: reminders.dueToday.length > 0 ? `Reminder: ${reminderTitle}` : 'Daily reminders',
       subtitle: reminderSubtitle,
       icon: <Bell className="h-4 w-4" />,
-      iconBg: 'bg-[#F7FAF8] text-[#667085]',
+      iconBg: 'bg-[#F1F5F9] text-[#64748B]',
       href: '/reminders',
       isComplete: reminders.dueToday.length === 0,
     },
@@ -128,12 +128,12 @@ export function TodayFocusList({
       description="Essential daily actions across health and wealth"
       className="h-full flex flex-col justify-between"
     >
-      <div className="divide-y divide-[#E5ECE8]/80">
+      <div className="divide-y divide-[#E2E8F0]">
         {items.map((item, idx) => (
           <Link
             key={idx}
             href={item.href}
-            className="flex items-center justify-between py-3 px-1 hover:bg-[#F7FAF8]/80 rounded-lg transition-colors group"
+            className="flex items-center justify-between py-3 px-1 hover:bg-[#F5F3FF] rounded-xl transition-colors group"
           >
             <div className="flex items-center gap-3 min-w-0">
               <div
@@ -143,17 +143,17 @@ export function TodayFocusList({
                 {item.icon}
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-[#111827] truncate group-hover:text-[#16A34A] transition-colors">
+                <div className="text-sm font-semibold text-[#1E293B] truncate group-hover:text-[#6D28D9] transition-colors">
                   {item.title}
                 </div>
-                <div className="text-xs text-[#667085] truncate mt-0.5">
+                <div className="text-xs text-[#64748B] truncate mt-0.5">
                   {item.subtitle}
                 </div>
               </div>
             </div>
-            <div className="shrink-0 flex items-center gap-1 text-[#667085] group-hover:text-[#111827]">
+            <div className="shrink-0 flex items-center gap-1 text-[#64748B] group-hover:text-[#1E293B]">
               {item.isComplete && (
-                <CheckCircle2 className="h-4 w-4 text-[#16A34A] mr-1" aria-label="Completed" />
+                <CheckCircle2 className="h-4 w-4 text-[#059669] mr-1" aria-label="Completed" />
               )}
               <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </div>

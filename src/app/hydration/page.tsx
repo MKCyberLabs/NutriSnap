@@ -63,16 +63,16 @@ function CustomDrinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md rounded-[2rem] p-6 border-0 shadow-2xl">
+      <DialogContent className="sm:max-w-md rounded-2xl p-6 border border-[#E2E8F0] bg-white shadow-xl">
         <DialogHeader className="mb-4">
-          <DialogTitle className="text-2xl font-bold text-center">
+          <DialogTitle className="text-xl font-bold text-center text-[#1E293B]">
             {editingLog ? 'Edit Drink' : 'Log Custom Drink'}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-8 py-2">
+        <div className="space-y-6 py-2">
           <div>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest text-center mb-4">Select Drink Type</p>
+            <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider text-center mb-3">Select Drink Type</p>
             <div className="flex justify-center gap-2 flex-wrap">
               {DRINK_TYPES.map((dt) => (
                 <button
@@ -81,20 +81,20 @@ function CustomDrinkDialog({
                   aria-label={dt.type}
                   aria-pressed={customType === dt.type}
                   onClick={() => setCustomType(dt.type as DrinkType)}
-                  className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 ${customType === dt.type ? 'bg-sky-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9] ${customType === dt.type ? 'bg-[#F5F3FF] border-[#6D28D9] text-[#6D28D9] shadow-xs font-bold' : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B] hover:bg-[#F1F5F9]'}`}
                 >
                   <span className="text-2xl" aria-hidden="true">{dt.emoji}</span>
-                  <span className="text-xs font-semibold">{dt.type}</span>
+                  <span className="text-xs">{dt.type}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest text-center mb-2">Amount</p>
-            <div className="text-center mb-4">
-              <span className="text-4xl font-extrabold text-sky-600">{customMl}</span>
-              <span className="text-xl font-bold text-sky-400 ml-1">ml</span>
+            <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider text-center mb-1">Amount</p>
+            <div className="text-center mb-3">
+              <span className="text-4xl font-extrabold text-[#0284C7]">{customMl}</span>
+              <span className="text-xl font-bold text-[#38BDF8] ml-1">ml</span>
             </div>
 
             <div className="px-4">
@@ -106,9 +106,9 @@ function CustomDrinkDialog({
                 step="50"
                 value={customMl}
                 onChange={(e) => setCustomMl(Number(e.target.value))}
-                className="w-full accent-sky-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                className="w-full accent-[#0284C7] h-2 bg-[#F1F5F9] rounded-lg appearance-none cursor-pointer"
               />
-              <div className="flex justify-between mt-2 text-xs font-bold text-slate-400">
+              <div className="flex justify-between mt-2 text-xs font-semibold text-[#94A3B8]">
                 <span>50 ml</span>
                 <span>2000 ml</span>
               </div>
@@ -117,7 +117,7 @@ function CustomDrinkDialog({
 
           <Button
             onClick={() => onSave(customMl, customType, editingLog ? editingLog.id : null)}
-            className="w-full h-14 rounded-2xl text-lg font-bold bg-sky-500 hover:bg-sky-600 shadow-lg shadow-sky-500/30"
+            className="w-full h-12 rounded-xl text-base font-semibold bg-[#6D28D9] hover:bg-[#5B21B6] text-white shadow-xs"
           >
             {editingLog ? 'Update Entry' : 'Log Drink'}
           </Button>
@@ -342,43 +342,43 @@ export default function HydrationPage() {
         {/* Header & Navigation */}
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <div>
-            <h1 className="text-2xl sm:text-[30px] font-bold text-[#111827] flex items-center gap-2">
-              <Droplets className="h-7 w-7 text-[#2F80ED]" />
+            <h1 className="text-2xl sm:text-[28px] font-bold text-[#1E293B] flex items-center gap-2">
+              <Droplets className="h-6 w-6 text-[#0284C7]" />
               Water
             </h1>
-            <p className="text-xs sm:text-sm text-[#667085] mt-1 font-normal">Track your daily water intake and stay hydrated.</p>
+            <p className="text-xs sm:text-sm text-[#64748B] mt-1 font-normal">Track your daily water intake and stay hydrated.</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/50 p-2 rounded-2xl backdrop-blur-sm border border-white/60">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-[200px]">
-              <TabsList className="grid w-full grid-cols-2 bg-sky-100/50">
-                <TabsTrigger value="daily" className="data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm rounded-xl">Daily</TabsTrigger>
-                <TabsTrigger value="weekly" className="data-[state=active]:bg-white data-[state=active]:text-sky-600 data-[state=active]:shadow-sm rounded-xl">Weekly</TabsTrigger>
+          <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-1.5 rounded-xl border border-[#E2E8F0] shadow-xs">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-[180px]">
+              <TabsList className="grid w-full grid-cols-2 bg-[#F1F5F9] rounded-lg p-0.5">
+                <TabsTrigger value="daily" className="data-[state=active]:bg-white data-[state=active]:text-[#6D28D9] data-[state=active]:shadow-xs rounded-md text-xs font-semibold">Daily</TabsTrigger>
+                <TabsTrigger value="weekly" className="data-[state=active]:bg-white data-[state=active]:text-[#6D28D9] data-[state=active]:shadow-xs rounded-md text-xs font-semibold">Weekly</TabsTrigger>
               </TabsList>
             </Tabs>
             
-            <div className="flex items-center gap-2 bg-white rounded-xl p-1 shadow-sm border border-sky-100">
+            <div className="flex items-center gap-1 bg-white rounded-lg p-0.5 border border-[#E2E8F0]">
               <Button 
                 variant="ghost" 
                 size="icon" 
                 aria-label="Previous period"
                 onClick={() => activeTab === 'daily' ? setDate(subDays(date, 1)) : setWeekStart(subDays(weekStart, 7))}
-                className="h-8 w-8 rounded-lg hover:bg-sky-50 text-sky-600"
+                className="h-8 w-8 rounded-md hover:bg-[#F5F3FF] text-[#64748B] hover:text-[#6D28D9]"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" className="h-8 px-2 text-sm font-medium hover:bg-sky-50 text-sky-700 min-w-[120px] justify-center">
-                    <CalendarIcon className="h-4 w-4 mr-2 text-sky-500" />
+                  <Button variant="ghost" className="h-8 px-2 text-xs font-semibold hover:bg-[#F5F3FF] text-[#1E293B] hover:text-[#6D28D9] min-w-[120px] justify-center">
+                    <CalendarIcon className="h-3.5 w-3.5 mr-2 text-[#6D28D9]" />
                     {activeTab === 'daily' 
                       ? format(date, 'MMM d, yyyy')
                       : `${format(weekStart, 'MMM d')} - ${format(addDays(weekStart, 6), 'MMM d, yyyy')}`
                     }
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 border-sky-100" align="center">
+                <PopoverContent className="w-auto p-0 border border-[#E2E8F0] bg-white rounded-xl shadow-xl" align="center">
                   <Calendar
                     mode="single"
                     selected={activeTab === 'daily' ? date : weekStart}
@@ -389,18 +389,18 @@ export default function HydrationPage() {
                       }
                     }}
                     initialFocus
-                    className="rounded-xl border-sky-100"
+                    className="rounded-xl border-none"
                   />
                 </PopoverContent>
               </Popover>
 
               <Button 
                 variant="ghost" 
-                size="icon"
+                size="icon" 
                 aria-label="Next period"
                 disabled={activeTab === 'daily' ? isSameDay(date, new Date()) : isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))}
                 onClick={() => activeTab === 'daily' ? setDate(addDays(date, 1)) : setWeekStart(addDays(weekStart, 7))}
-                className="h-8 w-8 rounded-lg hover:bg-sky-50 text-sky-600"
+                className="h-8 w-8 rounded-md hover:bg-[#F5F3FF] text-[#64748B] hover:text-[#6D28D9]"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -493,77 +493,77 @@ export default function HydrationPage() {
                 <>
                   {/* Quick Add Grid */}
                   <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <button type="button" aria-label="Quick add 250 milliliters of water" onClick={() => handleQuickAdd(250)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
-                        <GlassWater className="h-7 w-7" />
+                    <button type="button" aria-label="Quick add 250 milliliters of water" onClick={() => handleQuickAdd(250)} className="group bg-white rounded-2xl p-4 flex flex-col items-center justify-center gap-3 shadow-xs border border-[#E2E8F0] hover:border-[#6D28D9] hover:bg-[#F5F3FF] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9]">
+                      <div className="w-12 h-12 rounded-xl bg-[#EFF6FF] text-[#0284C7] flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <GlassWater className="h-6 w-6" />
                       </div>
-                      <span className="font-bold text-slate-700">250 ml</span>
+                      <span className="font-bold text-[#1E293B] text-sm">250 ml</span>
                     </button>
                     
-                    <button type="button" aria-label="Quick add 500 milliliters of water" onClick={() => handleQuickAdd(500)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
-                        <Droplets className="h-7 w-7" />
+                    <button type="button" aria-label="Quick add 500 milliliters of water" onClick={() => handleQuickAdd(500)} className="group bg-white rounded-2xl p-4 flex flex-col items-center justify-center gap-3 shadow-xs border border-[#E2E8F0] hover:border-[#6D28D9] hover:bg-[#F5F3FF] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9]">
+                      <div className="w-12 h-12 rounded-xl bg-[#EFF6FF] text-[#0284C7] flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Droplets className="h-6 w-6" />
                       </div>
-                      <span className="font-bold text-slate-700">500 ml</span>
+                      <span className="font-bold text-[#1E293B] text-sm">500 ml</span>
                     </button>
                     
-                    <button type="button" aria-label="Quick add 750 milliliters of water" onClick={() => handleQuickAdd(750)} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white shadow-inner group-hover:scale-110 transition-transform">
-                        <Wine className="h-7 w-7" />
+                    <button type="button" aria-label="Quick add 750 milliliters of water" onClick={() => handleQuickAdd(750)} className="group bg-white rounded-2xl p-4 flex flex-col items-center justify-center gap-3 shadow-xs border border-[#E2E8F0] hover:border-[#6D28D9] hover:bg-[#F5F3FF] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9]">
+                      <div className="w-12 h-12 rounded-xl bg-[#EFF6FF] text-[#0284C7] flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Wine className="h-6 w-6" />
                       </div>
-                      <span className="font-bold text-slate-700">750 ml</span>
+                      <span className="font-bold text-[#1E293B] text-sm">750 ml</span>
                     </button>
                     
-                    <button type="button" aria-label="Log custom drink entry" onClick={() => openCustomModal()} className="group bg-white rounded-3xl p-4 flex flex-col items-center justify-center gap-3 shadow-sm border border-sky-50 hover:shadow-md transition-all hover:-translate-y-1 border-dashed border-2 border-sky-200 bg-sky-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
-                      <div className="w-14 h-14 rounded-2xl bg-white border border-sky-200 flex items-center justify-center text-sky-500 group-hover:bg-sky-50 transition-colors">
-                        <Plus className="h-7 w-7" />
+                    <button type="button" aria-label="Log custom drink entry" onClick={() => openCustomModal()} className="group bg-[#F8FAFC] rounded-2xl p-4 flex flex-col items-center justify-center gap-3 shadow-xs border border-dashed border-[#DDD6FE] hover:border-[#6D28D9] hover:bg-[#F5F3FF] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9]">
+                      <div className="w-12 h-12 rounded-xl bg-white border border-[#DDD6FE] flex items-center justify-center text-[#6D28D9] group-hover:bg-[#F5F3FF] transition-colors">
+                        <Plus className="h-6 w-6" />
                       </div>
-                      <span className="font-bold text-sky-600">Custom</span>
+                      <span className="font-bold text-[#6D28D9] text-sm">Custom</span>
                     </button>
                   </motion.div>
 
                   {/* Daily Activity Timeline */}
-                  <motion.div variants={itemVariants} className="bg-white rounded-3xl p-6 shadow-sm border border-sky-50">
+                  <motion.div variants={itemVariants} className="bg-white rounded-2xl p-6 shadow-xs border border-[#E2E8F0]">
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-sky-100 text-sky-600">
+                        <div className="p-2 rounded-xl bg-[#EFF6FF] text-[#0284C7]">
                           <History className="h-5 w-5" />
                         </div>
                         <div>
-                          <h2 className="text-xl font-bold text-slate-800">Daily Activity</h2>
-                          <p className="text-sm text-slate-500">Visual timeline of your hydration intake.</p>
+                          <h2 className="text-lg font-bold text-[#1E293B]">Daily Activity</h2>
+                          <p className="text-xs text-[#64748B]">Visual timeline of your hydration intake.</p>
                         </div>
                       </div>
-                      {isRefreshing && <Loader2 className="h-5 w-5 text-sky-500 animate-spin" />}
+                      {isRefreshing && <Loader2 className="h-5 w-5 text-[#6D28D9] animate-spin" />}
                     </div>
 
                     <ScrollArea className="h-[350px] pr-4">
                       {logs.length === 0 ? (
-                        <div className="h-full flex items-center justify-center border-2 border-dashed border-sky-100 rounded-2xl p-8 text-center text-slate-400 font-medium">
+                        <div className="h-full flex items-center justify-center border border-dashed border-[#E2E8F0] rounded-xl p-8 text-center text-[#64748B] text-sm font-medium bg-[#F8FAFC]">
                           No activity recorded for this day.<br/>Drink some water! 💧
                         </div>
                       ) : (
-                        <div className="relative pl-6 space-y-6 before:absolute before:inset-0 before:left-[11px] before:w-[2px] before:-z-10 before:bg-sky-100">
+                        <div className="relative pl-6 space-y-6 before:absolute before:inset-0 before:left-[11px] before:w-[2px] before:-z-10 before:bg-[#E2E8F0]">
                           {logs.map((log) => (
                             <div key={log.id} className="relative flex items-center gap-4">
-                              <div className="absolute -left-[29px] w-3 h-3 rounded-full bg-white border-2 border-sky-500 shadow-sm" />
-                              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-500 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <div className="absolute -left-[29px] w-3 h-3 rounded-full bg-white border-2 border-[#0284C7] shadow-xs" />
+                              <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#0284C7] flex items-center justify-center flex-shrink-0 shadow-xs">
                                 {getIconForType(log.drinkType)}
                               </div>
                               <div className="flex-1">
-                                <h3 className="font-bold text-slate-800 text-lg leading-tight flex items-center gap-2">
-                                  {log.amountMl} ml <span className="text-sm font-medium text-slate-500">({log.drinkType})</span>
+                                <h3 className="font-bold text-[#1E293B] text-base leading-tight flex items-center gap-2">
+                                  {log.amountMl} ml <span className="text-xs font-medium text-[#64748B]">({log.drinkType})</span>
                                 </h3>
-                                <p className="text-sm font-medium text-slate-400 flex items-center gap-1 mt-0.5">
-                                  <Clock className="h-3.5 w-3.5" />
+                                <p className="text-xs font-medium text-[#94A3B8] flex items-center gap-1 mt-0.5">
+                                  <Clock className="h-3 w-3" />
                                   {format(new Date(log.createdAt), 'h:mm a')}
                                 </p>
                               </div>
                               <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" aria-label="Edit hydration log" onClick={() => openCustomModal(log)} className="h-8 w-8 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl">
+                                <Button variant="ghost" size="icon" aria-label="Edit hydration log" onClick={() => openCustomModal(log)} className="h-8 w-8 text-[#64748B] hover:text-[#6D28D9] hover:bg-[#F5F3FF] rounded-lg">
                                   <Pen className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" aria-label="Delete hydration log" onClick={() => setDeleteId(log.id)} className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl">
+                                <Button variant="ghost" size="icon" aria-label="Delete hydration log" onClick={() => setDeleteId(log.id)} className="h-8 w-8 text-[#64748B] hover:text-red-600 hover:bg-red-50 rounded-lg">
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -577,23 +577,23 @@ export default function HydrationPage() {
               ) : (
                 <>
                   {/* Weekly Trends Chart */}
-                  <motion.div variants={itemVariants} className="bg-white rounded-3xl p-6 shadow-sm border border-sky-50">
-                    <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-sky-500" />
+                  <motion.div variants={itemVariants} className="bg-white rounded-2xl p-6 shadow-xs border border-[#E2E8F0]">
+                    <h2 className="text-xl font-bold text-[#1E293B] mb-6 flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-[#0284C7]" />
                       Hydration Trends
                     </h2>
                     <div className="h-[300px] w-full">
                       {weeklyStats && (
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={weeklyStats.chartData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
                             <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                            <Bar dataKey="total" radius={[6, 6, 0, 0]} maxBarSize={50}>
+                            <Bar dataKey="total" radius={[6, 6, 0, 0]} maxBarSize={44}>
                               {weeklyStats.chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.total >= dailyGoal ? '#0ea5e9' : '#38bdf8'} opacity={entry.total > 0 ? 1 : 0.2} />
+                                <Cell key={`cell-${index}`} fill={entry.total >= dailyGoal ? '#0284C7' : '#38BDF8'} opacity={entry.total > 0 ? 1 : 0.3} />
                               ))}
-                              <LabelList dataKey="total" position="top" fill="#0ea5e9" fontSize={10} fontWeight="bold" formatter={(val: number) => val > 0 ? val : ''} />
+                              <LabelList dataKey="total" position="top" fill="#0284C7" fontSize={10} fontWeight="bold" formatter={(val: number) => val > 0 ? val : ''} />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -603,31 +603,31 @@ export default function HydrationPage() {
 
                   {/* Weekly Stat Cards */}
                   <motion.div variants={itemVariants} className="grid grid-cols-3 gap-4">
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-sky-50 flex flex-col items-center text-center">
-                      <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-500 mb-3">
+                    <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#E2E8F0] flex flex-col items-center text-center">
+                      <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] flex items-center justify-center text-[#0284C7] mb-2">
                         <Droplets className="h-5 w-5" />
                       </div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Avg Consum</span>
-                      <span className="text-2xl font-bold text-slate-800">{weeklyStats?.avgTotal || 0}</span>
-                      <span className="text-xs font-medium text-slate-500">ml/day</span>
+                      <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Avg Consum</span>
+                      <span className="text-2xl font-bold text-[#1E293B]">{weeklyStats?.avgTotal || 0}</span>
+                      <span className="text-xs font-medium text-[#64748B]">ml/day</span>
                     </div>
                     
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-sky-50 flex flex-col items-center text-center">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-500 mb-3">
+                    <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#E2E8F0] flex flex-col items-center text-center">
+                      <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] flex items-center justify-center text-[#0284C7] mb-2">
                         <BarChart3 className="h-5 w-5" />
                       </div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Max Consum</span>
-                      <span className="text-2xl font-bold text-slate-800">{weeklyStats?.maxDay || 0}</span>
-                      <span className="text-xs font-medium text-slate-500">ml</span>
+                      <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Max Consum</span>
+                      <span className="text-2xl font-bold text-[#1E293B]">{weeklyStats?.maxDay || 0}</span>
+                      <span className="text-xs font-medium text-[#64748B]">ml</span>
                     </div>
 
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-sky-50 flex flex-col items-center text-center">
-                      <div className="w-10 h-10 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 mb-3">
+                    <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#E2E8F0] flex flex-col items-center text-center">
+                      <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] flex items-center justify-center text-[#0284C7] mb-2">
                         <History className="h-5 w-5" />
                       </div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Days Streak</span>
-                      <span className="text-2xl font-bold text-slate-800">{weeklyStats?.streak || 0}</span>
-                      <span className="text-xs font-medium text-slate-500">days</span>
+                      <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Days Streak</span>
+                      <span className="text-2xl font-bold text-[#1E293B]">{weeklyStats?.streak || 0}</span>
+                      <span className="text-xs font-medium text-[#64748B]">days</span>
                     </div>
                   </motion.div>
                 </>
@@ -639,43 +639,43 @@ export default function HydrationPage() {
               {activeTab === 'daily' ? (
                 <>
                   {/* Hydration Insights */}
-                  <motion.div variants={itemVariants} className="bg-white rounded-3xl p-6 shadow-sm border border-sky-50">
-                    <h2 className="text-lg font-bold text-slate-800 mb-4">Hydration Insights</h2>
+                  <motion.div variants={itemVariants} className="bg-white rounded-2xl p-6 shadow-xs border border-[#E2E8F0]">
+                    <h2 className="text-lg font-bold text-[#1E293B] mb-4">Hydration Insights</h2>
                     
                     <div className="grid grid-cols-4 gap-y-4 gap-x-2 mb-6">
                       {GLASSES_ARRAY.map((_, i) => (
                         <div key={i} className="flex justify-center">
-                          <GlassWater className={`h-8 w-8 transition-colors duration-500 ${i < filledGlasses ? 'text-cyan-500 drop-shadow-sm' : 'text-slate-200'}`} fill={i < filledGlasses ? 'currentColor' : 'none'} />
+                          <GlassWater className={`h-8 w-8 transition-colors duration-500 ${i < filledGlasses ? 'text-[#0284C7] drop-shadow-sm' : 'text-[#CBD5E1]'}`} fill={i < filledGlasses ? 'currentColor' : 'none'} />
                         </div>
                       ))}
                     </div>
 
-                    <p className="text-sm font-semibold text-slate-600 text-center mb-4">
+                    <p className="text-sm font-semibold text-[#1E293B] text-center mb-4">
                       {progressPercentage >= 100 
                         ? "Goal reached! Excellent hydration today! 🎉" 
                         : `You're ${progressPercentage}% of the way to your goal! Keep it up!`}
                     </p>
 
-                    <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-2.5 w-full bg-[#F1F5F9] rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-sky-400 to-cyan-400 rounded-full transition-all duration-1000 ease-out" 
+                        className="h-full bg-[#0284C7] rounded-full transition-all duration-700 ease-out" 
                         style={{ width: `${progressPercentage}%` }} 
                       />
                     </div>
                   </motion.div>
 
                   {/* Did you know? */}
-                  <motion.div variants={itemVariants} className="bg-emerald-50 rounded-3xl p-6 border border-emerald-100 shadow-sm relative overflow-hidden">
+                  <motion.div variants={itemVariants} className="bg-[#F0FDF4] rounded-2xl p-5 border border-[#BBF7D0] shadow-xs relative overflow-hidden">
                     <div className="absolute -right-4 -bottom-4 opacity-10">
                       <Info className="h-24 w-24 text-emerald-600" />
                     </div>
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg">
+                      <div className="p-1.5 bg-[#DCFCE7] text-[#16A34A] rounded-lg">
                         <Info className="h-4 w-4" />
                       </div>
-                      <h3 className="font-bold text-emerald-900">Did you know?</h3>
+                      <h3 className="font-bold text-[#14532D]">Did you know?</h3>
                     </div>
-                    <p className="text-emerald-800 text-sm font-medium leading-relaxed">
+                    <p className="text-[#166534] text-xs font-medium leading-relaxed">
                       Drinking water before meals can help with digestion and portion control by making you feel fuller faster.
                     </p>
                   </motion.div>
@@ -683,18 +683,18 @@ export default function HydrationPage() {
               ) : (
                 <>
                   {/* Range Progress */}
-                  <motion.div variants={itemVariants} className="bg-white rounded-3xl p-6 shadow-sm border border-sky-50">
-                    <h2 className="text-lg font-bold text-slate-800 mb-6">Range Progress</h2>
+                  <motion.div variants={itemVariants} className="bg-white rounded-2xl p-6 shadow-xs border border-[#E2E8F0]">
+                    <h2 className="text-lg font-bold text-[#1E293B] mb-6">Range Progress</h2>
                     
                     <div className="space-y-6">
                       <div>
                         <div className="flex justify-between items-end mb-2">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Plain Water</span>
-                          <span className="text-sm font-bold text-slate-700">{weeklyStats?.totalWater || 0} / {dailyGoal * 7} ml</span>
+                          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Plain Water</span>
+                          <span className="text-sm font-bold text-[#1E293B]">{weeklyStats?.totalWater || 0} / {dailyGoal * 7} ml</span>
                         </div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-[#F1F5F9] rounded-full overflow-hidden">
                           <div 
-                            className="h-full bg-sky-500 rounded-full" 
+                            className="h-full bg-[#0284C7] rounded-full" 
                             style={{ width: `${Math.min(100, ((weeklyStats?.totalWater || 0) / (dailyGoal * 7)) * 100)}%` }} 
                           />
                         </div>
@@ -702,12 +702,12 @@ export default function HydrationPage() {
 
                       <div>
                         <div className="flex justify-between items-end mb-2">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Other Beverages</span>
-                          <span className="text-sm font-bold text-slate-700">{weeklyStats?.totalOther || 0} ml</span>
+                          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Other Beverages</span>
+                          <span className="text-sm font-bold text-[#1E293B]">{weeklyStats?.totalOther || 0} ml</span>
                         </div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-[#F1F5F9] rounded-full overflow-hidden">
                           <div 
-                            className="h-full bg-emerald-400 rounded-full" 
+                            className="h-full bg-emerald-500 rounded-full" 
                             style={{ width: `${Math.min(100, ((weeklyStats?.totalOther || 0) / (dailyGoal * 3)) * 100)}%` }} 
                           />
                         </div>
@@ -716,16 +716,10 @@ export default function HydrationPage() {
                   </motion.div>
 
                   {/* Period Insight */}
-                  <motion.div variants={itemVariants} className="bg-white rounded-3xl p-6 shadow-sm border border-sky-50 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-rose-100 to-transparent rounded-bl-[100px] -z-0 opacity-50"></div>
-                    <h2 className="text-lg font-bold text-slate-800 mb-3 relative z-10">Period Insight</h2>
-                    <p className="text-rose-500 font-semibold text-sm mb-3 relative z-10">
-                      Historical tracking analysis complete.
-                    </p>
-                    <p className="text-slate-500 text-sm font-medium leading-relaxed relative z-10">
-                      The weekly averages are derived from your actual logged entries for this period.
-                      <br/><br/>
-                      Great job on maintaining a consistent hydration routine this week! Keep it up.
+                  <motion.div variants={itemVariants} className="bg-[#F5F3FF] rounded-2xl p-6 shadow-xs border border-[#DDD6FE] relative overflow-hidden">
+                    <h2 className="text-lg font-bold text-[#6D28D9] mb-2 relative z-10">Period Insight</h2>
+                    <p className="text-[#475569] text-xs font-medium leading-relaxed relative z-10">
+                      The weekly averages are derived from your actual logged entries for this period. Great job on maintaining a consistent hydration routine this week! Keep it up.
                     </p>
                   </motion.div>
                 </>
@@ -744,16 +738,16 @@ export default function HydrationPage() {
 
         {/* Delete Confirmation */}
         <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-          <AlertDialogContent className="rounded-[2rem]">
+          <AlertDialogContent className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-xl">
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Hydration Entry?</AlertDialogTitle>
-              <AlertDialogDescription>
+              <AlertDialogTitle className="text-lg font-bold text-[#1E293B]">Delete Hydration Entry?</AlertDialogTitle>
+              <AlertDialogDescription className="text-xs text-[#64748B]">
                 This action cannot be undone. This entry will be permanently removed from your history.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600 text-white rounded-xl">Delete</AlertDialogAction>
+              <AlertDialogCancel className="rounded-xl border-[#E2E8F0]">Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700 text-white rounded-xl">Delete</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

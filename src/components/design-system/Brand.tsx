@@ -36,17 +36,17 @@ export function Brand({
   const content = (
     <div className={`flex items-center gap-2.5 ${className}`}>
       <div
-        className={`${iconSizes[size]} rounded-xl bg-[#16A34A] text-white flex items-center justify-center shadow-sm shrink-0`}
+        className={`${iconSizes[size]} rounded-xl bg-[#6D28D9] text-white flex items-center justify-center shadow-sm shrink-0`}
         aria-hidden="true"
       >
         <Leaf className={`${leafSizes[size]} fill-white/20`} />
       </div>
       <div className="flex flex-col">
-        <span className={`${textSizes[size]} font-bold tracking-tight text-[#111827] leading-none`}>
+        <span className={`${textSizes[size]} font-bold tracking-tight text-[#1E293B] leading-none`}>
           NutriSnap
         </span>
         {showTagline && (
-          <span className="text-[11px] font-medium text-[#667085] mt-1 leading-tight">
+          <span className="text-[11px] font-medium text-[#64748B] mt-1 leading-tight">
             Eat Well · Drink More · Manage Smart · Live Better
           </span>
         )}
@@ -58,7 +58,7 @@ export function Brand({
     return (
       <Link
         href={href}
-        className="inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] rounded-xl"
+        className="inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9] rounded-xl"
         aria-label="NutriSnap Home"
       >
         {content}

@@ -219,7 +219,7 @@ export default function FinanceOverviewPage() {
               label="Total Liquid Balance"
               value={`₹${formatIndianRupees(overview.liquidBalance)}`}
               icon={<Landmark className="h-4 w-4" />}
-              tone="green"
+              tone="purple"
               helperText={`${accounts.length} active accounts tracked`}
             />
             <MetricCard
@@ -233,7 +233,7 @@ export default function FinanceOverviewPage() {
               label="This Month's Expense"
               value={`₹${formatIndianRupees(overview.monthlyExpense)}`}
               icon={<ArrowUpRight className="h-4 w-4" />}
-              tone="amber"
+              tone="red"
               helperText="Authoritative monthly expense sum"
             />
           </div>
@@ -244,7 +244,7 @@ export default function FinanceOverviewPage() {
               <MetricCard
                 label="Friends Owe Me"
                 value={`₹${formatIndianRupees(overview.receivablesOutstanding)}`}
-                icon={<Users className="h-4 w-4 text-[#16A34A]" />}
+                icon={<Users className="h-4 w-4 text-[#059669]" />}
                 tone="green"
                 helperText="Money lent to friends"
               />
@@ -275,8 +275,8 @@ export default function FinanceOverviewPage() {
               <MetricCard
                 label="Wishlist Goals"
                 value={`₹${formatIndianRupees(overview.wishlistPlannedTotal)}`}
-                icon={<Sparkles className="h-4 w-4 text-[#2563EB]" />}
-                tone="blue"
+                icon={<Sparkles className="h-4 w-4 text-[#6D28D9]" />}
+                tone="purple"
                 helperText={`Ready: ₹${formatIndianRupees(overview.wishlistReadyTotal)}`}
               />
             </Link>
@@ -288,7 +288,7 @@ export default function FinanceOverviewPage() {
             action={
               <Link
                 href="/finance/accounts"
-                className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
+                className="text-xs font-semibold text-[#6D28D9] hover:underline flex items-center gap-1"
               >
                 <span>View all ({accounts.length})</span>
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -316,7 +316,7 @@ export default function FinanceOverviewPage() {
             <SectionCard
               title="Debts & Liabilities Spotlight"
               action={
-                <div className="flex items-center gap-3 text-xs font-semibold text-[#16A34A]">
+                <div className="flex items-center gap-3 text-xs font-semibold text-[#6D28D9]">
                   <Link href="/finance/debts" className="hover:underline">
                     Debts
                   </Link>
@@ -328,7 +328,7 @@ export default function FinanceOverviewPage() {
               }
             >
               {overview.debtsDueSoon.length === 0 && overview.loansDueSoon.length === 0 ? (
-                <div className="p-6 text-center text-xs text-[#667085]">
+                <div className="p-6 text-center text-xs text-[#64748B]">
                   No debts or loan payments due in the immediate schedule.
                 </div>
               ) : (
@@ -336,32 +336,32 @@ export default function FinanceOverviewPage() {
                   {overview.debtsDueSoon.slice(0, 3).map((d: any) => (
                     <div
                       key={d.id}
-                      className="p-3 rounded-xl border border-[#E5ECE8] bg-white flex items-center justify-between"
+                      className="p-3 rounded-xl border border-[#E2E8F0] bg-white flex items-center justify-between"
                     >
                       <div className="flex items-center gap-2.5">
                         <div
                           className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
                             d.direction === 'RECEIVABLE'
-                              ? 'bg-[#EAF8EF] text-[#16A34A]'
-                              : 'bg-[#FFF4DF] text-[#D97706]'
+                              ? 'bg-[#ECFDF5] text-[#059669]'
+                              : 'bg-[#FFFBEB] text-[#D97706]'
                           }`}
                         >
                           <Users className="h-4 w-4" />
                         </div>
                         <div>
-                          <div className="text-xs font-semibold text-[#111827]">
+                          <div className="text-xs font-semibold text-[#1E293B]">
                             {d.counterpartyName}
                           </div>
-                          <div className="text-[11px] text-[#667085]">
+                          <div className="text-[11px] text-[#64748B]">
                             {d.direction === 'RECEIVABLE' ? 'Owes you' : 'You owe'}
                             {d.isOverdue && (
-                              <span className="text-[#EF4444] font-medium ml-1.5">• Overdue</span>
+                              <span className="text-red-500 font-medium ml-1.5">• Overdue</span>
                             )}
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs font-bold text-[#111827]">
+                        <div className="text-xs font-bold text-[#1E293B]">
                           ₹{formatIndianRupees(d.outstandingAmount)}
                         </div>
                       </div>
@@ -371,21 +371,21 @@ export default function FinanceOverviewPage() {
                   {overview.loansDueSoon.slice(0, 2).map((l: any) => (
                     <div
                       key={l.id}
-                      className="p-3 rounded-xl border border-[#E5ECE8] bg-white flex items-center justify-between"
+                      className="p-3 rounded-xl border border-[#E2E8F0] bg-white flex items-center justify-between"
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-lg bg-[#FFF4DF] text-[#D97706] flex items-center justify-center shrink-0">
+                        <div className="h-8 w-8 rounded-lg bg-[#FFFBEB] text-[#D97706] flex items-center justify-center shrink-0">
                           <Building2 className="h-4 w-4" />
                         </div>
                         <div>
-                          <div className="text-xs font-semibold text-[#111827]">{l.name}</div>
-                          <div className="text-[11px] text-[#667085]">
+                          <div className="text-xs font-semibold text-[#1E293B]">{l.name}</div>
+                          <div className="text-[11px] text-[#64748B]">
                             {l.lender} {l.dueDay ? `• Due on ${l.dueDay}th` : ''}
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs font-bold text-[#111827]">
+                        <div className="text-xs font-bold text-[#1E293B]">
                           {l.emiAmount ? `₹${formatIndianRupees(l.emiAmount)} / mo` : `₹${formatIndianRupees(l.outstandingPrincipal)}`}
                         </div>
                       </div>
@@ -401,7 +401,7 @@ export default function FinanceOverviewPage() {
               action={
                 <Link
                   href="/finance/bills"
-                  className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
+                  className="text-xs font-semibold text-[#6D28D9] hover:underline flex items-center gap-1"
                 >
                   <span>Manage ({activeUpcoming.length})</span>
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -412,7 +412,7 @@ export default function FinanceOverviewPage() {
                 <EmptyState
                   title="No upcoming obligations"
                   description="Add utility bills, recharges, rent, or EMIs to track schedules."
-                  icon={<ReceiptText className="h-8 w-8 text-[#98A2B3]" />}
+                  icon={<ReceiptText className="h-8 w-8 text-[#94A3B8]" />}
                 />
               ) : (
                 <div className="space-y-2">
@@ -440,7 +440,7 @@ export default function FinanceOverviewPage() {
               action={
                 <Link
                   href="/finance/wishlist"
-                  className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
+                  className="text-xs font-semibold text-[#6D28D9] hover:underline flex items-center gap-1"
                 >
                   <span>Open Wishlist ({overview.activeWishlistCount})</span>
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -451,17 +451,17 @@ export default function FinanceOverviewPage() {
                 {overview.highPriorityWishlist.map((w: any) => (
                   <div
                     key={w.id}
-                    className="p-3.5 rounded-xl border border-[#E5ECE8] bg-white flex items-center justify-between"
+                    className="p-3.5 rounded-xl border border-[#E2E8F0] bg-white flex items-center justify-between"
                   >
                     <div>
-                      <div className="text-xs font-semibold text-[#111827]">{w.name}</div>
-                      <div className="text-[11px] text-[#667085] mt-0.5">{w.category}</div>
+                      <div className="text-xs font-semibold text-[#1E293B]">{w.name}</div>
+                      <div className="text-[11px] text-[#64748B] mt-0.5">{w.category}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-bold text-[#16A34A]">
+                      <div className="text-xs font-bold text-[#6D28D9]">
                         ₹{formatIndianRupees(w.targetPrice)}
                       </div>
-                      <div className="text-[10px] text-[#475467] font-medium capitalize">
+                      <div className="text-[10px] text-[#64748B] font-medium capitalize">
                         {w.status.toLowerCase()}
                       </div>
                     </div>
@@ -477,7 +477,7 @@ export default function FinanceOverviewPage() {
             action={
               <Link
                 href="/finance/transactions"
-                className="text-xs font-semibold text-[#16A34A] hover:underline flex items-center gap-1"
+                className="text-xs font-semibold text-[#6D28D9] hover:underline flex items-center gap-1"
               >
                 <span>All transactions</span>
                 <ChevronRight className="h-3.5 w-3.5" />

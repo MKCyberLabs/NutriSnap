@@ -27,20 +27,20 @@ export function RecentTransactions({
       case 'INCOME':
         return {
           icon: <ArrowUpRight className="h-4 w-4" />,
-          bg: 'bg-[#EAF8EF] text-[#16A34A]',
+          bg: 'bg-[#ECFDF5] text-[#059669]',
           moneyType: 'INCOME' as const,
         };
       case 'TRANSFER':
         return {
           icon: <ArrowLeftRight className="h-4 w-4" />,
-          bg: 'bg-[#EAF3FF] text-[#2F80ED]',
+          bg: 'bg-[#F5F3FF] text-[#6D28D9]',
           moneyType: 'TRANSFER' as const,
         };
       case 'EXPENSE':
       default:
         return {
           icon: <ArrowDownRight className="h-4 w-4" />,
-          bg: 'bg-[#FDECEC] text-[#EF4444]',
+          bg: 'bg-[#FEF2F2] text-[#DC2626]',
           moneyType: 'EXPENSE' as const,
         };
     }
@@ -53,7 +53,7 @@ export function RecentTransactions({
       action={
         <Link
           href="/finance/transactions"
-          className="text-xs font-semibold text-[#16A34A] hover:text-[#0F7A38] inline-flex items-center gap-1 transition-colors"
+          className="text-xs font-semibold text-[#6D28D9] hover:text-[#5B21B6] inline-flex items-center gap-1 transition-colors"
         >
           <span>View all</span>
           <ChevronRight className="h-3 w-3" />
@@ -66,13 +66,13 @@ export function RecentTransactions({
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="animate-pulse flex items-center justify-between py-2">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 bg-[#E5ECE8] rounded-lg" />
+                <div className="h-9 w-9 bg-[#E2E8F0] rounded-lg" />
                 <div className="space-y-1.5">
-                  <div className="h-3.5 w-24 bg-[#E5ECE8] rounded" />
-                  <div className="h-2.5 w-16 bg-[#F0F4F2] rounded" />
+                  <div className="h-3.5 w-24 bg-[#E2E8F0] rounded" />
+                  <div className="h-2.5 w-16 bg-[#F1F5F9] rounded" />
                 </div>
               </div>
-              <div className="h-4 w-16 bg-[#E5ECE8] rounded" />
+              <div className="h-4 w-16 bg-[#E2E8F0] rounded" />
             </div>
           ))}
         </div>
@@ -84,7 +84,7 @@ export function RecentTransactions({
           className="py-8"
         />
       ) : (
-        <div className="divide-y divide-[#E5ECE8]/80">
+        <div className="divide-y divide-[#E2E8F0]">
           {transactions.map((tx) => {
             const style = getIconAndStyle(tx.type);
             let formattedDate = '';
@@ -97,7 +97,7 @@ export function RecentTransactions({
             return (
               <div
                 key={tx.id}
-                className="flex items-center justify-between py-3 px-1 hover:bg-[#F7FAF8]/80 rounded-lg transition-colors"
+                className="flex items-center justify-between py-3 px-1 hover:bg-[#F5F3FF] rounded-xl transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
@@ -107,10 +107,10 @@ export function RecentTransactions({
                     {style.icon}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[#111827] truncate">
+                    <div className="text-sm font-semibold text-[#1E293B] truncate">
                       {tx.note || tx.category}
                     </div>
-                    <div className="text-xs text-[#667085] truncate mt-0.5">
+                    <div className="text-xs text-[#64748B] truncate mt-0.5">
                       {tx.accountName} • {formattedDate}
                     </div>
                   </div>
@@ -122,7 +122,7 @@ export function RecentTransactions({
                     showSign={true}
                     size="sm"
                   />
-                  <div className="text-[10px] text-[#667085] capitalize">
+                  <div className="text-[10px] text-[#64748B] capitalize">
                     {tx.category}
                   </div>
                 </div>

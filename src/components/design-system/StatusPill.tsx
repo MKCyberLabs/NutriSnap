@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type StatusTone = 'neutral' | 'green' | 'blue' | 'amber' | 'red';
+export type StatusTone = 'neutral' | 'green' | 'blue' | 'amber' | 'red' | 'purple';
 
 interface StatusPillProps {
   label: string;
@@ -13,29 +13,34 @@ interface StatusPillProps {
 
 const toneStyles: Record<StatusTone, { bg: string; text: string; dot: string }> = {
   neutral: {
-    bg: 'bg-[#F7FAF8] border-[#E5ECE8]',
-    text: 'text-[#667085]',
-    dot: 'bg-[#667085]',
+    bg: 'bg-[#F1F5F9] border-[#E2E8F0]',
+    text: 'text-[#475569]',
+    dot: 'bg-[#64748B]',
+  },
+  purple: {
+    bg: 'bg-[#F5F3FF] border-[#DDD6FE]',
+    text: 'text-[#6D28D9]',
+    dot: 'bg-[#6D28D9]',
   },
   green: {
-    bg: 'bg-[#EAF8EF] border-[#C3EAD0]',
-    text: 'text-[#0F7A38]',
-    dot: 'bg-[#16A34A]',
+    bg: 'bg-[#ECFDF5] border-[#A7F3D0]',
+    text: 'text-[#047857]',
+    dot: 'bg-[#059669]',
   },
   blue: {
-    bg: 'bg-[#EAF3FF] border-[#C2DBFE]',
+    bg: 'bg-[#EFF6FF] border-[#BFDBFE]',
     text: 'text-[#1D4ED8]',
-    dot: 'bg-[#2F80ED]',
+    dot: 'bg-[#2563EB]',
   },
   amber: {
-    bg: 'bg-[#FFF4DF] border-[#FCE1B3]',
+    bg: 'bg-[#FFFBEB] border-[#FDE68A]',
     text: 'text-[#B45309]',
-    dot: 'bg-[#F59E0B]',
+    dot: 'bg-[#D97706]',
   },
   red: {
-    bg: 'bg-[#FDECEC] border-[#F9C6C6]',
-    text: 'text-[#B42318]',
-    dot: 'bg-[#EF4444]',
+    bg: 'bg-[#FEF2F2] border-[#FECACA]',
+    text: 'text-[#DC2626]',
+    dot: 'bg-[#DC2626]',
   },
 };
 

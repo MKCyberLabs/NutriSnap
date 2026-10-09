@@ -33,7 +33,7 @@ export function TodayMetricGrid({ wealth }: TodayMetricGridProps) {
         label="Total Balance"
         value={`₹${formatIndianRupees(wealth.totalBalance)}`}
         icon={<WalletCards className="h-4 w-4" />}
-        tone="blue"
+        tone="purple"
         helperText="Across all active accounts"
         href="/finance/accounts"
       />

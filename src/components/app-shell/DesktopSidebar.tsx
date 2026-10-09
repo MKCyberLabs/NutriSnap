@@ -46,13 +46,13 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
 
   return (
     <aside
-      className="hidden md:flex flex-col w-[232px] shrink-0 h-screen sticky top-0 bg-white border-r border-[#E5ECE8] z-30 select-none justify-between"
+      className="hidden md:flex flex-col w-[232px] shrink-0 h-screen sticky top-0 bg-white border-r border-[#E2E8F0] z-30 select-none justify-between"
       aria-label="Main Navigation"
     >
       {/* Top region: Logo & Navigation */}
       <div className="flex flex-col">
         {/* Brand header */}
-        <div className="h-[72px] px-5 flex items-center border-b border-[#E5ECE8]/60">
+        <div className="h-[72px] px-5 flex items-center border-b border-[#E2E8F0]">
           <Brand size="md" href="/today" />
         </div>
 
@@ -61,39 +61,39 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
           {/* Today */}
           <Link
             href="/today"
-            className={`flex items-center gap-3 px-3 py-2 rounded-[10px] transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${
               pathname === '/today'
-                ? 'bg-[#EAF8EF] text-[#0F7A38] font-semibold'
-                : 'text-[#344054] hover:bg-[#F7FAF8] hover:text-[#111827]'
+                ? 'bg-[#F5F3FF] text-[#6D28D9] font-semibold'
+                : 'text-[#64748B] hover:bg-[#F5F3FF] hover:text-[#1E293B]'
             }`}
           >
-            <House className={`h-4 w-4 shrink-0 ${pathname === '/today' ? 'text-[#16A34A]' : 'text-[#667085]'}`} />
+            <House className={`h-4 w-4 shrink-0 ${pathname === '/today' ? 'text-[#6D28D9]' : 'text-[#64748B]'}`} />
             <span>Today</span>
           </Link>
 
           {/* Food */}
           <Link
             href="/dashboard"
-            className={`flex items-center gap-3 px-3 py-2 rounded-[10px] transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${
               pathname.startsWith('/dashboard')
-                ? 'bg-[#EAF8EF] text-[#0F7A38] font-semibold'
-                : 'text-[#344054] hover:bg-[#F7FAF8] hover:text-[#111827]'
+                ? 'bg-[#F5F3FF] text-[#6D28D9] font-semibold'
+                : 'text-[#64748B] hover:bg-[#F5F3FF] hover:text-[#1E293B]'
             }`}
           >
-            <Utensils className={`h-4 w-4 shrink-0 ${pathname.startsWith('/dashboard') ? 'text-[#16A34A]' : 'text-[#667085]'}`} />
+            <Utensils className={`h-4 w-4 shrink-0 ${pathname.startsWith('/dashboard') ? 'text-[#6D28D9]' : 'text-[#64748B]'}`} />
             <span>Food</span>
           </Link>
 
           {/* Water */}
           <Link
             href="/hydration"
-            className={`flex items-center gap-3 px-3 py-2 rounded-[10px] transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${
               pathname.startsWith('/hydration')
-                ? 'bg-[#EAF8EF] text-[#0F7A38] font-semibold'
-                : 'text-[#344054] hover:bg-[#F7FAF8] hover:text-[#111827]'
+                ? 'bg-[#F5F3FF] text-[#6D28D9] font-semibold'
+                : 'text-[#64748B] hover:bg-[#F5F3FF] hover:text-[#1E293B]'
             }`}
           >
-            <Droplets className={`h-4 w-4 shrink-0 ${pathname.startsWith('/hydration') ? 'text-[#16A34A]' : 'text-[#667085]'}`} />
+            <Droplets className={`h-4 w-4 shrink-0 ${pathname.startsWith('/hydration') ? 'text-[#6D28D9]' : 'text-[#64748B]'}`} />
             <span>Water</span>
           </Link>
 
@@ -101,24 +101,24 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
           <div className="space-y-0.5">
             <Link
               href="/finance"
-              className={`flex items-center gap-3 px-3 py-2 rounded-[10px] transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${
                 isMoneyActive
-                  ? 'bg-[#EAF8EF] text-[#0F7A38] font-semibold'
-                  : 'text-[#344054] hover:bg-[#F7FAF8] hover:text-[#111827]'
+                  ? 'bg-[#F5F3FF] text-[#6D28D9] font-semibold'
+                  : 'text-[#64748B] hover:bg-[#F5F3FF] hover:text-[#1E293B]'
               }`}
             >
-              <WalletCards className={`h-4 w-4 shrink-0 ${isMoneyActive ? 'text-[#16A34A]' : 'text-[#667085]'}`} />
+              <WalletCards className={`h-4 w-4 shrink-0 ${isMoneyActive ? 'text-[#6D28D9]' : 'text-[#64748B]'}`} />
               <span>Money</span>
             </Link>
 
             {/* Money sub-links (Indented 28px) */}
-            <div className="pl-7 pr-1 space-y-0.5 pt-0.5">
+            <div className="pl-7 pr-1 space-y-0.5 pt-0.5 border-l border-[#E2E8F0] ml-5">
               <Link
                 href="/finance"
                 className={`block px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                   pathname === '/finance'
-                    ? 'text-[#0F7A38] font-semibold bg-[#EAF8EF]/60'
-                    : 'text-[#667085] hover:text-[#111827] hover:bg-[#F7FAF8]'
+                    ? 'text-[#6D28D9] font-semibold bg-[#F5F3FF]'
+                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#F5F3FF]'
                 }`}
               >
                 Overview
@@ -127,8 +127,8 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
                 href="/finance/accounts"
                 className={`block px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                   pathname === '/finance/accounts'
-                    ? 'text-[#0F7A38] font-semibold bg-[#EAF8EF]/60'
-                    : 'text-[#667085] hover:text-[#111827] hover:bg-[#F7FAF8]'
+                    ? 'text-[#6D28D9] font-semibold bg-[#F5F3FF]'
+                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#F5F3FF]'
                 }`}
               >
                 Accounts
@@ -137,8 +137,8 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
                 href="/finance/transactions"
                 className={`block px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                   pathname === '/finance/transactions'
-                    ? 'text-[#0F7A38] font-semibold bg-[#EAF8EF]/60'
-                    : 'text-[#667085] hover:text-[#111827] hover:bg-[#F7FAF8]'
+                    ? 'text-[#6D28D9] font-semibold bg-[#F5F3FF]'
+                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#F5F3FF]'
                 }`}
               >
                 Transactions
@@ -147,11 +147,41 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
                 href="/finance/bills"
                 className={`block px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                   pathname === '/finance/bills'
-                    ? 'text-[#0F7A38] font-semibold bg-[#EAF8EF]/60'
-                    : 'text-[#667085] hover:text-[#111827] hover:bg-[#F7FAF8]'
+                    ? 'text-[#6D28D9] font-semibold bg-[#F5F3FF]'
+                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#F5F3FF]'
                 }`}
               >
                 Bills &amp; Subscriptions
+              </Link>
+              <Link
+                href="/finance/loans"
+                className={`block px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                  pathname === '/finance/loans'
+                    ? 'text-[#6D28D9] font-semibold bg-[#F5F3FF]'
+                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#F5F3FF]'
+                }`}
+              >
+                Loans &amp; EMIs
+              </Link>
+              <Link
+                href="/finance/debts"
+                className={`block px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                  pathname === '/finance/debts'
+                    ? 'text-[#6D28D9] font-semibold bg-[#F5F3FF]'
+                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#F5F3FF]'
+                }`}
+              >
+                Friends &amp; Family
+              </Link>
+              <Link
+                href="/finance/wishlist"
+                className={`block px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                  pathname === '/finance/wishlist'
+                    ? 'text-[#6D28D9] font-semibold bg-[#F5F3FF]'
+                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#F5F3FF]'
+                }`}
+              >
+                Wishlist
               </Link>
             </div>
           </div>
@@ -159,58 +189,58 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
           {/* Reminders */}
           <Link
             href="/reminders"
-            className={`flex items-center gap-3 px-3 py-2 rounded-[10px] transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${
               pathname.startsWith('/reminders')
-                ? 'bg-[#EAF8EF] text-[#0F7A38] font-semibold'
-                : 'text-[#344054] hover:bg-[#F7FAF8] hover:text-[#111827]'
+                ? 'bg-[#F5F3FF] text-[#6D28D9] font-semibold'
+                : 'text-[#64748B] hover:bg-[#F5F3FF] hover:text-[#1E293B]'
             }`}
           >
-            <Bell className={`h-4 w-4 shrink-0 ${pathname.startsWith('/reminders') ? 'text-[#16A34A]' : 'text-[#667085]'}`} />
+            <Bell className={`h-4 w-4 shrink-0 ${pathname.startsWith('/reminders') ? 'text-[#6D28D9]' : 'text-[#64748B]'}`} />
             <span>Reminders</span>
           </Link>
 
           {/* Settings */}
           <Link
             href="/settings"
-            className={`flex items-center gap-3 px-3 py-2 rounded-[10px] transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${
               pathname.startsWith('/settings')
-                ? 'bg-[#EAF8EF] text-[#0F7A38] font-semibold'
-                : 'text-[#344054] hover:bg-[#F7FAF8] hover:text-[#111827]'
+                ? 'bg-[#F5F3FF] text-[#6D28D9] font-semibold'
+                : 'text-[#64748B] hover:bg-[#F5F3FF] hover:text-[#1E293B]'
             }`}
           >
-            <Settings className={`h-4 w-4 shrink-0 ${pathname.startsWith('/settings') ? 'text-[#16A34A]' : 'text-[#667085]'}`} />
+            <Settings className={`h-4 w-4 shrink-0 ${pathname.startsWith('/settings') ? 'text-[#6D28D9]' : 'text-[#64748B]'}`} />
             <span>Settings</span>
           </Link>
         </nav>
       </div>
 
       {/* Bottom region: Admin + Profile footer */}
-      <div className="p-3 border-t border-[#E5ECE8] space-y-2">
+      <div className="p-3 border-t border-[#E2E8F0] space-y-2">
         {user?.role === 'ADMIN' && (
           <Link
             href="/admin"
-            className={`flex items-center gap-3 px-3 py-2 rounded-[10px] text-sm font-medium transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
               pathname.startsWith('/admin')
-                ? 'bg-[#EAF8EF] text-[#0F7A38] font-semibold'
-                : 'text-[#344054] hover:bg-[#F7FAF8] hover:text-[#111827]'
+                ? 'bg-[#F5F3FF] text-[#6D28D9] font-semibold'
+                : 'text-[#64748B] hover:bg-[#F5F3FF] hover:text-[#1E293B]'
             }`}
           >
-            <ShieldCheck className={`h-4 w-4 shrink-0 ${pathname.startsWith('/admin') ? 'text-[#16A34A]' : 'text-[#667085]'}`} />
+            <ShieldCheck className={`h-4 w-4 shrink-0 ${pathname.startsWith('/admin') ? 'text-[#6D28D9]' : 'text-[#64748B]'}`} />
             <span>Admin</span>
           </Link>
         )}
 
         {/* User Card & Logout */}
-        <div className="flex items-center justify-between gap-2 p-2 rounded-[10px] bg-[#F7FAF8] border border-[#E5ECE8]/60">
+        <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#FAFAFC] border border-[#E2E8F0]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-8 w-8 rounded-full bg-[#16A34A]/10 text-[#0F7A38] font-bold text-xs flex items-center justify-center shrink-0 border border-[#C3EAD0]">
+            <div className="h-8 w-8 rounded-full bg-[#F5F3FF] text-[#6D28D9] font-bold text-xs flex items-center justify-center shrink-0 border border-[#DDD6FE]">
               {getInitials(user?.name)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-[#111827] truncate">
+              <div className="text-xs font-semibold text-[#1E293B] truncate">
                 {user?.name || 'User'}
               </div>
-              <div className="text-[10px] text-[#667085] truncate">
+              <div className="text-[10px] text-[#64748B] truncate">
                 {user?.role === 'ADMIN' ? 'Administrator' : user?.email || 'Active'}
               </div>
             </div>
@@ -219,7 +249,7 @@ export function DesktopSidebar({ user }: DesktopSidebarProps) {
             onClick={handleLogout}
             aria-label="Log out"
             title="Log out"
-            className="p-1.5 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#DC2626] hover:bg-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9]"
           >
             <LogOut className="h-4 w-4" />
           </button>

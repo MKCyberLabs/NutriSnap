@@ -187,17 +187,17 @@ export function ObligationForm({
           {trigger || (
             <Button
               size="sm"
-              className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+              className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
             >
               <Plus className="h-4 w-4" />
-              <span>Add Bill / Obligation</span>
+              <span>+ Add Bill or Subscription</span>
             </Button>
           )}
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[460px] rounded-[18px] bg-white p-6 border border-[#E5ECE8] max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-          <DialogTitle className="text-lg font-semibold text-[#111827]">
+      <DialogContent className="sm:max-w-[460px] rounded-2xl bg-white p-6 border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+          <DialogTitle className="text-lg font-semibold text-[#1E293B]">
             {isEdit ? 'Edit Bill / Obligation' : 'Schedule Bill or Obligation'}
           </DialogTitle>
         </DialogHeader>
@@ -205,7 +205,7 @@ export function ObligationForm({
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           {/* Title */}
           <div className="space-y-1.5">
-            <Label htmlFor="ob-title" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="ob-title" className="text-xs font-semibold text-[#1E293B]">
               Title
             </Label>
             <Input
@@ -214,19 +214,19 @@ export function ObligationForm({
               placeholder="e.g. Jio 84-Day Recharge, Electricity, Netflix"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm"
               required
             />
           </div>
 
           {/* Kind */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-[#344054]">Category Kind</Label>
+            <Label className="text-xs font-semibold text-[#1E293B]">Category Kind</Label>
             <Select value={kind} onValueChange={(v: any) => setKind(v)}>
-              <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+              <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                 <SelectValue placeholder="Select kind" />
               </SelectTrigger>
-              <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+              <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                 {OBLIGATION_KINDS.map((k) => (
                   <SelectItem key={k} value={k} className="text-sm">
                     {k.replace('_', ' ')}
@@ -238,7 +238,7 @@ export function ObligationForm({
 
           {/* Amount (optional for variable bills) */}
           <div className="space-y-1.5">
-            <Label htmlFor="ob-amount" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="ob-amount" className="text-xs font-semibold text-[#1E293B]">
               Amount (₹, optional)
             </Label>
             <Input
@@ -249,13 +249,13 @@ export function ObligationForm({
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm tabular-nums"
             />
           </div>
 
           {/* First Due Date */}
           <div className="space-y-1.5">
-            <Label htmlFor="ob-date" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="ob-date" className="text-xs font-semibold text-[#1E293B]">
               {isEdit ? 'First Due Date / Anchor' : 'Due Date / Next Billing'}
             </Label>
             <Input
@@ -263,19 +263,19 @@ export function ObligationForm({
               type="date"
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm"
               required
             />
           </div>
 
           {/* Recurrence Type */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-[#344054]">Recurrence</Label>
+            <Label className="text-xs font-semibold text-[#1E293B]">Recurrence</Label>
             <Select value={recurrence} onValueChange={(v: any) => setRecurrence(v)}>
-              <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+              <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                 <SelectValue placeholder="Select recurrence" />
               </SelectTrigger>
-              <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+              <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                 <SelectItem value="MONTHLY" className="text-sm">Monthly (default)</SelectItem>
                 <SelectItem value="EVERY_N_DAYS" className="text-sm">Every N Days (e.g. 28 / 56 / 84)</SelectItem>
                 <SelectItem value="WEEKLY" className="text-sm">Weekly</SelectItem>
@@ -288,7 +288,7 @@ export function ObligationForm({
           {/* Recurrence Interval (for EVERY_N_DAYS) */}
           {recurrence === 'EVERY_N_DAYS' && (
             <div className="space-y-1.5">
-              <Label htmlFor="ob-interval" className="text-xs font-semibold text-[#344054]">
+              <Label htmlFor="ob-interval" className="text-xs font-semibold text-[#1E293B]">
                 Interval (Days)
               </Label>
               <Input
@@ -298,10 +298,10 @@ export function ObligationForm({
                 placeholder="84"
                 value={interval}
                 onChange={(e) => setInterval(e.target.value)}
-                className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+                className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm"
                 required
               />
-              <p className="text-[11px] text-[#667085]">
+              <p className="text-[11px] text-[#64748B]">
                 Common recharge cycles: 28, 56, or 84 days.
               </p>
             </div>
@@ -310,14 +310,14 @@ export function ObligationForm({
           {/* Account (Optional linked account) */}
           {accounts.length > 0 && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#344054]">
+              <Label className="text-xs font-semibold text-[#1E293B]">
                 Linked Payment Account (Optional)
               </Label>
               <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                   <SelectValue placeholder="Select account (optional)" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                   <SelectItem value="none" className="text-sm">None</SelectItem>
                   {accounts.map((acc) => (
                     <SelectItem key={acc.id} value={acc.id} className="text-sm">
@@ -331,7 +331,7 @@ export function ObligationForm({
 
           <Button
             type="submit"
-            className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+            className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
             disabled={submitting}
           >
             {submitting ? (

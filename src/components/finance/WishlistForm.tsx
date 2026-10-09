@@ -190,7 +190,7 @@ export function WishlistForm({
           {trigger || (
             <Button
               size="sm"
-              className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+              className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold shadow-xs flex items-center gap-1.5"
             >
               <Plus className="h-4 w-4" />
               <span>Add Wishlist Item</span>
@@ -201,8 +201,8 @@ export function WishlistForm({
 
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-[#111827] flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-[#16A34A]" />
+          <DialogTitle className="text-xl font-bold text-[#1E293B] flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-[#6D28D9]" />
             {initialItem ? 'Edit Wishlist Item' : 'Add Wishlist Item'}
           </DialogTitle>
         </DialogHeader>
@@ -335,20 +335,20 @@ export function WishlistForm({
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5ECE8]">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E2E8F0]">
             <Button
               type="button"
               variant="outline"
               onClick={() => setOpen(false)}
               disabled={submitting}
-              className="h-9 px-3 text-xs"
+              className="h-9 px-3 text-xs border-[#E2E8F0]"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={submitting}
-              className="h-9 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+              className="h-9 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] text-xs font-semibold shadow-xs flex items-center gap-1.5"
             >
               {submitting ? (
                 <>

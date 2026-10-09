@@ -335,19 +335,19 @@ export function LoanForm({
           {trigger || (
             <Button
               size="sm"
-              className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+              className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
             >
               <Plus className="h-4 w-4" />
-              <span>Add Loan / EMI</span>
+              <span>+ Add Loan / EMI</span>
             </Button>
           )}
         </DialogTrigger>
       )}
 
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 border border-[#E2E8F0]">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-[#111827] flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-[#16A34A]" />
+          <DialogTitle className="text-xl font-bold text-[#1E293B] flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-[#6D28D9]" />
             {isEdit ? `Edit Loan: ${loan?.name}` : 'Track Loan or EMI Liability'}
           </DialogTitle>
         </DialogHeader>
@@ -605,7 +605,7 @@ export function LoanForm({
             <Button
               type="submit"
               disabled={submitting}
-              className="h-9 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+              className="h-10 px-5 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
             >
               {submitting ? (
                 <>

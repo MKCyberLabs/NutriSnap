@@ -8,6 +8,8 @@ import { FinanceTabs } from '@/components/finance/FinanceTabs';
 import { TransactionRow } from '@/components/finance/TransactionRow';
 import { TransactionForm } from '@/components/finance/TransactionForm';
 import { SegmentedFilter } from '@/components/design-system/SegmentedFilter';
+import { MetricCard } from '@/components/design-system/MetricCard';
+import { formatIndianRupees } from '@/components/design-system/MoneyAmount';
 import { LoadingCard } from '@/components/design-system/LoadingCard';
 import { EmptyState } from '@/components/design-system/EmptyState';
 import { ErrorState } from '@/components/design-system/ErrorState';
@@ -122,11 +124,21 @@ export default function TransactionsPage() {
     },
   ];
 
+  const totalIncome = transactions
+    .filter((t) => t.type === 'INCOME')
+    .reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+  const totalExpense = transactions
+    .filter((t) => t.type === 'EXPENSE')
+    .reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+  const netSurplus = totalIncome - totalExpense;
+
   return (
     <AppShell>
       <PageHeader
-        title="Transactions"
-        description="Comprehensive log of all incomes, expenses, and internal transfers"
+        title="Transactions Ledger"
+        description="Manual record-keeping of income, expenses, and account transfers"
         action={
           <TransactionForm
             accounts={accounts}
@@ -156,12 +168,38 @@ export default function TransactionsPage() {
         />
       ) : loading ? (
         <div className="space-y-4">
-          <LoadingCard height="60px" lines={1} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <LoadingCard key={i} height="100px" lines={2} />
+            ))}
+          </div>
           <LoadingCard height="400px" lines={6} />
         </div>
       ) : (
-        <div className="space-y-4">
-          {/* Filter Chips */}
+        <div className="space-y-6">
+          {/* Summary Metrics Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <MetricCard
+              label="Total Inflow"
+              value={`₹${formatIndianRupees(totalIncome)}`}
+              tone="green"
+              helperText={`${transactions.filter((t) => t.type === 'INCOME').length} income records`}
+            />
+            <MetricCard
+              label="Total Outflow"
+              value={`₹${formatIndianRupees(totalExpense)}`}
+              tone="red"
+              helperText={`${transactions.filter((t) => t.type === 'EXPENSE').length} expense records`}
+            />
+            <MetricCard
+              label="Net Cash Margin"
+              value={`₹${formatIndianRupees(Math.abs(netSurplus))}`}
+              tone={netSurplus >= 0 ? 'purple' : 'red'}
+              helperText={netSurplus >= 0 ? 'Net positive surplus' : 'Net cash deficit'}
+            />
+          </div>
+
+          {/* Filter Controls Toolbar */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <SegmentedFilter
               options={filterOptions}
@@ -169,13 +207,13 @@ export default function TransactionsPage() {
               onChange={setFilter}
               size="md"
             />
-            <div className="text-xs text-[#667085]">
+            <div className="text-xs text-[#64748B]">
               Showing {filteredTransactions.length} of {transactions.length} record{transactions.length === 1 ? '' : 's'}
             </div>
           </div>
 
           {/* Transactions List */}
-          <div className="rounded-[14px] border border-[#E5ECE8] bg-white p-3 sm:p-4 shadow-[0_1px_3px_rgba(16,24,40,0.04)]">
+          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-3 sm:p-5 shadow-[0_1px_3px_0_rgba(15,23,42,0.05),0_1px_2px_-1px_rgba(15,23,42,0.03)]">
             {filteredTransactions.length === 0 ? (
               <EmptyState
                 icon={<ArrowLeftRight className="h-6 w-6" />}
@@ -203,7 +241,7 @@ export default function TransactionsPage() {
                 className="py-10"
               />
             ) : (
-              <div className="divide-y divide-[#E5ECE8]/80">
+              <div className="divide-y divide-[#E2E8F0]">
                 {filteredTransactions.map((tx) => (
                   <TransactionRow
                     key={tx.id}

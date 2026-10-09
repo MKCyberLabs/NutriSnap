@@ -222,21 +222,21 @@ export default function LoansPage() {
               label="Total Outstanding Liabilities"
               value={`₹${formatIndianRupees(totalOutstanding)}`}
               helperText="Active principal across all loans and EMIs"
-              tone="amber"
+              tone="red"
               icon={<Landmark className="h-4 w-4" />}
             />
             <MetricCard
               label="Monthly EMI Commitment"
               value={`₹${formatIndianRupees(totalMonthlyEmi)}`}
               helperText="Recurring monthly instalments"
-              tone="neutral"
+              tone="purple"
               icon={<Calendar className="h-4 w-4" />}
             />
             <MetricCard
-              label="Active Liabilities"
+              label="Active Facilities"
               value={String(activeLoans.length)}
               helperText={`${activeLoans.filter((l) => l.loanType === 'CREDIT_CARD_EMI' || l.loanType === 'PRODUCT_EMI').length} product/card EMIs`}
-              tone="blue"
+              tone="neutral"
               icon={<CreditCard className="h-4 w-4" />}
             />
           </div>

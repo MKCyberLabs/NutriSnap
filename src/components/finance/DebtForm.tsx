@@ -235,17 +235,17 @@ export function DebtForm({
           {trigger || (
             <Button
               size="sm"
-              className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+              className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
             >
               <Plus className="h-4 w-4" />
-              <span>Add Record</span>
+              <span>+ Add Record</span>
             </Button>
           )}
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[460px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-        <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-          <DialogTitle className="text-lg font-semibold text-[#111827]">
+      <DialogContent className="sm:max-w-[460px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+        <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+          <DialogTitle className="text-lg font-semibold text-[#1E293B]">
             {isEdit ? `Edit Debt: ${debt?.counterpartyName}` : 'Add Friend / Family Debt'}
           </DialogTitle>
         </DialogHeader>
@@ -427,7 +427,7 @@ export function DebtForm({
 
           <Button
             type="submit"
-            className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+            className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
             disabled={submitting}
           >
             {submitting ? (

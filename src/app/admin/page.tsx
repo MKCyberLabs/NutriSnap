@@ -167,49 +167,49 @@ export default function AdminPage() {
         action={
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-              <Button className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm shadow-xs flex items-center gap-1.5">
+              <Button className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm shadow-xs flex items-center gap-1.5">
                 <UserPlus className="h-4 w-4" />
                 <span>Provision User</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-              <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-                <DialogTitle className="text-lg font-semibold text-[#111827]">New Identity</DialogTitle>
-                <DialogDescription className="text-xs text-[#667085]">
+            <DialogContent className="sm:max-w-[425px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+              <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+                <DialogTitle className="text-lg font-bold text-[#1E293B]">New Identity</DialogTitle>
+                <DialogDescription className="text-xs text-[#64748B]">
                   Create a new user profile. Onboarding is enabled by default.
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleCreateUser} className="space-y-4 pt-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name" className="text-xs font-semibold text-[#344054]">Full Name</Label>
-                  <Input id="name" placeholder="John Doe" value={currentUser.name || ''} onChange={e => setCurrentUser({...currentUser, name: e.target.value})} className="h-10 rounded-[10px] border-[#E5ECE8] text-sm" required />
+                  <Label htmlFor="name" className="text-xs font-semibold text-[#475569]">Full Name</Label>
+                  <Input id="name" placeholder="John Doe" value={currentUser.name || ''} onChange={e => setCurrentUser({...currentUser, name: e.target.value})} className="h-10 rounded-xl border-[#E2E8F0] text-sm" required />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-xs font-semibold text-[#344054]">Email Address</Label>
-                  <Input id="email" type="email" placeholder="john@example.com" value={currentUser.email || ''} onChange={e => setCurrentUser({...currentUser, email: e.target.value})} className="h-10 rounded-[10px] border-[#E5ECE8] text-sm" required />
+                  <Label htmlFor="email" className="text-xs font-semibold text-[#475569]">Email Address</Label>
+                  <Input id="email" type="email" placeholder="john@example.com" value={currentUser.email || ''} onChange={e => setCurrentUser({...currentUser, email: e.target.value})} className="h-10 rounded-xl border-[#E2E8F0] text-sm" required />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="password" className="text-xs font-semibold text-[#344054]">Initial Password</Label>
-                  <Input id="password" type="password" placeholder="Leave blank for default" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="h-10 rounded-[10px] border-[#E5ECE8] text-sm" />
+                  <Label htmlFor="password" className="text-xs font-semibold text-[#475569]">Initial Password</Label>
+                  <Input id="password" type="password" placeholder="Leave blank for default" value={currentUser.password || ''} onChange={e => setCurrentUser({...currentUser, password: e.target.value})} className="h-10 rounded-xl border-[#E2E8F0] text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="telegram" className="text-xs font-semibold text-[#344054]">Telegram ID (Optional)</Label>
-                  <Input id="telegram" placeholder="e.g. 123456789" value={currentUser.telegramId || ''} onChange={e => setCurrentUser({...currentUser, telegramId: e.target.value})} className="h-10 rounded-[10px] border-[#E5ECE8] text-sm" />
+                  <Label htmlFor="telegram" className="text-xs font-semibold text-[#475569]">Telegram ID (Optional)</Label>
+                  <Input id="telegram" placeholder="e.g. 123456789" value={currentUser.telegramId || ''} onChange={e => setCurrentUser({...currentUser, telegramId: e.target.value})} className="h-10 rounded-xl border-[#E2E8F0] text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-[#344054]">System Role</Label>
+                  <Label className="text-xs font-semibold text-[#475569]">System Role</Label>
                   <Select value={currentUser.role || 'USER'} onValueChange={val => setCurrentUser({...currentUser, role: val as UserRole})}>
-                    <SelectTrigger aria-label="Select system role" className="h-10 rounded-[10px] border-[#E5ECE8] text-sm">
+                    <SelectTrigger aria-label="Select system role" className="h-10 rounded-xl border-[#E2E8F0] text-sm">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                    <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                       <SelectItem value="USER" className="text-sm">Standard User</SelectItem>
                       <SelectItem value="ADMIN" className="text-sm">Administrator</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <DialogFooter className="pt-2">
-                  <Button type="submit" className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm">
+                  <Button type="submit" className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm shadow-xs">
                     Initialize Account
                   </Button>
                 </DialogFooter>
@@ -226,7 +226,7 @@ export default function AdminPage() {
             label="Total Managed Users"
             value={managedUsers.length}
             icon={<Users className="h-4 w-4" />}
-            tone="blue"
+            tone="purple"
             helperText="Registered user accounts"
           />
           <MetricCard
@@ -258,11 +258,11 @@ export default function AdminPage() {
           description="View and manage user permissions, Telegram handles, and account access"
           action={
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#667085]" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748B]" />
               <Input
                 aria-label="Search directory"
                 placeholder="Search users..."
-                className="pl-9 h-9 rounded-lg border-[#E5ECE8] bg-white text-xs focus-visible:ring-[#16A34A]"
+                className="pl-9 h-9 rounded-xl border-[#E2E8F0] bg-white text-xs focus-visible:ring-[#6D28D9]"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
@@ -273,32 +273,32 @@ export default function AdminPage() {
           <div className="overflow-x-auto -mx-5 sm:mx-0">
             <Table>
               <TableHeader>
-                <TableRow className="border-b border-[#E5ECE8]">
-                  <TableHead className="font-semibold text-xs text-[#344054]">Identity</TableHead>
-                  <TableHead className="font-semibold text-xs text-[#344054]">Role</TableHead>
-                  <TableHead className="font-semibold text-xs text-[#344054]">Telegram</TableHead>
-                  <TableHead className="font-semibold text-xs text-[#344054]">Status</TableHead>
-                  <TableHead className="text-right font-semibold text-xs text-[#344054]">Actions</TableHead>
+                <TableRow className="border-b border-[#E2E8F0]">
+                  <TableHead className="font-semibold text-xs text-[#475569]">Identity</TableHead>
+                  <TableHead className="font-semibold text-xs text-[#475569]">Role</TableHead>
+                  <TableHead className="font-semibold text-xs text-[#475569]">Telegram</TableHead>
+                  <TableHead className="font-semibold text-xs text-[#475569]">Status</TableHead>
+                  <TableHead className="text-right font-semibold text-xs text-[#475569]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUsers.map((user) => (
-                  <TableRow key={user.id} className="border-b border-[#E5ECE8]/60 hover:bg-[#F7FAF8]">
+                  <TableRow key={user.id} className="border-b border-[#E2E8F0] hover:bg-[#F8FAFC]">
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-semibold text-sm text-[#111827]">{user.name}</span>
-                        <span className="text-xs text-[#667085]">{user.email}</span>
+                        <span className="font-semibold text-sm text-[#1E293B]">{user.name}</span>
+                        <span className="text-xs text-[#64748B]">{user.email}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <StatusPill
                         label={user.role}
-                        tone={user.role === 'ADMIN' ? 'green' : 'neutral'}
+                        tone={user.role === 'ADMIN' ? 'purple' : 'neutral'}
                       />
                     </TableCell>
-                    <TableCell className="text-xs text-[#667085]">
+                    <TableCell className="text-xs text-[#64748B]">
                       {user.telegramId ? (
-                        <span className="text-[#0F7A38] font-medium">{user.telegramId}</span>
+                        <span className="text-[#059669] font-medium">{user.telegramId}</span>
                       ) : (
                         'Not linked'
                       )}
@@ -315,7 +315,7 @@ export default function AdminPage() {
                           variant="ghost" 
                           size="icon" 
                           aria-label={`Edit ${user.name}`}
-                          className="h-8 w-8 rounded-lg text-[#667085] hover:text-[#111827] hover:bg-slate-100"
+                          className="h-8 w-8 rounded-lg text-[#64748B] hover:text-[#6D28D9] hover:bg-[#F5F3FF]"
                           onClick={() => {
                             setCurrentUser(user);
                             setIsEditOpen(true);
@@ -327,7 +327,7 @@ export default function AdminPage() {
                           variant="ghost" 
                           size="icon" 
                           aria-label={`Delete ${user.name}`}
-                          className="h-8 w-8 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+                          className="h-8 w-8 rounded-lg text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
                           onClick={() => setDeleteId(user.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -344,57 +344,57 @@ export default function AdminPage() {
 
       {/* Edit User Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-          <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-            <DialogTitle className="text-lg font-semibold text-[#111827]">Modify User</DialogTitle>
-            <DialogDescription className="text-xs text-[#667085]">
+        <DialogContent className="sm:max-w-[425px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+          <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+            <DialogTitle className="text-lg font-bold text-[#1E293B]">Modify User</DialogTitle>
+            <DialogDescription className="text-xs text-[#64748B]">
               Update user details and access privileges.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditUser} className="space-y-4 pt-3">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-name" className="text-xs font-semibold text-[#344054]">Display Name</Label>
-              <Input id="edit-name" value={currentUser.name || ''} onChange={e => setCurrentUser({...currentUser, name: e.target.value})} className="h-10 rounded-[10px] border-[#E5ECE8] text-sm" required />
+              <Label htmlFor="edit-name" className="text-xs font-semibold text-[#475569]">Display Name</Label>
+              <Input id="edit-name" value={currentUser.name || ''} onChange={e => setCurrentUser({...currentUser, name: e.target.value})} className="h-10 rounded-xl border-[#E2E8F0] text-sm" required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-email" className="text-xs font-semibold text-[#344054]">Email Address</Label>
-              <Input id="edit-email" type="email" value={currentUser.email || ''} onChange={e => setCurrentUser({...currentUser, email: e.target.value})} className="h-10 rounded-[10px] border-[#E5ECE8] text-sm" required />
+              <Label htmlFor="edit-email" className="text-xs font-semibold text-[#475569]">Email Address</Label>
+              <Input id="edit-email" type="email" value={currentUser.email || ''} onChange={e => setCurrentUser({...currentUser, email: e.target.value})} className="h-10 rounded-xl border-[#E2E8F0] text-sm" required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-password" className="text-xs font-semibold text-[#344054]">Update Password</Label>
+              <Label htmlFor="edit-password" className="text-xs font-semibold text-[#475569]">Update Password</Label>
               <Input
                 id="edit-password"
                 type="password"
                 placeholder="New password (optional)"
                 value={currentUser.password || ''}
                 onChange={e => setCurrentUser({...currentUser, password: e.target.value})}
-                className="h-10 rounded-[10px] border-[#E5ECE8] text-sm"
+                className="h-10 rounded-xl border-[#E2E8F0] text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-telegram" className="text-xs font-semibold text-[#344054]">Telegram ID</Label>
+              <Label htmlFor="edit-telegram" className="text-xs font-semibold text-[#475569]">Telegram ID</Label>
               <Input
                 id="edit-telegram"
                 placeholder="e.g. 123456789 (optional)"
                 value={currentUser.telegramId || ''}
                 onChange={e => setCurrentUser({...currentUser, telegramId: e.target.value})}
-                className="h-10 rounded-[10px] border-[#E5ECE8] text-sm"
+                className="h-10 rounded-xl border-[#E2E8F0] text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#344054]">System Role</Label>
+              <Label className="text-xs font-semibold text-[#475569]">System Role</Label>
               <Select value={currentUser.role || 'USER'} onValueChange={val => setCurrentUser({...currentUser, role: val as UserRole})}>
-                <SelectTrigger aria-label="Select system role" className="h-10 rounded-[10px] border-[#E5ECE8] text-sm">
+                <SelectTrigger aria-label="Select system role" className="h-10 rounded-xl border-[#E2E8F0] text-sm">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                   <SelectItem value="USER" className="text-sm">Standard User</SelectItem>
                   <SelectItem value="ADMIN" className="text-sm">Administrator</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <DialogFooter className="pt-2">
-              <Button type="submit" className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm">
+              <Button type="submit" className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm shadow-xs">
                 Commit Changes
               </Button>
             </DialogFooter>
@@ -404,16 +404,16 @@ export default function AdminPage() {
 
       {/* Delete User Confirmation Dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
+        <AlertDialogContent className="rounded-2xl bg-white p-6 border border-[#E2E8F0]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-base font-semibold text-[#111827]">Delete User Account?</AlertDialogTitle>
-            <AlertDialogDescription className="text-xs text-[#667085]">
+            <AlertDialogTitle className="text-base font-semibold text-[#1E293B]">Delete User Account?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-[#64748B]">
               This action cannot be undone. This will permanently delete the user account and remove their data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="pt-2">
-            <AlertDialogCancel className="rounded-[10px] border-[#E5ECE8] text-sm">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && handleDeleteUser(deleteId)} className="bg-[#EF4444] hover:bg-[#B42318] text-white rounded-[10px] text-sm font-semibold">
+            <AlertDialogCancel className="rounded-xl border-[#E2E8F0] text-sm">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteId && handleDeleteUser(deleteId)} className="bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-xl text-sm font-semibold">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

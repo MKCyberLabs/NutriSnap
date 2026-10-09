@@ -259,17 +259,16 @@ export function AccountForm({
         <DialogTrigger asChild>
           <Button
             size="sm"
-            variant="outline"
-            className="h-10 px-4 rounded-[10px] border-[#E5ECE8] bg-white text-[#344054] hover:bg-[#F7FAF8] font-semibold shadow-xs flex items-center gap-1.5"
+            className="h-10 px-4 rounded-xl bg-[#6D28D9] hover:bg-[#5B21B6] text-white font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Account</span>
+            <span>+ Add Account</span>
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[440px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-        <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-          <DialogTitle className="text-lg font-semibold text-[#111827]">
+      <DialogContent className="sm:max-w-[440px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+        <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+          <DialogTitle className="text-lg font-semibold text-[#1E293B]">
             {isEdit ? 'Edit Account' : 'Add Account'}
           </DialogTitle>
         </DialogHeader>
@@ -277,7 +276,7 @@ export function AccountForm({
         <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           {/* Account Name */}
           <div className="space-y-1.5">
-            <Label htmlFor="acc-name" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="acc-name" className="text-xs font-semibold text-[#1E293B]">
               Account Name
             </Label>
             <Input
@@ -286,7 +285,7 @@ export function AccountForm({
               placeholder="e.g. HDFC Salary, Main Cash Wallet"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm"
               required
             />
           </div>
@@ -294,12 +293,12 @@ export function AccountForm({
           {/* Account Type (Select for Create, Readonly pill for Edit) */}
           {!isEdit ? (
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#344054]">Account Type</Label>
+              <Label className="text-xs font-semibold text-[#1E293B]">Account Type</Label>
               <Select value={type} onValueChange={(v: any) => setType(v)}>
-                <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                   {ACCOUNT_TYPES.map((t) => (
                     <SelectItem key={t} value={t} className="text-sm">
                       {t.replace('_', ' ')}
@@ -309,9 +308,9 @@ export function AccountForm({
               </Select>
             </div>
           ) : (
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#F7FAF8] border border-[#E5ECE8] text-xs">
-              <span className="font-medium text-[#667085]">Account Type</span>
-              <span className="font-semibold uppercase px-2 py-0.5 rounded-md bg-white border border-[#E5ECE8] text-[#344054]">
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE] text-xs">
+              <span className="font-medium text-[#64748B]">Account Type</span>
+              <span className="font-semibold uppercase px-2 py-0.5 rounded-md bg-white border border-[#DDD6FE] text-[#6D28D9]">
                 {type.replace('_', ' ')}
               </span>
             </div>
@@ -319,7 +318,7 @@ export function AccountForm({
 
           {/* Financial Institution */}
           <div className="space-y-1.5">
-            <Label htmlFor="acc-inst" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="acc-inst" className="text-xs font-semibold text-[#1E293B]">
               Financial Institution (Optional)
             </Label>
             <Input
@@ -328,14 +327,14 @@ export function AccountForm({
               placeholder="e.g. HDFC Bank, SBI, Paytm"
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm"
             />
           </div>
 
           {/* Opening Balance (Create mode only; Non-editable in Edit mode) */}
           {!isEdit ? (
             <div className="space-y-1.5">
-              <Label htmlFor="acc-balance" className="text-xs font-semibold text-[#344054]">
+              <Label htmlFor="acc-balance" className="text-xs font-semibold text-[#1E293B]">
                 Opening Balance (₹)
               </Label>
               <Input
@@ -345,19 +344,19 @@ export function AccountForm({
                 placeholder="0.00"
                 value={openingBalance}
                 onChange={(e) => setOpeningBalance(e.target.value)}
-                className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+                className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm tabular-nums"
                 required
               />
             </div>
           ) : (
-            <div className="space-y-1 rounded-xl bg-[#F8FAF9] p-3 border border-[#E5ECE8]/80 text-xs">
+            <div className="space-y-1 rounded-xl bg-[#F8FAFC] p-3 border border-[#E2E8F0] text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-[#667085]">Current Ledger Balance</span>
-                <span className="font-semibold text-[#111827]">
+                <span className="font-medium text-[#64748B]">Current Ledger Balance</span>
+                <span className="font-semibold text-[#1E293B]">
                   ₹{formatIndianRupees(initialData?.currentBalance ?? initialData?.openingBalance ?? 0)}
                 </span>
               </div>
-              <p className="text-[11px] text-[#667085]">
+              <p className="text-[11px] text-[#64748B]">
                 Account balances are derived from posted transactions and cannot be altered directly.
               </p>
             </div>
@@ -365,9 +364,9 @@ export function AccountForm({
 
           {/* Credit Card Specific Fields */}
           {type === 'CREDIT_CARD' && (
-            <div className="space-y-3 pt-1 border-t border-[#E5ECE8]">
+            <div className="space-y-3 pt-1 border-t border-[#E2E8F0]">
               <div className="space-y-1.5">
-                <Label htmlFor="acc-limit" className="text-xs font-semibold text-[#344054]">
+                <Label htmlFor="acc-limit" className="text-xs font-semibold text-[#1E293B]">
                   Credit Limit (₹)
                 </Label>
                 <Input
@@ -377,13 +376,13 @@ export function AccountForm({
                   placeholder="50000.00"
                   value={creditLimit}
                   onChange={(e) => setCreditLimit(e.target.value)}
-                  className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+                  className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm tabular-nums"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="acc-statement-day" className="text-xs font-semibold text-[#344054]">
+                  <Label htmlFor="acc-statement-day" className="text-xs font-semibold text-[#1E293B]">
                     Statement Day (1-31)
                   </Label>
                   <Input
@@ -394,12 +393,12 @@ export function AccountForm({
                     placeholder="e.g. 15"
                     value={statementDay}
                     onChange={(e) => setStatementDay(e.target.value)}
-                    className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+                    className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm tabular-nums"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="acc-due-day" className="text-xs font-semibold text-[#344054]">
+                  <Label htmlFor="acc-due-day" className="text-xs font-semibold text-[#1E293B]">
                     Payment Due Day (1-31)
                   </Label>
                   <Input
@@ -410,25 +409,25 @@ export function AccountForm({
                     placeholder="e.g. 5"
                     value={paymentDueDay}
                     onChange={(e) => setPaymentDueDay(e.target.value)}
-                    className="h-11 rounded-[10px] border-[#E5ECE8] text-sm tabular-nums"
+                    className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm tabular-nums"
                   />
                 </div>
               </div>
 
               {paymentAccountOptions.length > 0 && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-[#344054]">
+                  <Label className="text-xs font-semibold text-[#1E293B]">
                     Default Payment Account
                   </Label>
                   <Select
                     value={defaultPaymentAccountId || 'none'}
                     onValueChange={(val) => setDefaultPaymentAccountId(val === 'none' ? '' : val)}
                   >
-                    <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                    <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                       <SelectValue placeholder="Select payment bank/wallet" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
-                      <SelectItem value="none" className="text-sm text-[#667085]">
+                    <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
+                      <SelectItem value="none" className="text-sm text-[#64748B]">
                         None / Manual selection
                       </SelectItem>
                       {paymentAccountOptions.map((acc) => (
@@ -445,7 +444,7 @@ export function AccountForm({
 
           <Button
             type="submit"
-            className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+            className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
             disabled={submitting}
           >
             {submitting ? (

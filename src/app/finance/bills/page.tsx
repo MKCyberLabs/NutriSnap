@@ -8,6 +8,8 @@ import { FinanceTabs } from '@/components/finance/FinanceTabs';
 import { ObligationRow } from '@/components/finance/ObligationRow';
 import { ObligationForm } from '@/components/finance/ObligationForm';
 import { SegmentedFilter } from '@/components/design-system/SegmentedFilter';
+import { MetricCard } from '@/components/design-system/MetricCard';
+import { formatIndianRupees } from '@/components/design-system/MoneyAmount';
 import { LoadingCard } from '@/components/design-system/LoadingCard';
 import { EmptyState } from '@/components/design-system/EmptyState';
 import { ErrorState } from '@/components/design-system/ErrorState';
@@ -127,11 +129,27 @@ export default function BillsPage() {
     { label: 'All Registered', value: 'ALL', count: obligations.length },
   ];
 
+  const totalMonthlyRecurring = activeObligations.reduce(
+    (sum, o) => sum + (parseFloat(o.amount) || 0),
+    0
+  );
+
+  const dueThisWeekCount = activeObligations.filter((o) => {
+    try {
+      const diff = new Date(o.nextDueAt).getTime() - Date.now();
+      return diff >= 0 && diff <= 7 * 86400000;
+    } catch {
+      return false;
+    }
+  }).length;
+
+  const annualizedBudget = totalMonthlyRecurring * 12;
+
   return (
     <AppShell>
       <PageHeader
         title="Bills & Subscriptions"
-        description="Recurring payments, mobile recharges, credit card dues and EMIs"
+        description="Track upcoming dues, recurring schedules, and paid obligations"
         action={
           <ObligationForm
             accounts={accounts}
@@ -161,11 +179,37 @@ export default function BillsPage() {
         />
       ) : loading ? (
         <div className="space-y-4">
-          <LoadingCard height="60px" lines={1} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <LoadingCard key={i} height="100px" lines={2} />
+            ))}
+          </div>
           <LoadingCard height="350px" lines={5} />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Top Stats Banner: 3-Card Precision Metric Architecture */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <MetricCard
+              label="Total Monthly Recurring"
+              value={`₹${formatIndianRupees(totalMonthlyRecurring)}`}
+              tone="purple"
+              helperText={`${activeObligations.length} active recurring obligations`}
+            />
+            <MetricCard
+              label="Due This Week"
+              value={`${dueThisWeekCount}`}
+              tone={dueThisWeekCount > 0 ? 'amber' : 'neutral'}
+              helperText={dueThisWeekCount > 0 ? 'Upcoming payment due soon' : 'No dues this week'}
+            />
+            <MetricCard
+              label="Annualized Budget Load"
+              value={`₹${formatIndianRupees(annualizedBudget)}`}
+              tone="neutral"
+              helperText="Projected yearly recurring commitment"
+            />
+          </div>
+
           {/* Filter Tabs */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <SegmentedFilter
@@ -174,7 +218,7 @@ export default function BillsPage() {
               onChange={(val: any) => setFilter(val)}
               size="md"
             />
-            <div className="text-xs text-[#667085]">
+            <div className="text-xs text-[#64748B]">
               {displayedObligations.length} obligation{displayedObligations.length === 1 ? '' : 's'}
             </div>
           </div>
@@ -206,7 +250,7 @@ export default function BillsPage() {
                 <div key={ob.id} className="space-y-1">
                   {ob.isCreditCardStatement && (
                     <div className="flex items-center gap-1.5 px-1">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE]">
                         <CreditCard className="h-3 w-3" />
                         Credit Card Statement Bill
                       </span>
@@ -476,7 +520,7 @@ function LinkedLoanObligationModal({
             </Button>
             <Button
               type="submit"
-              className="bg-[#16A34A] text-white hover:bg-[#0F7A38]"
+              className="bg-[#6D28D9] text-white hover:bg-[#5B21B6] rounded-xl transition-colors"
               disabled={submitting}
             >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -706,7 +750,7 @@ function LinkedCardStatementModal({
             </Button>
             <Button
               type="submit"
-              className="bg-[#16A34A] text-white hover:bg-[#0F7A38]"
+              className="bg-[#6D28D9] text-white hover:bg-[#5B21B6] rounded-xl transition-colors"
               disabled={submitting}
             >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

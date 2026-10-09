@@ -248,7 +248,7 @@ export default function WishlistPage() {
               label="Planned Wishlist Total"
               value={`₹${formatIndianRupees(totalPlannedBudget)}`}
               helperText={`${activeItems.length} active goals saving for`}
-              tone="amber"
+              tone="purple"
               icon={<ShoppingBag className="h-4 w-4" />}
             />
             <MetricCard

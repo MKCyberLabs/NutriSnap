@@ -84,7 +84,7 @@ export default function TodayPage() {
                 const session = getAuthSession();
                 if (session) loadData(session.id);
               }}
-              className="h-10 px-3 rounded-[10px] border-[#E5ECE8] bg-white text-[#344054] hover:bg-[#F7FAF8] shadow-xs"
+              className="h-10 px-3 rounded-xl border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F5F3FF] hover:text-[#6D28D9] shadow-xs"
               aria-label="Refresh today overview"
             >
               <RefreshCw className="h-4 w-4" />
@@ -92,7 +92,7 @@ export default function TodayPage() {
             <QuickAddModal>
               <Button
                 size="sm"
-                className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+                className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold shadow-xs flex items-center gap-1.5"
               >
                 <Plus className="h-4 w-4" />
                 <span>Quick Add</span>
@@ -140,42 +140,42 @@ export default function TodayPage() {
           <div className="md:hidden grid grid-cols-4 gap-2 pt-1 pb-1">
             <Link
               href="/dashboard"
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-[#E5ECE8] shadow-xs hover:border-[#16A34A] transition-colors"
+              className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#E2E8F0] shadow-xs hover:border-[#059669] transition-colors"
             >
-              <div className="h-9 w-9 rounded-lg bg-[#EAF8EF] text-[#16A34A] flex items-center justify-center mb-1">
+              <div className="h-9 w-9 rounded-xl bg-[#ECFDF5] text-[#059669] flex items-center justify-center mb-1">
                 <Utensils className="h-4 w-4" />
               </div>
-              <span className="text-xs font-semibold text-[#111827]">Food</span>
+              <span className="text-xs font-semibold text-[#1E293B]">Food</span>
             </Link>
 
             <Link
               href="/hydration"
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-[#E5ECE8] shadow-xs hover:border-[#2F80ED] transition-colors"
+              className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#E2E8F0] shadow-xs hover:border-[#2563EB] transition-colors"
             >
-              <div className="h-9 w-9 rounded-lg bg-[#EAF3FF] text-[#2F80ED] flex items-center justify-center mb-1">
+              <div className="h-9 w-9 rounded-xl bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center mb-1">
                 <Droplets className="h-4 w-4" />
               </div>
-              <span className="text-xs font-semibold text-[#111827]">Water</span>
+              <span className="text-xs font-semibold text-[#1E293B]">Water</span>
             </Link>
 
             <Link
               href="/finance"
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-[#E5ECE8] shadow-xs hover:border-[#16A34A] transition-colors"
+              className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#E2E8F0] shadow-xs hover:border-[#6D28D9] transition-colors"
             >
-              <div className="h-9 w-9 rounded-lg bg-[#EAF8EF] text-[#0F7A38] flex items-center justify-center mb-1">
+              <div className="h-9 w-9 rounded-xl bg-[#F5F3FF] text-[#6D28D9] flex items-center justify-center mb-1">
                 <WalletCards className="h-4 w-4" />
               </div>
-              <span className="text-xs font-semibold text-[#111827]">Money</span>
+              <span className="text-xs font-semibold text-[#1E293B]">Money</span>
             </Link>
 
             <Link
               href="/reminders"
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-[#E5ECE8] shadow-xs hover:border-[#F59E0B] transition-colors"
+              className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-[#E2E8F0] shadow-xs hover:border-[#D97706] transition-colors"
             >
-              <div className="h-9 w-9 rounded-lg bg-[#FFF4DF] text-[#F59E0B] flex items-center justify-center mb-1">
+              <div className="h-9 w-9 rounded-xl bg-[#FFFBEB] text-[#D97706] flex items-center justify-center mb-1">
                 <Bell className="h-4 w-4" />
               </div>
-              <span className="text-xs font-semibold text-[#111827]">Alerts</span>
+              <span className="text-xs font-semibold text-[#1E293B]">Alerts</span>
             </Link>
           </div>
 

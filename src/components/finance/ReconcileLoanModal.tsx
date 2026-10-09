@@ -130,7 +130,7 @@ export function ReconcileLoanModal({
 
           <Button
             type="submit"
-            className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+            className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
             disabled={submitting}
           >
             {submitting ? (

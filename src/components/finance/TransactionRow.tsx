@@ -69,20 +69,20 @@ export function TransactionRow({
       case 'INCOME':
         return {
           icon: <ArrowUpRight className="h-4 w-4" />,
-          bg: 'bg-[#EAF8EF] text-[#16A34A]',
+          bg: 'bg-[#ECFDF5] text-[#059669]',
           moneyType: 'INCOME' as const,
         };
       case 'TRANSFER':
         return {
           icon: <ArrowLeftRight className="h-4 w-4" />,
-          bg: 'bg-[#EAF3FF] text-[#2F80ED]',
+          bg: 'bg-[#F5F3FF] text-[#6D28D9]',
           moneyType: 'TRANSFER' as const,
         };
       case 'EXPENSE':
       default:
         return {
           icon: <ArrowDownRight className="h-4 w-4" />,
-          bg: 'bg-[#FDECEC] text-[#EF4444]',
+          bg: 'bg-[#FEF2F2] text-[#DC2626]',
           moneyType: 'EXPENSE' as const,
         };
     }
@@ -105,7 +105,7 @@ export function TransactionRow({
     : transaction.account?.name || 'Account';
 
   return (
-    <div className="flex items-center justify-between py-3.5 px-3 hover:bg-[#F7FAF8] rounded-xl transition-colors group">
+    <div className="flex items-center justify-between py-3.5 px-3 hover:bg-[#F5F3FF]/40 rounded-xl transition-colors group">
       <div className="flex items-center gap-3.5 min-w-0">
         <div
           className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${style.bg}`}
@@ -115,20 +115,20 @@ export function TransactionRow({
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#111827] truncate">
+            <span className="text-sm font-semibold text-[#1E293B] truncate">
               {transaction.note || transaction.category}
             </span>
             {isSystemLinked && (
               <span
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F2F4F7] text-[#475467] border border-[#E4E7EC] shrink-0"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0] shrink-0"
                 title="System-managed transaction (linked to obligation, loan, personal debt, credit card payment, or wishlist). Generic edit disabled."
               >
-                <ShieldCheck className="h-2.5 w-2.5 text-[#667085]" />
+                <ShieldCheck className="h-2.5 w-2.5 text-[#64748B]" />
                 <span>System Managed</span>
               </span>
             )}
           </div>
-          <div className="text-xs text-[#667085] truncate mt-0.5">
+          <div className="text-xs text-[#64748B] truncate mt-0.5">
             {accountText} • {formattedDate}
           </div>
         </div>
@@ -142,12 +142,12 @@ export function TransactionRow({
             showSign={true}
             size="sm"
           />
-          <div className="text-[10px] text-[#667085] capitalize">
+          <div className="text-[10px] text-[#64748B] capitalize">
             {transaction.category}
           </div>
         </div>
 
-        {/* Action buttons: Edit and Delete */}
+        {/* Action buttons: Edit and Delete (Accessible on mobile touch and hover on desktop) */}
         <div className="flex items-center gap-0.5">
           {onEdit && (
             isSystemLinked ? (
@@ -156,7 +156,7 @@ export function TransactionRow({
                 disabled
                 aria-label="Cannot edit system-managed transaction"
                 title="This transaction is managed by an automated lifecycle (loan, debt, bill, card payment, or wishlist) and cannot be edited directly."
-                className="p-1.5 rounded-lg text-[#D0D5DD] cursor-not-allowed"
+                className="p-1.5 rounded-lg text-[#CBD5E1] cursor-not-allowed"
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -178,7 +178,7 @@ export function TransactionRow({
                     type="button"
                     aria-label="Edit transaction"
                     title="Edit transaction"
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-[#667085] hover:text-[#16A34A] hover:bg-[#EAF8EF] transition-all focus-visible:opacity-100"
+                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 rounded-lg text-[#64748B] hover:text-[#6D28D9] hover:bg-[#F5F3FF] transition-all focus-visible:opacity-100"
                   >
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -193,23 +193,23 @@ export function TransactionRow({
                 <button
                   aria-label="Delete transaction"
                   title="Delete transaction"
-                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] transition-all focus-visible:opacity-100"
+                  className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 rounded-lg text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2] transition-all focus-visible:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
+              <AlertDialogContent className="rounded-2xl bg-white p-6 border border-[#E2E8F0]">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
-                  <AlertDialogDescription>
+                  <AlertDialogTitle className="text-base font-semibold text-[#1E293B]">Delete Transaction?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-xs text-[#64748B]">
                     Are you sure you want to delete this transaction? This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel className="rounded-[10px]">Cancel</AlertDialogCancel>
+                  <AlertDialogCancel className="rounded-xl border-[#E2E8F0]">Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => onDelete(transaction.id)}
-                    className="bg-[#EF4444] hover:bg-[#B42318] text-white rounded-[10px]"
+                    className="bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-xl transition-colors"
                   >
                     Delete
                   </AlertDialogAction>

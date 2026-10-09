@@ -5,26 +5,31 @@ interface ProgressMetricProps {
   current: number;
   goal: number;
   unit?: string;
-  tone?: 'green' | 'blue' | 'amber';
+  tone?: 'purple' | 'green' | 'blue' | 'amber';
   subtitle?: string;
   className?: string;
 }
 
 const toneStyles = {
+  purple: {
+    bg: 'bg-[#F1F5F9]',
+    bar: 'bg-[#6D28D9]',
+    text: 'text-[#6D28D9]',
+  },
   green: {
-    bg: 'bg-[#EAF8EF]',
-    bar: 'bg-[#16A34A]',
-    text: 'text-[#0F7A38]',
+    bg: 'bg-[#ECFDF5]',
+    bar: 'bg-[#059669]',
+    text: 'text-[#059669]',
   },
   blue: {
-    bg: 'bg-[#EAF3FF]',
-    bar: 'bg-[#2F80ED]',
-    text: 'text-[#2F80ED]',
+    bg: 'bg-[#EFF6FF]',
+    bar: 'bg-[#2563EB]',
+    text: 'text-[#2563EB]',
   },
   amber: {
-    bg: 'bg-[#FFF4DF]',
-    bar: 'bg-[#F59E0B]',
-    text: 'text-[#B45309]',
+    bg: 'bg-[#FFFBEB]',
+    bar: 'bg-[#D97706]',
+    text: 'text-[#D97706]',
   },
 };
 
@@ -33,7 +38,7 @@ export function ProgressMetric({
   current,
   goal,
   unit = '',
-  tone = 'green',
+  tone = 'purple',
   subtitle,
   className = '',
 }: ProgressMetricProps) {

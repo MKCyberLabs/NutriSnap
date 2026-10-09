@@ -250,21 +250,21 @@ export function MealAnalysisTool({
           </div>
 
           {/* Photo & Category Summary Bar */}
-          <div className="flex gap-4 items-center p-3 rounded-2xl bg-secondary/30 border border-border">
+          <div className="flex gap-4 items-center p-3 rounded-2xl bg-[#F5F3FF] border border-[#DDD6FE]">
             {previewUrl && (
               <img
                 src={previewUrl}
                 alt="Meal photo"
-                className="w-16 h-16 rounded-xl object-cover border border-border shadow-xs shrink-0"
+                className="w-16 h-16 rounded-xl object-cover border border-[#DDD6FE] shadow-xs shrink-0"
               />
             )}
             <div className="flex-1 grid grid-cols-2 gap-2 text-xs">
               <div>
-                <span className="text-muted-foreground block text-[10px] font-bold uppercase">Time</span>
-                <span className="font-semibold text-foreground">{mealTime} ({hour12}:{minutes} {period})</span>
+                <span className="text-[#64748B] block text-[10px] font-bold uppercase">Time</span>
+                <span className="font-semibold text-[#1E293B]">{mealTime} ({hour12}:{minutes} {period})</span>
               </div>
               <div>
-                <span className="text-muted-foreground block text-[10px] font-bold uppercase">Category</span>
+                <span className="text-[#64748B] block text-[10px] font-bold uppercase">Category</span>
                 <Select
                   value={categoryMode === 'auto' ? 'auto' : manualCategory}
                   onValueChange={(val) => {
@@ -276,10 +276,10 @@ export function MealAnalysisTool({
                     }
                   }}
                 >
-                  <SelectTrigger className="h-7 text-xs rounded-lg border-primary/20 bg-background">
+                  <SelectTrigger className="h-7 text-xs rounded-lg border-[#DDD6FE] bg-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-xl">
+                  <SelectContent className="rounded-xl border-[#E2E8F0]">
                     <SelectItem value="auto">Auto ({inferredCategory})</SelectItem>
                     {MEAL_CATEGORY_OPTIONS.map((cat) => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
@@ -292,22 +292,22 @@ export function MealAnalysisTool({
 
           {/* Calorie & Macro Highlights */}
           <div className="grid grid-cols-4 gap-2 text-center">
-            <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 flex flex-col items-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Calories</span>
-              <span className="text-xl font-bold text-primary mt-0.5">{Math.round(analysisResult.calories)}</span>
-              <span className="text-[9px] text-muted-foreground">kcal</span>
+            <div className="p-3 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE] flex flex-col items-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#6D28D9]">Calories</span>
+              <span className="text-xl font-bold text-[#6D28D9] mt-0.5">{Math.round(analysisResult.calories)}</span>
+              <span className="text-[9px] text-[#64748B]">kcal</span>
             </div>
-            <div className="p-3 rounded-xl bg-secondary/50 border border-border flex flex-col items-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Protein</span>
-              <span className="text-lg font-bold text-foreground mt-0.5">{Math.round(analysisResult.protein)}g</span>
+            <div className="p-3 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE] flex flex-col items-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#6D28D9]">Protein</span>
+              <span className="text-lg font-bold text-[#1E293B] mt-0.5">{Math.round(analysisResult.protein)}g</span>
             </div>
-            <div className="p-3 rounded-xl bg-secondary/50 border border-border flex flex-col items-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Carbs</span>
-              <span className="text-lg font-bold text-foreground mt-0.5">{Math.round(analysisResult.carbs)}g</span>
+            <div className="p-3 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] flex flex-col items-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#2563EB]">Carbs</span>
+              <span className="text-lg font-bold text-[#1E293B] mt-0.5">{Math.round(analysisResult.carbs)}g</span>
             </div>
-            <div className="p-3 rounded-xl bg-secondary/50 border border-border flex flex-col items-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Fat</span>
-              <span className="text-lg font-bold text-foreground mt-0.5">{Math.round(analysisResult.fat)}g</span>
+            <div className="p-3 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] flex flex-col items-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#D97706]">Fat</span>
+              <span className="text-lg font-bold text-[#1E293B] mt-0.5">{Math.round(analysisResult.fat)}g</span>
             </div>
           </div>
 

@@ -233,7 +233,7 @@ export default function DebtsPage() {
               label="Net Position"
               value={`${netPosition >= 0 ? '+' : '-'}₹${formatIndianRupees(Math.abs(netPosition))}`}
               icon={<Scale className="h-4 w-4" />}
-              tone={netPosition >= 0 ? 'blue' : 'red'}
+              tone={netPosition >= 0 ? 'purple' : 'red'}
               helperText={netPosition >= 0 ? 'Overall you are owed more' : 'Overall you owe more'}
             />
           </div>

@@ -30,10 +30,10 @@ const sizeStyles = {
 };
 
 const typeStyles: Record<MoneyType, string> = {
-  INCOME: 'text-[#0F7A38]',
-  EXPENSE: 'text-[#B42318]',
-  TRANSFER: 'text-[#2F80ED]',
-  NEUTRAL: 'text-[#111827]',
+  INCOME: 'text-[#059669]',
+  EXPENSE: 'text-[#DC2626]',
+  TRANSFER: 'text-[#6D28D9]',
+  NEUTRAL: 'text-[#1E293B]',
 };
 
 export function MoneyAmount({

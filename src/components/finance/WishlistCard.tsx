@@ -81,10 +81,10 @@ export function WishlistCard({
 
   return (
     <div
-      className={`rounded-[14px] border p-5 flex flex-col justify-between transition-all ${
+      className={`rounded-2xl border p-5 flex flex-col justify-between transition-all ${
         isPurchased
-          ? 'border-[#C3EBD0] bg-[#F9FDFB] shadow-xs'
-          : 'border-[#E5ECE8] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.04)] hover:shadow-[0_6px_18px_rgba(16,24,40,0.06)]'
+          ? 'border-[#A7F3D0] bg-[#F0FDF4]/50 shadow-xs'
+          : 'border-[#E2E8F0] bg-white shadow-xs hover:border-[#6D28D9]/30 hover:shadow-sm'
       }`}
     >
       <div>
@@ -93,10 +93,10 @@ export function WishlistCard({
             <div
               className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 ${
                 isPurchased
-                  ? 'bg-[#EAF8EF] border-[#C3EBD0] text-[#16A34A]'
+                  ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#059669]'
                   : isReady
-                  ? 'bg-[#EBF5FB] border-[#D1E8F7] text-[#2563EB]'
-                  : 'bg-[#F2F4F7] border-[#EAECF0] text-[#475467]'
+                  ? 'bg-[#F5F3FF] border-[#DDD6FE] text-[#6D28D9]'
+                  : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B]'
               }`}
             >
               {isPurchased ? (
@@ -106,10 +106,10 @@ export function WishlistCard({
               )}
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-[#111827] leading-tight">
+              <h3 className="text-sm font-semibold text-[#1E293B] leading-tight">
                 {item.name}
               </h3>
-              <p className="text-xs text-[#667085] mt-0.5 truncate max-w-[180px]">
+              <p className="text-xs text-[#64748B] mt-0.5 truncate max-w-[180px]">
                 {item.category}
               </p>
             </div>
@@ -123,7 +123,7 @@ export function WishlistCard({
             {isPurchased ? (
               <StatusPill label="Purchased" tone="green" />
             ) : isReady ? (
-              <StatusPill label="Ready to Buy" tone="blue" />
+              <StatusPill label="Ready to Buy" tone="purple" />
             ) : isPlanned ? (
               <StatusPill label="Planned" tone="amber" />
             ) : (
@@ -132,11 +132,11 @@ export function WishlistCard({
           </div>
         </div>
 
-        <div className="mt-3 pt-3 border-t border-[#E5ECE8]/60">
-          <div className="text-xs text-[#667085]">
+        <div className="mt-3 pt-3 border-t border-[#E2E8F0]">
+          <div className="text-xs text-[#64748B]">
             {isPurchased ? 'Purchase Price' : 'Target Price'}
           </div>
-          <div className="text-2xl font-bold tracking-tight text-[#111827] mt-1">
+          <div className="text-2xl font-bold tracking-tight text-[#1E293B] mt-1">
             <MoneyAmount
               amount={isPurchased && item.actualPrice ? item.actualPrice : item.targetPrice}
               type={isPurchased ? 'EXPENSE' : 'INCOME'}
@@ -145,41 +145,41 @@ export function WishlistCard({
           </div>
 
           {item.maxBudget && !isPurchased && (
-            <div className="text-xs text-[#667085] mt-1.5 flex items-center gap-1">
+            <div className="text-xs text-[#64748B] mt-1.5 flex items-center gap-1">
               <span>Max Budget: ₹{formatIndianRupees(item.maxBudget)}</span>
             </div>
           )}
 
           {isPurchased && item.targetPrice && (
-            <div className="text-xs text-[#667085] mt-1 flex items-center justify-between">
+            <div className="text-xs text-[#64748B] mt-1 flex items-center justify-between">
               <span>Target was: ₹{formatIndianRupees(item.targetPrice)}</span>
               {item.transactionId && (
-                <span className="text-[#16A34A] font-medium">• Recorded Expense</span>
+                <span className="text-[#059669] font-medium">• Recorded Expense</span>
               )}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2 text-xs text-[#667085] mt-3 pt-2.5 border-t border-[#E5ECE8]/40">
+          <div className="grid grid-cols-2 gap-2 text-xs text-[#64748B] mt-3 pt-2.5 border-t border-[#E2E8F0]">
             {formattedTargetDate && !isPurchased && (
               <div className="flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5 text-[#475467]" />
+                <Calendar className="h-3.5 w-3.5 text-[#64748B]" />
                 <span>Target: {formattedTargetDate}</span>
               </div>
             )}
             {formattedPurchasedDate && isPurchased && (
               <div className="flex items-center gap-1.5 col-span-2">
-                <Clock className="h-3.5 w-3.5 text-[#16A34A]" />
+                <Clock className="h-3.5 w-3.5 text-[#059669]" />
                 <span>Purchased on {formattedPurchasedDate}</span>
               </div>
             )}
             {item.plannedAccount && (
               <div className="flex items-center gap-1.5 col-span-2">
-                <Landmark className="h-3.5 w-3.5 text-[#475467]" />
+                <Landmark className="h-3.5 w-3.5 text-[#64748B]" />
                 <span className="truncate">From {item.plannedAccount.name}</span>
               </div>
             )}
             {item.notes && (
-              <div className="col-span-2 text-[11px] text-[#667085] italic truncate">
+              <div className="col-span-2 text-[11px] text-[#64748B] italic truncate">
                 &ldquo;{item.notes}&rdquo;
               </div>
             )}
@@ -187,13 +187,13 @@ export function WishlistCard({
         </div>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-[#E5ECE8]/60 flex items-center justify-between flex-wrap gap-2">
+      <div className="mt-4 pt-3 border-t border-[#E2E8F0] flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           {!isPurchased && onMarkPurchased && (
             <Button
               size="sm"
               onClick={() => onMarkPurchased(item)}
-              className="h-8 px-2.5 rounded-lg bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1"
+              className="h-8 px-2.5 rounded-lg bg-[#059669] text-white hover:bg-[#047857] text-xs font-semibold shadow-xs flex items-center gap-1"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               Mark Purchased
@@ -205,7 +205,7 @@ export function WishlistCard({
               size="sm"
               variant="outline"
               onClick={() => onSetReady(item.id)}
-              className="h-8 px-2.5 rounded-lg border-[#E5ECE8] text-[#2563EB] hover:bg-[#EBF5FB] text-xs font-medium flex items-center gap-1"
+              className="h-8 px-2.5 rounded-lg border-[#DDD6FE] text-[#6D28D9] hover:bg-[#F5F3FF] text-xs font-medium flex items-center gap-1"
             >
               <Sparkles className="h-3.5 w-3.5" />
               Mark Ready
@@ -225,7 +225,7 @@ export function WishlistCard({
                   onUnmarkPurchased(item.id);
                 }
               }}
-              className="h-8 px-2.5 rounded-lg border-[#E5ECE8] text-[#D97706] hover:bg-[#FFF4DF] text-xs font-medium flex items-center gap-1"
+              className="h-8 px-2.5 rounded-lg border-[#E2E8F0] text-[#D97706] hover:bg-[#FFFBEB] text-xs font-medium flex items-center gap-1"
             >
               <Undo2 className="h-3.5 w-3.5" />
               Unmark as Purchased
@@ -237,7 +237,7 @@ export function WishlistCard({
               size="sm"
               variant="ghost"
               onClick={() => onEdit(item)}
-              className="h-8 px-2 rounded-lg text-[#475467] hover:text-[#111827] text-xs"
+              className="h-8 px-2 rounded-lg text-[#64748B] hover:text-[#1E293B] hover:bg-[#F1F5F9] text-xs"
               title="Edit item"
             >
               <Edit2 className="h-3.5 w-3.5" />
@@ -254,7 +254,7 @@ export function WishlistCard({
                 onArchive(item.id);
               }
             }}
-            className="h-8 px-2 rounded-lg text-[#98A2B3] hover:text-[#EF4444] hover:bg-[#FEF3F2] text-xs"
+            className="h-8 px-2 rounded-lg text-[#94A3B8] hover:text-[#DC2626] hover:bg-[#FEF2F2] text-xs"
             title="Archive item"
           >
             <Archive className="h-3.5 w-3.5" />

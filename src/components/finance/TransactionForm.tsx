@@ -237,16 +237,16 @@ export function TransactionForm({
         <DialogTrigger asChild>
           <Button
             size="sm"
-            className="h-10 px-4 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold shadow-xs flex items-center gap-1.5"
+            className="h-10 px-4 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Transaction</span>
+            <span>+ Add Transaction</span>
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[440px] rounded-[18px] bg-white p-6 border border-[#E5ECE8]">
-        <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
-          <DialogTitle className="text-lg font-semibold text-[#111827]">
+      <DialogContent className="sm:max-w-[440px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+        <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
+          <DialogTitle className="text-lg font-semibold text-[#1E293B]">
             {isEdit ? 'Edit Transaction' : 'Record Transaction'}
           </DialogTitle>
         </DialogHeader>
@@ -257,7 +257,7 @@ export function TransactionForm({
             <div
               role="group"
               aria-label="Transaction Type"
-              className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F7FAF8] border border-[#E5ECE8]"
+              className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]"
             >
               {(['EXPENSE', 'INCOME', 'TRANSFER'] as TransactionType[]).map((t) => (
                 <button
@@ -265,14 +265,14 @@ export function TransactionForm({
                   type="button"
                   aria-pressed={txType === t}
                   onClick={() => setTxType(t)}
-                  className={`py-2 rounded-lg text-xs font-semibold capitalize transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] focus-visible:ring-offset-2 ${
+                  className={`py-2 rounded-lg text-xs font-semibold capitalize transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6D28D9] focus-visible:ring-offset-2 ${
                     txType === t
                       ? t === 'EXPENSE'
-                        ? 'bg-white text-[#B42318] shadow-xs'
+                        ? 'bg-white text-[#DC2626] shadow-sm'
                         : t === 'INCOME'
-                        ? 'bg-white text-[#0F7A38] shadow-xs'
-                        : 'bg-white text-[#2F80ED] shadow-xs'
-                      : 'text-[#667085] hover:text-[#111827]'
+                        ? 'bg-white text-[#059669] shadow-sm'
+                        : 'bg-white text-[#6D28D9] shadow-sm'
+                      : 'text-[#64748B] hover:text-[#1E293B]'
                   }`}
                 >
                   {t.toLowerCase()}
@@ -280,15 +280,15 @@ export function TransactionForm({
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#F7FAF8] border border-[#E5ECE8] text-xs">
-              <span className="font-medium text-[#667085]">Transaction Type</span>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs">
+              <span className="font-medium text-[#64748B]">Transaction Type</span>
               <span
                 className={`font-semibold uppercase px-2 py-0.5 rounded-md ${
                   txType === 'EXPENSE'
-                    ? 'bg-[#FDECEC] text-[#B42318]'
+                    ? 'bg-[#FEF2F2] text-[#DC2626]'
                     : txType === 'INCOME'
-                    ? 'bg-[#EAF8EF] text-[#0F7A38]'
-                    : 'bg-[#EAF3FF] text-[#2F80ED]'
+                    ? 'bg-[#ECFDF5] text-[#059669]'
+                    : 'bg-[#F5F3FF] text-[#6D28D9]'
                 }`}
               >
                 {txType}
@@ -298,7 +298,7 @@ export function TransactionForm({
 
           {/* Amount */}
           <div className="space-y-1.5">
-            <Label htmlFor="tx-amount" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="tx-amount" className="text-xs font-semibold text-[#1E293B]">
               Amount (₹)
             </Label>
             <Input
@@ -309,7 +309,7 @@ export function TransactionForm({
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-base font-semibold tabular-nums"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-base font-semibold tabular-nums"
               required
             />
           </div>
@@ -317,12 +317,12 @@ export function TransactionForm({
           {/* Category (if not transfer) */}
           {txType !== 'TRANSFER' && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#344054]">Category</Label>
+              <Label className="text-xs font-semibold text-[#1E293B]">Category</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
-                <SelectContent className="max-h-60 rounded-xl bg-white border border-[#E5ECE8]">
+                <SelectContent className="max-h-60 rounded-xl bg-white border border-[#E2E8F0]">
                   {TRANSACTION_CATEGORIES.filter((c) => c !== 'Transfer').map((cat) => (
                     <SelectItem key={cat} value={cat} className="text-sm">
                       {cat}
@@ -335,14 +335,14 @@ export function TransactionForm({
 
           {/* Source Account */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-[#344054]">
+            <Label className="text-xs font-semibold text-[#1E293B]">
               {txType === 'TRANSFER' ? 'From Account' : 'Account'}
             </Label>
             <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+              <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                 <SelectValue placeholder="Select account" />
               </SelectTrigger>
-              <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+              <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                 {accounts.map((acc) => (
                   <SelectItem key={acc.id} value={acc.id} className="text-sm">
                     {acc.name}
@@ -355,12 +355,12 @@ export function TransactionForm({
           {/* Destination Account (Transfer only) */}
           {txType === 'TRANSFER' && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#344054]">To Account</Label>
+              <Label className="text-xs font-semibold text-[#1E293B]">To Account</Label>
               <Select value={transferAccountId} onValueChange={setTransferAccountId}>
-                <SelectTrigger className="h-11 rounded-[10px] border-[#E5ECE8] text-sm">
+                <SelectTrigger className="h-11 rounded-xl border-[#E2E8F0] text-sm">
                   <SelectValue placeholder="Select destination account" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl bg-white border border-[#E5ECE8]">
+                <SelectContent className="rounded-xl bg-white border border-[#E2E8F0]">
                   {accounts
                     .filter((acc) => acc.id !== accountId)
                     .map((acc) => (
@@ -375,7 +375,7 @@ export function TransactionForm({
 
           {/* Date & Time */}
           <div className="space-y-1.5">
-            <Label htmlFor="tx-date" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="tx-date" className="text-xs font-semibold text-[#1E293B]">
               Date & Time
             </Label>
             <Input
@@ -383,14 +383,14 @@ export function TransactionForm({
               type="datetime-local"
               value={occurredAt}
               onChange={(e) => setOccurredAt(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm"
               required
             />
           </div>
 
           {/* Note */}
           <div className="space-y-1.5">
-            <Label htmlFor="tx-note" className="text-xs font-semibold text-[#344054]">
+            <Label htmlFor="tx-note" className="text-xs font-semibold text-[#1E293B]">
               Note / Description (Optional)
             </Label>
             <Input
@@ -399,13 +399,13 @@ export function TransactionForm({
               placeholder="e.g. Lunch at cafe or Mobile recharge"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="h-11 rounded-[10px] border-[#E5ECE8] text-sm"
+              className="h-11 rounded-xl border-[#E2E8F0] focus:border-[#6D28D9] focus:ring-[#6D28D9] text-sm"
             />
           </div>
 
           <Button
             type="submit"
-            className="w-full h-11 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] font-semibold text-sm transition-colors mt-2"
+            className="w-full h-11 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
             disabled={submitting}
           >
             {submitting ? (

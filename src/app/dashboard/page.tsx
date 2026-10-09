@@ -166,7 +166,7 @@ function EditGramsPopover({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="glass-card w-40 p-3 rounded-xl border-none shadow-xl"
+        className="bg-white w-40 p-3 rounded-xl border border-[#E2E8F0] shadow-xl"
         align="start"
       >
         <div className="flex items-center gap-2">
@@ -180,7 +180,7 @@ function EditGramsPopover({
           <Button
             size="icon"
             aria-label="Confirm update"
-            className="h-8 w-8 shrink-0 rounded-lg"
+            className="h-8 w-8 shrink-0 rounded-lg bg-[#6D28D9] text-white hover:bg-[#5B21B6]"
             onClick={() => {
               onUpdate(logId, item.id, value);
               setOpen(false);
@@ -218,13 +218,13 @@ function AddItemPopover({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 text-[10px] gap-2 font-bold uppercase tracking-wider text-primary hover:bg-primary/5 rounded-lg"
+          className="h-8 text-[10px] gap-2 font-bold uppercase tracking-wider text-[#6D28D9] hover:bg-[#F5F3FF] rounded-lg"
         >
           <Plus className="h-3.5 w-3.5" /> Append Item
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="glass-card w-80 p-5 rounded-2xl border-none shadow-2xl"
+        className="bg-white w-80 p-5 rounded-2xl border border-[#E2E8F0] shadow-2xl"
         align="end"
       >
         <div className="space-y-4">
@@ -914,14 +914,14 @@ export default function DashboardPage() {
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
-                          className="glass-card justify-start text-left font-normal min-w-[200px] rounded-xl border-white/60"
+                          className="bg-white justify-start text-left font-normal min-w-[200px] rounded-xl border border-[#E2E8F0] shadow-xs hover:border-[#6D28D9]"
                         >
-                          <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
+                          <CalendarIcon className="mr-2 h-4 w-4 text-[#6D28D9]" />
                           {format(selectedDate, "EEEE, MMM do")}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent
-                        className="w-auto p-0 rounded-2xl border-none shadow-2xl"
+                        className="w-auto p-0 rounded-2xl border border-[#E2E8F0] bg-white shadow-xl"
                         align="start"
                       >
                         <Calendar
@@ -937,7 +937,7 @@ export default function DashboardPage() {
                         variant="outline"
                         size="icon"
                         aria-label="Previous day"
-                        className="glass-card h-10 w-10 rounded-xl border-white/60"
+                        className="bg-white h-10 w-10 rounded-xl border border-[#E2E8F0] shadow-xs hover:border-[#6D28D9]"
                         onClick={() =>
                           setSelectedDate(subDays(selectedDate, 1))
                         }
@@ -948,7 +948,7 @@ export default function DashboardPage() {
                         variant="outline"
                         size="icon"
                         aria-label="Next day"
-                        className="glass-card h-10 w-10 rounded-xl border-white/60"
+                        className="bg-white h-10 w-10 rounded-xl border border-[#E2E8F0] shadow-xs hover:border-[#6D28D9]"
                         onClick={() =>
                           setSelectedDate(addDays(selectedDate, 1))
                         }
@@ -959,7 +959,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="glass-card flex items-center gap-2 p-1 rounded-xl border-white/60">
+                    <div className="bg-white flex items-center gap-2 p-1 rounded-xl border border-[#E2E8F0] shadow-xs">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -976,7 +976,7 @@ export default function DashboardPage() {
                         <PopoverTrigger asChild>
                           <Button
                             variant="ghost"
-                            className="text-xs font-bold px-4 h-8 rounded-lg hover:text-primary transition-colors"
+                            className="text-xs font-bold px-4 h-8 rounded-lg hover:text-[#6D28D9] transition-colors"
                           >
                             <CalendarIcon className="mr-2 h-3.5 w-3.5" />
                             {format(activeWeeklyRange.from, "MMM d")} -{" "}
@@ -984,7 +984,7 @@ export default function DashboardPage() {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent
-                          className="w-auto p-0 rounded-2xl border-none shadow-2xl"
+                          className="w-auto p-0 rounded-2xl border border-[#E2E8F0] bg-white shadow-xl"
                           align="center"
                         >
                           <Calendar
@@ -1014,7 +1014,7 @@ export default function DashboardPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setCustomRange(undefined)}
-                        className="text-[10px] font-bold uppercase tracking-widest h-8 px-3 rounded-lg bg-white/40 dark:bg-black/40 border border-white/60"
+                        className="text-[10px] font-bold uppercase tracking-widest h-8 px-3 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569]"
                       >
                         Reset Range
                       </Button>
@@ -1027,36 +1027,36 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <Button
               onClick={() => setIsLogMealOpen(true)}
-              className="h-12 px-5 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md shadow-primary/20 flex items-center gap-2"
+              className="h-11 px-5 rounded-xl bg-[#6D28D9] hover:bg-[#5B21B6] text-white font-semibold shadow-xs flex items-center gap-2"
               aria-label="Log Meal"
             >
               <Plus className="h-5 w-5" />
               <span>Log Meal</span>
             </Button>
 
-            <Card className="glass-card bg-primary text-primary-foreground border-none px-6 py-4 flex items-center gap-4 rounded-2xl">
-              <div className="p-2 bg-white/20 rounded-xl">
-                <TrendingUp className="h-6 w-6" />
+            <div className="rounded-xl border border-[#DDD6FE] bg-[#F5F3FF] px-4 py-2 flex items-center gap-3">
+              <div className="p-2 bg-[#EDE9FE] rounded-lg text-[#6D28D9]">
+                <TrendingUp className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest">
+                <p className="text-[10px] text-[#6D28D9] font-bold uppercase tracking-wider">
                   {activeTab === "daily" ? "Intake" : "Range Avg"}
                 </p>
-                <p className="text-2xl font-bold">
+                <p className="text-xl font-bold text-[#1E293B]">
                   {activeTab === "daily" ? totalCals : weeklyAvgCalories}{" "}
-                  <span className="text-sm font-normal opacity-70"> kcal</span>
+                  <span className="text-xs font-normal text-[#64748B]"> kcal</span>
                 </p>
               </div>
-            </Card>
+            </div>
           </div>
         </header>
 
         {isMobile ? (
           <Sheet open={isLogMealOpen} onOpenChange={setIsLogMealOpen}>
-            <SheetContent side="bottom" className="h-[90svh] rounded-t-[3rem] border-none glass-card p-8 flex flex-col">
-              <div className="w-12 h-1.5 bg-foreground/10 rounded-full mx-auto mb-6" />
+            <SheetContent side="bottom" className="h-[90svh] rounded-t-2xl border-t border-[#E2E8F0] bg-white p-6 flex flex-col">
+              <div className="w-12 h-1.5 bg-[#E2E8F0] rounded-full mx-auto mb-4" />
               <SheetHeader className="mb-4">
-                <SheetTitle className="text-2xl font-bold text-primary text-left">
+                <SheetTitle className="text-2xl font-bold text-[#1E293B] text-left">
                   Log Meal
                 </SheetTitle>
               </SheetHeader>
@@ -1074,9 +1074,9 @@ export default function DashboardPage() {
           </Sheet>
         ) : (
           <Dialog open={isLogMealOpen} onOpenChange={setIsLogMealOpen}>
-            <DialogContent className="sm:max-w-[540px] glass-card border-none rounded-[2.5rem] p-8">
+            <DialogContent className="sm:max-w-[540px] bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xl">
               <DialogHeader className="mb-4">
-                <DialogTitle className="text-2xl font-bold text-primary">
+                <DialogTitle className="text-2xl font-bold text-[#1E293B]">
                   Log Meal
                 </DialogTitle>
               </DialogHeader>
@@ -1123,14 +1123,14 @@ export default function DashboardPage() {
               </section>
 
               <motion.div variants={itemVariants}>
-                <Card className="glass-card border-white/60 rounded-3xl overflow-hidden">
+                <Card className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs overflow-hidden">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <div>
-                      <CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground">
-                        <History className="h-5 w-5 text-primary" /> Daily
+                      <CardTitle className="text-xl font-bold flex items-center gap-2 text-[#1E293B]">
+                        <History className="h-5 w-5 text-[#6D28D9]" /> Daily
                         Activity
                       </CardTitle>
-                      <CardDescription>
+                      <CardDescription className="text-xs text-[#64748B]">
                         Visual timeline of your metabolic intake.
                       </CardDescription>
                     </div>
@@ -1138,8 +1138,8 @@ export default function DashboardPage() {
                   <CardContent>
                     <ScrollArea className="h-[650px] pr-4">
                       {filteredLogs.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed border-white/40 rounded-3xl bg-white/20">
-                          <p className="font-medium">
+                        <div className="flex flex-col items-center justify-center h-40 text-[#64748B] border border-dashed border-[#E2E8F0] rounded-2xl bg-[#F8FAFC]">
+                          <p className="font-medium text-sm">
                             No activity recorded for this day.
                           </p>
                         </div>
@@ -1149,16 +1149,16 @@ export default function DashboardPage() {
                             <motion.div
                               key={log.id}
                               variants={itemVariants}
-                              className="relative pl-6 border-l-2 border-primary/20 pb-4 last:pb-0"
+                              className="relative pl-6 border-l-2 border-[#DDD6FE] pb-4 last:pb-0"
                             >
-                              <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-primary border-4 border-background" />
-                              <div className="glass-card rounded-2xl p-5 border-white/60">
+                              <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full bg-[#6D28D9] border-4 border-white" />
+                              <div className="rounded-2xl p-4 bg-[#F8FAFC] border border-[#E2E8F0]">
                                 <div className="flex justify-between items-center mb-4">
                                   <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-2">
                                       <Badge
                                         variant="secondary"
-                                        className="bg-primary/10 text-primary h-6 px-3 rounded-lg text-xs font-bold"
+                                        className="bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE] h-6 px-2.5 rounded-lg text-xs font-semibold"
                                       >
                                         {log.category}
                                       </Badge>
@@ -1166,7 +1166,7 @@ export default function DashboardPage() {
                                         {"⭐".repeat(logRatings[log.id] ?? 3)}
                                       </span>
                                     </div>
-                                    <span className="text-xs text-muted-foreground font-medium">
+                                    <span className="text-xs text-[#64748B] font-medium">
                                       {format(
                                         parseISO(log.timestamp),
                                         "h:mm a",
@@ -1174,18 +1174,18 @@ export default function DashboardPage() {
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-3 bg-white/30 dark:bg-black/20 px-3 py-1.5 rounded-xl border border-white/40">
-                                      <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-white/40 bg-white/40 shadow-sm flex items-center justify-center group shrink-0">
+                                    <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-xl border border-[#E2E8F0]">
+                                      <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-[#E2E8F0] bg-[#F1F5F9] shadow-xs flex items-center justify-center group shrink-0">
                                         <div className="absolute inset-0 flex items-center justify-center opacity-40">
                                           {log.category === "Breakfast" && (
-                                            <Coffee className="w-5 h-5 text-muted-foreground" />
+                                            <Coffee className="w-5 h-5 text-[#64748B]" />
                                           )}
                                           {(log.category === "Lunch" ||
                                             log.category === "Dinner") && (
-                                            <Utensils className="w-5 h-5 text-muted-foreground" />
+                                            <Utensils className="w-5 h-5 text-[#64748B]" />
                                           )}
                                           {log.category === "Snacks" && (
-                                            <Apple className="w-5 h-5 text-muted-foreground" />
+                                            <Apple className="w-5 h-5 text-[#64748B]" />
                                           )}
                                         </div>
                                         {log.imagePath && (
@@ -1199,13 +1199,13 @@ export default function DashboardPage() {
                                                 />
                                               </div>
                                             </DialogTrigger>
-                                            <DialogContent className="sm:max-w-[600px] glass-card border-none rounded-3xl overflow-hidden">
+                                            <DialogContent className="sm:max-w-[600px] bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden p-6 shadow-xl">
                                               <DialogHeader>
-                                                <DialogTitle className="text-2xl font-bold">
+                                                <DialogTitle className="text-2xl font-bold text-[#1E293B]">
                                                   {log.category} Details
                                                 </DialogTitle>
                                               </DialogHeader>
-                                              <div className="aspect-square w-full rounded-2xl overflow-hidden shadow-2xl bg-black/5 flex items-center justify-center">
+                                              <div className="aspect-square w-full rounded-2xl overflow-hidden shadow-sm bg-black/5 flex items-center justify-center">
                                                 <img
                                                   src={log.imagePath}
                                                   alt={log.category}
@@ -1217,10 +1217,10 @@ export default function DashboardPage() {
                                         )}
                                       </div>
                                       <div className="text-right">
-                                        <span className="font-bold text-lg text-primary">
+                                        <span className="font-bold text-lg text-[#6D28D9]">
                                           {log.totalNutrients.calories}
                                         </span>
-                                        <span className="text-[10px] ml-1 text-muted-foreground font-bold uppercase">
+                                        <span className="text-[10px] ml-1 text-[#64748B] font-bold uppercase">
                                           kcal
                                         </span>
                                       </div>
@@ -1231,7 +1231,7 @@ export default function DashboardPage() {
                                             size="icon"
                                             aria-label="Delete log"
                                             disabled={log.isPending}
-                                            className="h-8 w-8 p-0 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive border-none shadow-none rounded-full disabled:opacity-50"
+                                            className="h-8 w-8 p-0 bg-transparent hover:bg-red-50 text-[#64748B] hover:text-red-600 border-none shadow-none rounded-lg disabled:opacity-50"
                                           >
                                             {log.isPending ? (
                                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1240,25 +1240,25 @@ export default function DashboardPage() {
                                             )}
                                           </Button>
                                         </AlertDialogTrigger>
-                                        <AlertDialogContent className="glass-card border-none rounded-3xl">
+                                        <AlertDialogContent className="bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xl">
                                           <AlertDialogHeader>
-                                            <AlertDialogTitle>
+                                            <AlertDialogTitle className="text-lg font-bold text-[#1E293B]">
                                               Delete Log?
                                             </AlertDialogTitle>
-                                            <AlertDialogDescription>
+                                            <AlertDialogDescription className="text-xs text-[#64748B]">
                                               This will permanently remove this
                                               meal entry from your database.
                                             </AlertDialogDescription>
                                           </AlertDialogHeader>
                                           <AlertDialogFooter>
-                                            <AlertDialogCancel className="rounded-xl">
+                                            <AlertDialogCancel className="rounded-xl border-[#E2E8F0]">
                                               Cancel
                                             </AlertDialogCancel>
                                             <AlertDialogAction
                                               onClick={() =>
                                                 handleDeleteLog(log.id)
                                               }
-                                              className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                              className="rounded-xl bg-red-600 text-white hover:bg-red-700"
                                             >
                                               Delete
                                             </AlertDialogAction>
@@ -1273,10 +1273,10 @@ export default function DashboardPage() {
                                   {log.items.map((item) => (
                                     <div
                                       key={item.id}
-                                      className="p-3 rounded-xl bg-white/30 dark:bg-black/20 border border-white/40 flex items-center justify-between group"
+                                      className="p-3 rounded-xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between group"
                                     >
                                       <div className="flex flex-col">
-                                        <span className="text-sm font-bold text-foreground">
+                                        <span className="text-sm font-bold text-[#1E293B]">
                                           {item.name}{" "}
                                           <span className="text-xs font-normal">
                                             {"⭐".repeat(item.rating || 3)}
@@ -1288,10 +1288,10 @@ export default function DashboardPage() {
                                             logId={log.id}
                                             onUpdate={handleUpdateItemGrams}
                                           />
-                                          <span className="text-[10px] text-muted-foreground opacity-60">
+                                          <span className="text-[10px] text-[#94A3B8]">
                                             •
                                           </span>
-                                          <span className="text-[10px] text-muted-foreground font-medium">
+                                          <span className="text-[10px] text-[#64748B] font-medium">
                                             {item.calories} kcal
                                           </span>
                                         </div>
@@ -1300,25 +1300,25 @@ export default function DashboardPage() {
                                         <div className="flex gap-1.5 overflow-x-auto">
                                           <Badge
                                             variant="outline"
-                                            className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap"
+                                            className="text-[9px] h-5 border-[#DDD6FE] bg-[#F5F3FF] text-[#6D28D9] font-bold px-2 rounded-md whitespace-nowrap"
                                           >
                                             P: {item.protein}g
                                           </Badge>
                                           <Badge
                                             variant="outline"
-                                            className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap"
+                                            className="text-[9px] h-5 border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB] font-bold px-2 rounded-md whitespace-nowrap"
                                           >
                                             C: {item.carbs}g
                                           </Badge>
                                           <Badge
                                             variant="outline"
-                                            className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap"
+                                            className="text-[9px] h-5 border-[#FDE68A] bg-[#FFFBEB] text-[#D97706] font-bold px-2 rounded-md whitespace-nowrap"
                                           >
                                             F: {item.fat}g
                                           </Badge>
                                           <Badge
                                             variant="outline"
-                                            className="text-[9px] h-5 border-white/40 font-bold px-2 rounded-md whitespace-nowrap"
+                                            className="text-[9px] h-5 border-[#E2E8F0] bg-[#F8FAFC] text-[#475569] font-bold px-2 rounded-md whitespace-nowrap"
                                           >
                                             S: {item.sugar}g
                                           </Badge>
@@ -1329,24 +1329,24 @@ export default function DashboardPage() {
                                               variant="ghost"
                                               size="icon"
                                               aria-label="Remove item"
-                                              className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground"
+                                              className="h-6 w-6 rounded-md hover:bg-red-50 hover:text-red-600 text-[#94A3B8]"
                                             >
                                               <X className="h-3 w-3" />
                                             </Button>
                                           </AlertDialogTrigger>
-                                          <AlertDialogContent className="glass-card border-none rounded-3xl">
+                                          <AlertDialogContent className="bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xl">
                                             <AlertDialogHeader>
-                                              <AlertDialogTitle>
+                                              <AlertDialogTitle className="text-lg font-bold text-[#1E293B]">
                                                 Delete Item?
                                               </AlertDialogTitle>
-                                              <AlertDialogDescription>
+                                              <AlertDialogDescription className="text-xs text-[#64748B]">
                                                 Are you sure you want to remove
                                                 &quot;{item.name}&quot; from this meal?
                                                 This action cannot be undone.
                                               </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
-                                              <AlertDialogCancel className="rounded-xl">
+                                              <AlertDialogCancel className="rounded-xl border-[#E2E8F0]">
                                                 Cancel
                                               </AlertDialogCancel>
                                               <AlertDialogAction
@@ -1356,7 +1356,7 @@ export default function DashboardPage() {
                                                     item.id,
                                                   )
                                                 }
-                                                className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                className="rounded-xl bg-red-600 text-white hover:bg-red-700"
                                               >
                                                 Delete
                                               </AlertDialogAction>
@@ -1448,9 +1448,9 @@ export default function DashboardPage() {
 
             <aside className="space-y-6">
               <motion.div variants={itemVariants}>
-                <Card className="glass-card border-white/60 rounded-3xl">
+                <Card className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs">
                   <CardHeader>
-                    <CardTitle className="text-xl font-bold text-foreground">
+                    <CardTitle className="text-xl font-bold text-[#1E293B]">
                       Biometric Targets
                     </CardTitle>
                   </CardHeader>
@@ -1460,7 +1460,7 @@ export default function DashboardPage() {
                       const percentage = Math.min((m.val / m.max) * 100, 100);
                       return (
                         <div key={m.label} className="space-y-2">
-                          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
                             <div className="flex items-center gap-2">
                               <span>{m.label}</span>
                               {m.isLimit && isOver && (
@@ -1474,22 +1474,22 @@ export default function DashboardPage() {
                             </div>
                             <span
                               className={cn(
-                                "text-foreground",
+                                "text-[#1E293B]",
                                 isOver &&
                                   !m.isLimit &&
-                                  "text-emerald-500 font-bold",
+                                  "text-emerald-600 font-bold",
                               )}
                             >
                               {m.val.toFixed(0)}g / {m.max}g
                             </span>
                           </div>
-                          <div className="h-2.5 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-2.5 w-full bg-[#F1F5F9] rounded-full overflow-hidden">
                             <div
                               className={cn(
                                 "h-full transition-all duration-700 ease-out",
                                 m.isLimit && isOver
-                                  ? "bg-primary"
-                                  : "bg-primary/80",
+                                  ? "bg-red-500"
+                                  : "bg-[#6D28D9]",
                               )}
                               style={{ width: `${percentage}%` }}
                             />
@@ -1501,13 +1501,13 @@ export default function DashboardPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants}>
-                <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30">
+                <Card className="rounded-2xl border border-[#DDD6FE] bg-[#F5F3FF] shadow-xs">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-                      <Info className="h-4 w-4 text-primary" /> Daily Insight
+                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-[#6D28D9]">
+                      <Info className="h-4 w-4 text-[#6D28D9]" /> Daily Insight
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm leading-relaxed text-foreground/80">
+                  <CardContent className="text-sm leading-relaxed text-[#475569]">
                     {filteredLogs.length === 0
                       ? "Log your first meal to generate metabolic insights."
                       : `Precision tracking active. You have achieved ${Math.round((totalP / userTargets.protein) * 100)}% of your daily protein target.`}
@@ -1525,10 +1525,10 @@ export default function DashboardPage() {
           >
             <div className="lg:col-span-2 space-y-6">
               <motion.div variants={itemVariants}>
-                <Card className="glass-card border-white/60 rounded-3xl">
+                <Card className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs">
                   <CardHeader>
-                    <CardTitle className="text-2xl font-bold flex items-center gap-2 text-foreground">
-                      <BarChart3 className="h-5 w-5 text-primary" /> Calorie
+                    <CardTitle className="text-xl font-bold flex items-center gap-2 text-[#1E293B]">
+                      <BarChart3 className="h-5 w-5 text-[#6D28D9]" /> Calorie
                       Trends
                     </CardTitle>
                   </CardHeader>
@@ -1548,14 +1548,14 @@ export default function DashboardPage() {
                             <CartesianGrid
                               strokeDasharray="3 3"
                               vertical={false}
-                              stroke="rgba(0,0,0,0.1)"
+                              stroke="rgba(0,0,0,0.06)"
                             />
                             <XAxis
                               dataKey="day"
                               axisLine={false}
                               tickLine={false}
                               tick={{
-                                fill: "hsl(var(--muted-foreground))",
+                                fill: "#64748B",
                                 fontSize: 12,
                               }}
                             />
@@ -1563,7 +1563,7 @@ export default function DashboardPage() {
                               axisLine={false}
                               tickLine={false}
                               tick={{
-                                fill: "hsl(var(--muted-foreground))",
+                                fill: "#64748B",
                                 fontSize: 12,
                               }}
                             />
@@ -1572,7 +1572,7 @@ export default function DashboardPage() {
                             />
                             <Bar
                               dataKey="calories"
-                              radius={[8, 8, 8, 8]}
+                              radius={[6, 6, 0, 0]}
                               maxBarSize={32}
                             >
                               {dynamicWeeklyData.map((entry, index) => (
@@ -1580,8 +1580,8 @@ export default function DashboardPage() {
                                   key={`cell-${index}`}
                                   fill={
                                     entry.calories > userTargets.calories
-                                      ? "hsl(var(--primary))"
-                                      : "hsl(var(--primary) / 0.6)"
+                                      ? "#EF4444"
+                                      : "#6D28D9"
                                   }
                                 />
                               ))}
@@ -1590,7 +1590,7 @@ export default function DashboardPage() {
                         </ResponsiveContainer>
                       </ChartContainer>
                     ) : (
-                      <div className="h-[300px] flex items-center justify-center text-muted-foreground bg-white/5 rounded-2xl border border-dashed">
+                      <div className="h-[300px] flex items-center justify-center text-[#64748B] bg-[#F8FAFC] rounded-2xl border border-dashed border-[#E2E8F0]">
                         Select a valid range to view trends
                       </div>
                     )}
@@ -1610,15 +1610,15 @@ export default function DashboardPage() {
                       damping: 17,
                     }}
                   >
-                    <Card className="glass-card border-white/60 rounded-2xl">
+                    <Card className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs">
                       <CardContent className="pt-6 text-center">
                         <div className="flex justify-center mb-2">
-                          <s.icon className="h-6 w-6 text-primary" />
+                          <s.icon className="h-6 w-6 text-[#6D28D9]" />
                         </div>
-                        <p className="text-2xl font-bold text-foreground">
+                        <p className="text-2xl font-bold text-[#1E293B]">
                           {s.val}
                         </p>
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                        <p className="text-[10px] text-[#64748B] uppercase font-bold tracking-widest">
                           {s.label}
                         </p>
                       </CardContent>
@@ -1629,9 +1629,9 @@ export default function DashboardPage() {
             </div>
             <aside className="space-y-6">
               <motion.div variants={itemVariants}>
-                <Card className="glass-card border-white/60 rounded-3xl">
+                <Card className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs">
                   <CardHeader>
-                    <CardTitle className="text-xl font-bold text-foreground">
+                    <CardTitle className="text-xl font-bold text-[#1E293B]">
                       Range Progress
                     </CardTitle>
                   </CardHeader>
@@ -1643,15 +1643,15 @@ export default function DashboardPage() {
                       );
                       return (
                         <div key={m.label} className="space-y-2">
-                          <div className="flex justify-between items-center text-[10px] font-bold uppercase text-muted-foreground">
+                          <div className="flex justify-between items-center text-[10px] font-bold uppercase text-[#64748B]">
                             <span>{m.label}</span>
-                            <span className="text-foreground">
+                            <span className="text-[#1E293B]">
                               {m.val.toFixed(0)}g / {m.max.toFixed(0)}g
                             </span>
                           </div>
-                          <div className="h-2.5 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-2.5 w-full bg-[#F1F5F9] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-primary/80 transition-all duration-700 ease-out"
+                              className="h-full bg-[#6D28D9] transition-all duration-700 ease-out"
                               style={{ width: `${percentage}%` }}
                             />
                           </div>
@@ -1662,14 +1662,14 @@ export default function DashboardPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants}>
-                <Card className="glass-card border-white/60 rounded-3xl bg-secondary/30">
+                <Card className="rounded-2xl border border-[#DDD6FE] bg-[#F5F3FF] shadow-xs">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-                      <BrainCircuit className="h-4 w-4 text-primary" /> Period
+                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-[#6D28D9]">
+                      <BrainCircuit className="h-4 w-4 text-[#6D28D9]" /> Period
                       Insight
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm leading-relaxed text-foreground/80">
+                  <CardContent className="text-sm leading-relaxed text-[#475569]">
                     Historical tracking analysis complete. The weekly averages
                     are derived from your actual logged entries for this period.
                   </CardContent>

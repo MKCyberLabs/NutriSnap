@@ -21,7 +21,7 @@ export function AppShell({ children, contentClassName = '' }: AppShellProps) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F7FAF8] flex flex-col md:flex-row text-[#111827] antialiased">
+    <div className="min-h-screen bg-[#FAFAFC] flex flex-col md:flex-row text-[#1E293B] antialiased">
       {/* Desktop Sidebar: 232px persistent */}
       <DesktopSidebar user={user} />
 
