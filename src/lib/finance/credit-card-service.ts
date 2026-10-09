@@ -234,14 +234,22 @@ export async function recordCreditCardPayment(
 
   const amountDecimal = parseAndValidateAmount(parsed.amount.toString());
 
-  // Verify fromAccountId ownership and type
+  // Verify fromAccountId ownership and type (SOL-R004-008)
   const fromAccount = await db.financialAccount.findUnique({
     where: { id: parsed.fromAccountId },
-    select: { id: true, userId: true, name: true, isActive: true }
+    select: { id: true, userId: true, name: true, isActive: true, type: true }
   });
 
   if (!fromAccount || fromAccount.userId !== userId) {
     throw new Error('Source payment account not found or unauthorized');
+  }
+
+  if (fromAccount.type === 'CREDIT_CARD') {
+    throw new Error('Payment source cannot be a credit card (Source account cannot be the credit card being paid)');
+  }
+
+  if (!['BANK', 'CASH', 'WALLET'].includes(fromAccount.type)) {
+    throw new Error('Payment source must be a BANK, CASH, or WALLET account');
   }
 
   const paidAtDate = parsed.paidAt ? new Date(parsed.paidAt) : new Date();

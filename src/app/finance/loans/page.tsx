@@ -168,6 +168,11 @@ export default function LoansPage() {
     }
   };
 
+  // User timezone from loan models or session (SOL-R001-011)
+  const userTimezone =
+    loans.find((l) => l.user?.timezone)?.user?.timezone ||
+    (typeof window !== 'undefined' ? (getAuthSession() as any)?.timezone : undefined);
+
   return (
     <AppShell>
       <PageHeader
@@ -175,6 +180,7 @@ export default function LoansPage() {
         description="Track personal loans, bank EMIs, and credit card instalments"
         action={
           <LoanForm
+            timezone={userTimezone}
             accounts={accounts}
             onLoanCreated={() => {
               const session = getAuthSession();
@@ -262,6 +268,7 @@ export default function LoansPage() {
               icon={<Building2 className="h-10 w-10 text-[#98A2B3]" />}
               action={
                 <LoanForm
+                  timezone={userTimezone}
                   accounts={accounts}
                   onLoanCreated={() => {
                     const session = getAuthSession();
@@ -298,6 +305,7 @@ export default function LoansPage() {
           {editingLoan && (
             <LoanForm
               loan={editingLoan}
+              timezone={editingLoan?.user?.timezone || userTimezone}
               open={editLoanModalOpen}
               onOpenChange={setEditLoanModalOpen}
               accounts={accounts}

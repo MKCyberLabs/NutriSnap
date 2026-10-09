@@ -37,10 +37,61 @@ import {
   Clock,
   Pencil,
   ArrowRightLeft,
+  Pause,
+  Play,
+  Archive,
 } from 'lucide-react';
 import { StatusPill } from '@/components/design-system/StatusPill';
 import { MoneyAmount } from '@/components/design-system/MoneyAmount';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
+import { TZDate } from '@date-fns/tz';
+
+function getUserTimezone(preferredTz?: string): string {
+  if (preferredTz) return preferredTz;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+  } catch {
+    return 'Asia/Kolkata';
+  }
+}
+
+function getInitialPaymentDate(userTz?: string): string {
+  try {
+    const tz = getUserTimezone(userTz);
+    const now = new TZDate(new Date(), tz);
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  } catch {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+}
+
+function toPaymentDateIso(paymentDateStr: string, userTz?: string): string {
+  const tz = getUserTimezone(userTz);
+  if (typeof paymentDateStr === 'string') {
+    const match = paymentDateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      return new TZDate(year, month, day, 12, 0, 0, 0, tz).toISOString();
+    }
+  }
+  return new Date(paymentDateStr).toISOString();
+}
+
+function generateRepaymentIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `cc-repay-${crypto.randomUUID()}`;
+  }
+  return `cc-repay-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
 import {
   Dialog,
   DialogContent,
@@ -134,6 +185,10 @@ export default function BillsPage() {
       });
     }
   };
+
+  const userTimezone =
+    obligations.find((o) => (o as any).user?.timezone)?.user?.timezone ||
+    (typeof window !== 'undefined' ? (getAuthSession() as any)?.timezone : undefined);
 
   const activeObligations = obligations.filter((o) => o.isActive && !o.isArchived);
   const displayedObligations = filter === 'UPCOMING'
@@ -236,6 +291,7 @@ export default function BillsPage() {
                         setEditingObligation(obligation);
                         setEditModalOpen(true);
                       }}
+                      onToggleActive={handleToggleActive}
                       onArchive={handleArchive}
                     />
                   ) : (
@@ -332,6 +388,7 @@ export default function BillsPage() {
                 if (session) loadData(session.id);
                 setRepayingStatementObligation(null);
               }}
+              userTimezone={userTimezone}
             />
           )}
         </div>
@@ -784,6 +841,7 @@ interface StatementBillRowProps {
   onUndoPaid: (params: { obligationId: string; occurrenceKey?: string }) => Promise<any>;
   onPaidSuccess: () => void;
   onEdit: (obligation: any) => void;
+  onToggleActive?: (id: string, isActive: boolean) => Promise<any>;
   onArchive?: (id: string) => void;
 }
 
@@ -794,6 +852,7 @@ function StatementBillRow({
   onUndoPaid,
   onPaidSuccess,
   onEdit,
+  onToggleActive,
   onArchive,
 }: StatementBillRowProps) {
   const [submitting, setSubmitting] = useState(false);
@@ -839,6 +898,29 @@ function StatementBillRow({
     }
   };
 
+  const handleToggle = async () => {
+    if (!onToggleActive) return;
+    setSubmitting(true);
+    try {
+      const nextActive = !obligation.isActive;
+      const res = await onToggleActive(obligation.id, nextActive);
+      if (res && res.error) throw new Error(res.error);
+      toast({
+        title: nextActive ? 'Reminder Resumed' : 'Reminder Paused',
+        description: `Statement bill reminder "${obligation.title}" is now ${nextActive ? 'active' : 'paused'}.`,
+      });
+      onPaidSuccess();
+    } catch (err: any) {
+      toast({
+        title: 'Error toggling reminder',
+        description: err?.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-blue-200 bg-white hover:border-blue-400 transition-colors gap-3">
       <div className="flex items-start gap-3.5 min-w-0">
@@ -866,6 +948,11 @@ function StatementBillRow({
                 statementStatus === 'PARTIAL' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'
               }`}>
                 {statementStatus}
+              </span>
+            )}
+            {!obligation.isActive && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide uppercase bg-gray-100 text-gray-600">
+                Paused
               </span>
             )}
           </div>
@@ -911,6 +998,19 @@ function StatementBillRow({
             <Pencil className="h-4 w-4" />
           </Button>
 
+          {onToggleActive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={submitting}
+              onClick={handleToggle}
+              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+              title={obligation.isActive ? 'Pause reminder' : 'Resume reminder'}
+            >
+              {obligation.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </Button>
+          )}
+
           {obligation.lastCompletedAt && (
             <Button
               variant="ghost"
@@ -933,6 +1033,19 @@ function StatementBillRow({
             <ArrowRightLeft className="h-3.5 w-3.5" />
             <span>Pay Statement</span>
           </Button>
+
+          {onArchive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={submitting}
+              onClick={() => onArchive(obligation.id)}
+              className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC]"
+              title="Archive statement bill"
+            >
+              <Archive className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -945,6 +1058,7 @@ interface StatementRepaymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  userTimezone?: string;
 }
 
 function StatementRepaymentModal({
@@ -953,6 +1067,7 @@ function StatementRepaymentModal({
   open,
   onOpenChange,
   onSuccess,
+  userTimezone,
 }: StatementRepaymentModalProps) {
   const { toast } = useToast();
   const cardAccountId = obligation?.creditCardStatement?.accountId || obligation?.account?.id || obligation?.accountId;
@@ -963,6 +1078,7 @@ function StatementRepaymentModal({
     (acc) => acc.type !== 'CREDIT_CARD' && acc.id !== cardAccountId
   );
 
+  const tz = userTimezone || obligation?.user?.timezone;
   const pendingAmount = obligation?.amount != null ? String(obligation.amount) : '0';
   const [paymentAmount, setPaymentAmount] = useState(pendingAmount);
   const [fromAccountId, setFromAccountId] = useState(
@@ -970,9 +1086,10 @@ function StatementRepaymentModal({
       ? cardAccount.defaultPaymentAccountId
       : (eligiblePaymentAccounts[0]?.id || '')
   );
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().substring(0, 10));
+  const [paymentDate, setPaymentDate] = useState(() => getInitialPaymentDate(tz));
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => generateRepaymentIdempotencyKey());
 
   useEffect(() => {
     if (obligation && open) {
@@ -984,10 +1101,11 @@ function StatementRepaymentModal({
       const defaultId = foundCard?.defaultPaymentAccountId;
       const validDefault = defaultId && eligiblePaymentAccounts.some((a) => a.id === defaultId);
       setFromAccountId(validDefault ? defaultId : (eligiblePaymentAccounts[0]?.id || ''));
-      setPaymentDate(new Date().toISOString().substring(0, 10));
+      setPaymentDate(getInitialPaymentDate(tz));
       setNote('');
+      setIdempotencyKey(generateRepaymentIdempotencyKey());
     }
-  }, [obligation, accounts, open]);
+  }, [obligation, accounts, open, tz]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1029,8 +1147,9 @@ function StatementRepaymentModal({
         statementId,
         fromAccountId,
         amount: numAmount,
-        paidAt: paymentDate ? new Date(paymentDate) : new Date(),
+        paidAt: paymentDate ? toPaymentDateIso(paymentDate, tz) : new Date().toISOString(),
         note: note.trim() || undefined,
+        idempotencyKey,
       });
 
       if (res && res.error) {
@@ -1049,6 +1168,7 @@ function StatementRepaymentModal({
         description: err?.message || 'Could not record credit card payment.',
         variant: 'destructive',
       });
+      // SOL-R004-003: Preserve idempotencyKey across retries so network retries deduplicate atomically
     } finally {
       setSubmitting(false);
     }

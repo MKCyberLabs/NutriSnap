@@ -351,6 +351,7 @@ export async function getLoans(
     where,
     orderBy: { createdAt: 'desc' },
     include: {
+      user: { select: { timezone: true } },
       paymentAccount: { select: { id: true, name: true } },
       obligation: { select: { id: true, title: true, nextDueAt: true } },
       payments: {
@@ -387,6 +388,7 @@ export async function getLoans(
     productName: l.productName,
     merchant: l.merchant,
     obligation: l.obligation,
+    user: l.user ? { timezone: l.user.timezone } : null,
     status: l.status,
     notes: stripOptOutTag(l.notes),
     paymentsCount: l.payments.length,
@@ -417,6 +419,7 @@ export async function getLoanById(
   const loan = await db.loan.findUnique({
     where: { id: loanId },
     include: {
+      user: { select: { timezone: true } },
       paymentAccount: { select: { id: true, name: true } },
       obligation: { select: { id: true, title: true, nextDueAt: true } },
       payments: {
@@ -456,6 +459,7 @@ export async function getLoanById(
     productName: loan.productName,
     merchant: loan.merchant,
     obligation: loan.obligation,
+    user: loan.user ? { timezone: loan.user.timezone } : null,
     status: loan.status,
     notes: stripOptOutTag(loan.notes),
     payments: loan.payments.map((p: any) => ({
@@ -1637,11 +1641,20 @@ export async function revertEmiPayment(
       }
     }
 
-    // For records without recoverable scheduled identity, do NOT silently substitute payment date:
-    // restore dueDate from linked occurrence, or use explicit revertToDate, or preserve existing loan schedule.
-    const restoredNextEmiDate = input.revertToDate
-      ? new Date(input.revertToDate)
-      : (scheduledDateFromPayment ?? currentLoan.nextEmiDate);
+    // For records without recoverable scheduled identity, do NOT silently substitute payment date or retain advanced schedule:
+    // restore dueDate from linked occurrence, or use explicit revertToDate, or reject if unlinked and no revertToDate (SOL-R002-006).
+    let restoredNextEmiDate: Date;
+    if (input.revertToDate) {
+      const parsedRevertDate = new Date(input.revertToDate);
+      if (isNaN(parsedRevertDate.getTime())) {
+        throw new Error('Invalid revertToDate');
+      }
+      restoredNextEmiDate = parsedRevertDate;
+    } else if (scheduledDateFromPayment) {
+      restoredNextEmiDate = scheduledDateFromPayment;
+    } else {
+      throw new Error('Explicit revertToDate required to reverse legacy unlinked payment');
+    }
 
     const restoredStatus = currentLoan.status === 'CLOSED' ? 'ACTIVE' : currentLoan.status;
 

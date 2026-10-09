@@ -89,7 +89,7 @@ export function LoanForm({
   userTimezone,
   timezone,
 }: LoanFormProps) {
-  const configuredTimezone = userTimezone || timezone || loan?.userTimezone || loan?.timezone;
+  const configuredTimezone = userTimezone || timezone || loan?.user?.timezone || loan?.userTimezone || loan?.timezone;
   const isEdit = Boolean(loan);
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;

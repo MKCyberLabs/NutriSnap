@@ -2723,15 +2723,28 @@ test('V2-R004-WORKER-B: Repair test suite for SOL-R001-011, SOL-R002-006, SOL-R0
       data: { nextEmiDate: scheduleAnchor }
     });
 
+    // SOL-R002-006: Reversing unlinked legacy payment without revertToDate is rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanId: legLoanId,
+          paymentId: unlinkedPay.id,
+        }, db);
+      },
+      /Explicit revertToDate required to reverse legacy unlinked payment/
+    );
+
+    // Reversing with explicit revertToDate succeeds and restores schedule
     const unlinkedRevert = await loanService.revertEmiPayment(user.id, {
       loanId: legLoanId,
       paymentId: unlinkedPay.id,
+      revertToDate: scheduleAnchor,
     }, db);
     assert.equal(unlinkedRevert.success, true);
     assert.equal(
       unlinkedRevert.restoredNextEmiDate,
       scheduleAnchor.toISOString(),
-      'Must preserve existing loan schedule rather than substituting occurredAt'
+      'Must restore schedule using explicit revertToDate'
     );
 
     // =========================================================================
@@ -2821,6 +2834,267 @@ test('V2-R004-WORKER-B: Repair test suite for SOL-R001-011, SOL-R002-006, SOL-R0
       where: { id: ccObligation.id },
     });
     assert.equal(obAfterAccUpdate?.accountId, ccId, 'Obligation accountId must remain the card account');
+
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('V2-R004-ROUND2-B: Round 2 Worker B Verification Suite (SOL-R004-003, SOL-R001-011, SOL-R002-006, SOL-R004-004, SOL-R004-008)', async (t) => {
+  const db = new PrismaClient();
+  const timestamp = Date.now();
+  const userId = `usr_r004_r2_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `r004_r2_${timestamp}@nutrisnap.app`,
+        name: 'Worker B Round 2 User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const bankA = await financeService.createAccount(user.id, {
+      name: 'Primary Bank A',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankAId = bankA.account.id;
+
+    const wallet = await financeService.createAccount(user.id, {
+      name: 'Paytm Wallet',
+      type: 'WALLET',
+      openingBalance: '15000.00',
+    }, db);
+
+    const cc1 = await financeService.createAccount(user.id, {
+      name: 'HDFC Regalia CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '150000.00',
+      openingBalance: '0.00',
+      statementDay: 1,
+      paymentDueDay: 20,
+      defaultPaymentAccountId: bankAId,
+    }, db);
+
+    const cc2 = await financeService.createAccount(user.id, {
+      name: 'ICICI Amazon Pay CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '100000.00',
+      openingBalance: '0.00',
+      statementDay: 5,
+      paymentDueDay: 25,
+    }, db);
+
+    // =========================================================================
+    // 1. SOL-R001-011: getLoans and getLoanById expose user.timezone
+    // =========================================================================
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Kiritimati Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'Pacific Bank',
+      openingOutstanding: '30000.00',
+      emiAmount: '3000.00',
+      nextEmiDate: '2026-11-15',
+      dueDay: 15,
+      paymentAccountId: bankAId,
+    }, db);
+    assert.equal(loanRes.success, true);
+    const loanId = loanRes.loan.id;
+
+    // getLoans read model must include user.timezone
+    const allLoans = await loanService.getLoans(user.id, {}, db);
+    const fetchedLoan = allLoans.find((l: any) => l.id === loanId);
+    assert.ok(fetchedLoan, 'Loan must be in getLoans response');
+    assert.ok(fetchedLoan.user, 'Loan read model must have user');
+    assert.equal(fetchedLoan.user.timezone, 'Pacific/Kiritimati', 'getLoans must expose user.timezone');
+
+    // getLoanById read model must include user.timezone
+    const singleLoan = await loanService.getLoanById(user.id, loanId, db);
+    assert.ok(singleLoan.user, 'Single loan read model must have user');
+    assert.equal(singleLoan.user.timezone, 'Pacific/Kiritimati', 'getLoanById must expose user.timezone');
+
+    // Test LoanForm date formatting helper in extreme timezone
+    const { formatCalendarDate } = await import('../../components/finance/LoanForm');
+    // Nov 15 12:00 in Kiritimati (+14) is Nov 14 22:00 UTC.
+    // If formatted with timezone 'Pacific/Kiritimati', it must be '2026-11-15'
+    const kiriIso = '2026-11-14T22:00:00.000Z';
+    const formattedDate = formatCalendarDate(kiriIso, 'Pacific/Kiritimati');
+    assert.equal(formattedDate, '2026-11-15', 'Calendar date must be 2026-11-15 in Pacific/Kiritimati');
+
+    // =========================================================================
+    // 2. SOL-R002-006: Legacy Unlinked EMI Reversal Requires Explicit Date
+    // =========================================================================
+    // Create an unlinked legacy payment (no note tags, no obligationOccurrenceId)
+    const unlinkedPayment = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('3000.00'),
+        principalPaid: new Prisma.Decimal('3000.00'),
+        occurredAt: new Date('2026-11-15T12:00:00.000Z'),
+        accountId: bankAId,
+        obligationOccurrenceId: null,
+        note: null,
+      }
+    });
+
+    // Reversal without revertToDate must be rejected with exact error message
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanId,
+          paymentId: unlinkedPayment.id,
+        }, db);
+      },
+      /Explicit revertToDate required to reverse legacy unlinked payment/
+    );
+
+    // Reversal with invalid revertToDate must be rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanId,
+          paymentId: unlinkedPayment.id,
+          revertToDate: 'invalid-date-string',
+        }, db);
+      },
+      /Invalid revertToDate/
+    );
+
+    // Reversal with valid revertToDate succeeds and sets schedule
+    const explicitDate = new Date('2026-11-15T12:00:00.000Z');
+    const successfulReversal = await loanService.revertEmiPayment(user.id, {
+      loanId,
+      paymentId: unlinkedPayment.id,
+      revertToDate: explicitDate,
+    }, db);
+    assert.equal(successfulReversal.success, true);
+    assert.equal(successfulReversal.alreadyReversed, false);
+    assert.equal(successfulReversal.restoredNextEmiDate, explicitDate.toISOString());
+
+    // =========================================================================
+    // 3. SOL-R004-008: Server-Side Account Type Validation for Statement Repayment
+    // =========================================================================
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: cc1.account.id,
+      periodKey: '2026-11',
+      statementDate: '2026-11-01T12:00:00.000Z',
+      statementAmount: '12000.00',
+      dueDate: '2026-11-20T12:00:00.000Z',
+    }, db);
+    assert.equal(stmtRes.success, true);
+    const stmtId = stmtRes.statement.id;
+
+    // A. Reject paying with cc1 itself (source is same card)
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtId,
+          fromAccountId: cc1.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      /Payment source cannot be a credit card/
+    );
+
+    // B. Reject paying with cc2 (source is another owned credit card)
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtId,
+          fromAccountId: cc2.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      /Payment source cannot be a credit card/
+    );
+
+    // C. Accept paying with BANK or WALLET
+    const walletPayment = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: wallet.account.id,
+      amount: '2000.00',
+      idempotencyKey: `wallet-pay-${timestamp}`,
+    }, db);
+    assert.equal(walletPayment.success, true);
+    assert.equal(walletPayment.statementStatus, 'PARTIAL');
+
+    // =========================================================================
+    // 4. SOL-R004-003: Idempotency Key for Partial Statement Payments
+    // =========================================================================
+    const idempKey = `idem-partial-${timestamp}`;
+    const [p1, p2] = await Promise.all([
+      creditCardService.recordCreditCardPayment(user.id, {
+        statementId: stmtId,
+        fromAccountId: bankAId,
+        amount: '3000.00',
+        idempotencyKey: idempKey,
+      }, db),
+      creditCardService.recordCreditCardPayment(user.id, {
+        statementId: stmtId,
+        fromAccountId: bankAId,
+        amount: '3000.00',
+        idempotencyKey: idempKey,
+      }, db),
+    ]);
+
+    assert.equal(p1.success, true);
+    assert.equal(p2.success, true);
+    const results = [p1, p2];
+    const fresh = results.find(r => !r.alreadyProcessed);
+    const deduped = results.find(r => r.alreadyProcessed);
+    assert.ok(fresh, 'First call must process payment');
+    assert.ok(deduped, 'Second concurrent call with same idempotencyKey must be deduped');
+    assert.equal(deduped.paymentId, fresh.paymentId, 'Both calls must return the same paymentId');
+
+    // Sequential retry with same idempotencyKey must also return alreadyProcessed
+    const p3 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: bankAId,
+      amount: '3000.00',
+      idempotencyKey: idempKey,
+    }, db);
+    assert.equal(p3.success, true);
+    assert.equal(p3.alreadyProcessed, true);
+    assert.equal(p3.paymentId, fresh.paymentId);
+
+    // Verify exactly 1 payment record exists for this idempotency key in DB
+    const ccPayments = await db.creditCardPayment.findMany({
+      where: { statementId: stmtId, note: { contains: idempKey } }
+    });
+    assert.equal(ccPayments.length, 1, 'Only 1 CreditCardPayment must be recorded in DB for idempotency key');
+
+    // =========================================================================
+    // 5. SOL-R004-004: Statement Repayment Timezone Parsing & Avoid UTC Shift
+    // =========================================================================
+    // In UTC-8 (America/Los_Angeles), "2026-11-15" parsed via new Date("2026-11-15").toISOString() is UTC midnight,
+    // which in US local time is 4 PM Nov 14.
+    // With midday anchor (new TZDate(year, month, day, 12, 0, 0, 0, tz).toISOString()),
+    // it remains Nov 15 across both local and UTC timezones!
+    const { TZDate } = await import('@date-fns/tz');
+    const laMidday = new TZDate(2026, 10, 15, 12, 0, 0, 0, 'America/Los_Angeles');
+    assert.equal(laMidday.getFullYear(), 2026);
+    assert.equal(laMidday.getMonth(), 10);
+    assert.equal(laMidday.getDate(), 15);
+    // Even when converted to UTC, Nov 15 12:00 PST is Nov 15 20:00 UTC (still Nov 15!)
+    assert.ok(laMidday.toISOString().includes('2026-11-15'), 'Midday anchor prevents UTC date shift');
+
+    // Verify toggle obligation active/pause works on CC statement obligation
+    const allObs = await financeService.getObligations(user.id, db);
+    const ccOb = allObs.find(o => o.creditCardStatement?.id === stmtId);
+    assert.ok(ccOb, 'CC statement obligation must exist');
+    assert.equal(ccOb.isActive, true);
+
+    const pauseRes = await financeService.toggleObligationActive(user.id, ccOb.id, false, db);
+    assert.equal(pauseRes.success, true);
+    assert.equal(pauseRes.isActive, false);
+
+    const resumeRes = await financeService.toggleObligationActive(user.id, ccOb.id, true, db);
+    assert.equal(resumeRes.success, true);
+    assert.equal(resumeRes.isActive, true);
 
   } finally {
     await db.$disconnect();
