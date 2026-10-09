@@ -1,11 +1,11 @@
 # NutriSnap R004 Round 2 — Worker B Repair Notes
 
-**Assigned Agent:** `agy-rohit`  
-**Working Directory:** `/home/openclaw/Projects/NutriSnap-worker-b`  
-**Branch:** `worker-b/loans-obligations-reminders`  
-**Base SHA:** `7b1a06d2af452a4d8280cc8d59634e12fe75aaac`  
-**Task ID:** `tsk_m4faxzkkg673v`  
-**Dispatch ID:** `dsp_m4fayfdpcrvp0`  
+**Assigned Agent:** `agy-rohit`
+**Working Directory:** `/home/openclaw/Projects/NutriSnap-worker-b`
+**Branch:** `worker-b/loans-obligations-reminders`
+**Base SHA:** `7b1a06d2af452a4d8280cc8d59634e12fe75aaac`
+**Task ID:** `tsk_m4faxzkkg673v`
+**Dispatch ID:** `dsp_m4fayfdpcrvp0`
 
 ---
 
@@ -28,7 +28,7 @@ Worker A files (`finance-service.ts`, `scheduler.ts`, `debt-service.ts`, `Obliga
 ### 1. [P1] SOL-R004-003: Idempotency Key for Partial Statement Payments
 - **File:** `src/app/finance/bills/page.tsx`
 - **Defect:** `StatementRepaymentModal` submitted payments to `recordCreditCardPayment` without `idempotencyKey`. The backend service only deduplicated partial payments when `idempotencyKey` was provided.
-- **Repair:** 
+- **Repair:**
   - Added persistent `idempotencyKey` state generated via `generateRepaymentIdempotencyKey()` (`crypto.randomUUID()` or timestamp fallback).
   - Preserved `idempotencyKey` during submission errors/retries in `StatementRepaymentModal` so retried network calls atomically deduplicate without double debits.
   - Reset `idempotencyKey` when opening modal or on successful repayment.

@@ -478,13 +478,13 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(new Decimal(pay3.pendingBalance).toString(), '0');
     assert.equal(pay3.fullyPaid, true);
 
-    // Obligation occurrence created with transactionId = null (Finding 3)
+    // Completion links the final transfer so Bills Undo targets the correct payment.
     const occ = await db.obligationOccurrence.findFirst({
       where: { obligationId: linkedOb.id }
     });
     assert.ok(occ);
     assert.equal(occ.status, 'COMPLETED');
-    assert.equal(occ.transactionId, null);
+    assert.equal(occ.transactionId, pay3.transactionId);
 
     // Obligation deactivated on full payoff
     const obAfterFull = await db.obligation.findUnique({ where: { id: linkedOb.id } });
@@ -3298,4 +3298,287 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     await db.financialAccount.deleteMany({ where: { userId: userUtc.id } });
     await db.user.delete({ where: { id: userUtc.id } });
   });
+
+  await t.test('SOL-R001-007: Adjacent historical date-only payments at 00:30 in UTC+14 stay distinct', async () => {
+    await db.user.update({ where: { id: userAId }, data: { timezone: 'Pacific/Kiritimati' } });
+    try {
+      const ob = await db.obligation.create({ data: {
+        userId: userAId, title: 'Daily midnight regression', kind: 'BILL',
+        amount: new Decimal(100), accountId: bankA.id,
+        dueAt: new Date('2026-01-13T10:30:00Z'),
+        nextDueAt: new Date('2026-01-19T10:30:00Z'), recurrenceType: 'DAILY',
+      } });
+      const pay = (key: string) => financeService.markObligationPaid(userAId, {
+        obligationId: ob.id, occurrenceKey: key, createExpense: true, accountId: bankA.id,
+      }, db);
+      const jan14 = await pay('2026-01-14');
+      const jan15 = await pay('2026-01-15');
+      assert.equal(jan14.alreadyCompleted, false);
+      assert.equal(jan15.alreadyCompleted, false);
+      assert.notEqual(jan15.occurrenceId, jan14.occurrenceId);
+      for (const key of ['2026-01-14T10:30', '2026-01-15T00:30']) {
+        const retry = await pay(key);
+        assert.equal(retry.alreadyCompleted, true);
+        assert.equal(retry.occurrenceId, jan15.occurrenceId);
+        assert.equal(retry.transactionId, jan15.transactionId);
+      }
+      assert.equal(await db.obligationOccurrence.count({ where: { obligationId: ob.id } }), 2);
+      assert.equal(await db.financialTransaction.count({ where: { obligationId: ob.id } }), 2);
+      const earlier = await db.obligationOccurrence.findUniqueOrThrow({ where: { id: jan14.occurrenceId! } });
+      assert.equal(earlier.dueDate.toISOString(), '2026-01-13T10:30:00.000Z');
+      assert.equal(financeService.matchesOccurrence(earlier, '2026-01-14T10:30', 'Pacific/Kiritimati'), false);
+      await assert.rejects(financeService.revertObligationPayment(userAId, {
+        obligationId: ob.id, occurrenceKey: '2026-01-14',
+      }, db), /earlier occurrence/);
+      const undo = await financeService.revertObligationPayment(userAId, {
+        obligationId: ob.id, occurrenceKey: '2026-01-14T10:30',
+      }, db);
+      assert.equal(undo.revertedOccurrenceId, jan15.occurrenceId);
+      assert.ok(await db.obligationOccurrence.findUnique({ where: { id: jan14.occurrenceId! } }));
+    } finally {
+      await db.user.update({ where: { id: userAId }, data: { timezone: 'Asia/Kolkata' } });
+    }
+  });
+
+  await t.test('SOL-R004-018: Date-only card Paid creates one completion and Undo allows repayment', async () => {
+    const createdStatement = (await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardA.id, periodKey: '2027-01',
+      statementDate: new Date('2027-01-01T12:00:00Z'),
+      dueDate: new Date('2027-01-15T12:00:00Z'), statementAmount: 5000,
+    }, db)).statement;
+    const statement = await db.creditCardStatement.findUniqueOrThrow({ where: { id: createdStatement.id } });
+    const pay = () => financeService.markObligationPaid(userAId, {
+      obligationId: statement.obligationId!, occurrenceKey: '2027-01-15', accountId: bankA.id,
+    }, db);
+    const first = await pay();
+    const occurrences = await db.obligationOccurrence.findMany({ where: { obligationId: statement.obligationId! } });
+    assert.equal(occurrences.length, 1);
+    assert.equal(occurrences[0].id, first.occurrenceId);
+    assert.equal(occurrences[0].transactionId, first.transactionId);
+    // Historical timestamp completions were unlinked; the duplicate date-only row held the transfer.
+    await db.obligationOccurrence.update({ where: { id: occurrences[0].id }, data: { transactionId: null } });
+    const legacy = await db.obligationOccurrence.create({ data: {
+      userId: userAId, obligationId: statement.obligationId!, occurrenceKey: '2027-01-15',
+      dueDate: new Date(statement.dueDate), status: 'COMPLETED',
+      paidAt: new Date(occurrences[0].paidAt.getTime() + 1), transactionId: first.transactionId,
+    } });
+    const undo = await financeService.revertObligationPayment(userAId, {
+      obligationId: statement.obligationId!, occurrenceId: legacy.id,
+    }, db);
+    assert.equal(undo.alreadyReversed, false);
+    assert.equal(await db.obligationOccurrence.count({ where: { obligationId: statement.obligationId! } }), 0);
+    assert.equal(await db.creditCardPayment.count({ where: { statementId: statement.id } }), 0);
+    assert.equal(await db.financialTransaction.findUnique({ where: { id: first.transactionId! } }), null);
+    const reopened = await db.creditCardStatement.findUniqueOrThrow({ where: { id: statement.id } });
+    assert.equal(reopened.status, 'OPEN');
+    const second = await pay();
+    assert.equal(second.alreadyCompleted, false);
+    assert.notEqual(second.transactionId, first.transactionId);
+    assert.equal(await db.obligationOccurrence.count({ where: { obligationId: statement.obligationId! } }), 1);
+  });
+
+  await t.test('SOL-R004-017: EMI recorded from Loans is linked and Bills Undo reverses principal and schedule', async () => {
+    const dueDate = new Date('2027-02-15T10:00:00Z');
+    const loan = (await loanService.createLoan(userAId, {
+      name: 'Loans to Bills regression', loanType: 'PERSONAL', lender: 'Test Bank',
+      openingOutstanding: 10000, emiAmount: 2500, paymentAccountId: bankA.id,
+      nextEmiDate: dueDate, createLinkedObligation: true, emiGeneratesExpense: true,
+    }, db)).loan;
+    const res = await loanService.recordEmiPayment(userAId, {
+      loanId: loan.id, accountId: bankA.id, amount: 2500, principalPaid: 2000,
+      interestPaid: 500, occurredAt: new Date('2027-02-14T10:00:00Z'),
+    }, db);
+    const payment = await db.loanPayment.findUniqueOrThrow({ where: { id: res.paymentId } });
+    assert.ok(payment.obligationOccurrenceId);
+    const occurrence = await db.obligationOccurrence.findUniqueOrThrow({ where: { id: payment.obligationOccurrenceId } });
+    assert.equal(occurrence.obligationId, loan.obligationId);
+    assert.equal(occurrence.dueDate.toISOString(), dueDate.toISOString());
+    assert.equal(occurrence.paidAt!.toISOString(), payment.occurredAt.toISOString());
+    assert.equal(occurrence.transactionId, res.transactionId);
+    assert.equal(occurrence.status, 'COMPLETED');
+    const paidLoan = await db.loan.findUniqueOrThrow({ where: { id: loan.id } });
+    assert.equal(paidLoan.outstandingPrincipal.toString(), '8000');
+    assert.ok(paidLoan.nextEmiDate!.getTime() > dueDate.getTime());
+    const undo = await financeService.revertObligationPayment(userAId, { obligationId: loan.obligationId! }, db);
+    assert.equal(undo.alreadyReversed, false);
+    assert.equal(undo.loanReversed, true);
+    const restored = await db.loan.findUniqueOrThrow({ where: { id: loan.id } });
+    assert.equal(restored.outstandingPrincipal.toString(), '10000');
+    assert.equal(restored.nextEmiDate!.toISOString(), dueDate.toISOString());
+    const restoredOb = await db.obligation.findUniqueOrThrow({ where: { id: loan.obligationId! } });
+    assert.equal(restoredOb.nextDueAt.toISOString(), dueDate.toISOString());
+    assert.equal(restoredOb.lastCompletedAt, null);
+    assert.equal(await db.loanPayment.findUnique({ where: { id: payment.id } }), null);
+    assert.equal(await db.financialTransaction.findUnique({ where: { id: res.transactionId! } }), null);
+    assert.equal(await db.obligationOccurrence.findUnique({ where: { id: occurrence.id } }), null);
+    assert.equal((await financeService.revertObligationPayment(userAId, { obligationId: loan.obligationId! }, db)).alreadyReversed, true);
+  });
+
+});
+
+
+test('SOL-R001-007 unit: Scheduled instant controls local date-only and UTC/local timestamp aliases', () => {
+  const dueDate = new Date('2026-01-14T10:30:00Z');
+  const previous = { occurrenceKey: '2026-01-14', dueDate: new Date('2026-01-13T10:30:00Z') };
+  const current = { occurrenceKey: '2026-01-15', dueDate };
+  for (const hostTimezone of ['UTC', 'America/Los_Angeles', 'Asia/Kolkata']) {
+    const originalTimezone = process.env.TZ;
+    process.env.TZ = hostTimezone;
+    try {
+      for (const key of ['2026-01-15', '2026-01-15T00:30', '2026-01-14T10:30', '2026-01-14T10:30:00Z']) {
+        assert.equal(financeService.matchesOccurrence(previous, key, 'Pacific/Kiritimati'), false, `${hostTimezone}: ${key}`);
+        assert.equal(financeService.matchesOccurrence(current, key, 'Pacific/Kiritimati'), true, `${hostTimezone}: ${key}`);
+      }
+      assert.equal(financeService.matchesOccurrence(current, '2026-01-14', 'Pacific/Kiritimati'), false);
+      assert.equal(financeService.matchesOccurrence(current, '2026-01-15T01:30', 'Pacific/Kiritimati'), false);
+      assert.equal(financeService.matchesOccurrence(previous, '2026-01-14', 'Pacific/Kiritimati', dueDate), false);
+    } finally {
+      if (originalTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTimezone;
+    }
+  }
+});
+
+test('SOL-R004-018 unit: Card Paid and Undo share one completion and allow a second payment', async () => {
+  const dueDate = new Date('2026-01-15T12:00:00Z');
+  const ob: any = { id: 'card-ob', userId: 'user', title: 'Card bill', amount: new Decimal(5000),
+    dueAt: dueDate, nextDueAt: dueDate, accountId: 'card', recurrenceType: 'ONCE' };
+  const statement: any = { id: 'statement', userId: 'user', accountId: 'card', periodKey: '2026-01',
+    dueDate, statementAmount: new Decimal(5000), status: 'OPEN', account: { name: 'Test card' } };
+  let occurrences: any[] = [];
+  let payments: any[] = [];
+  let transactions: any[] = [];
+  let sequence = 0;
+  const db: any = {
+    user: { findUnique: async () => ({ timezone: 'UTC' }) },
+    financialAccount: { findUnique: async () => ({ id: 'bank', userId: 'user', type: 'BANK', isActive: true }) },
+    obligation: {
+      findUnique: async () => ({ ...ob, creditCardStatements: [statement], occurrences: [...occurrences] }),
+      update: async ({ data }: any) => Object.assign(ob, data),
+    },
+    obligationOccurrence: {
+      findMany: async () => [...occurrences],
+      findFirst: async () => occurrences[0] || null,
+      upsert: async ({ where, create, update }: any) => {
+        const prior = occurrences.find(o => o.occurrenceKey === where.obligationId_occurrenceKey.occurrenceKey);
+        if (prior) return Object.assign(prior, update);
+        const occurrence = { ...create, id: `occ-${++sequence}` };
+        occurrences.push(occurrence);
+        return occurrence;
+      },
+      deleteMany: async ({ where }: any) => {
+        assert.equal(where.obligationId, ob.id);
+        assert.equal(where.dueDate.getTime(), dueDate.getTime());
+        occurrences = occurrences.filter(o => o.dueDate.getTime() !== where.dueDate.getTime());
+      },
+    },
+    creditCardStatement: {
+      findUnique: async () => ({ ...statement, obligation: ob, payments: [...payments] }),
+      findMany: async () => [],
+      update: async ({ data }: any) => Object.assign(statement, data),
+    },
+    creditCardPayment: {
+      create: async ({ data }: any) => { const p = { ...data, id: `pay-${++sequence}` }; payments.push(p); return p; },
+      findUnique: async ({ where }: any) => payments.find(p => p.id === where.id) || null,
+      findFirst: async ({ where }: any) => payments.find(p => p.transactionId === where.transactionId) || null,
+      findMany: async () => [...payments],
+      delete: async ({ where }: any) => { payments = payments.filter(p => p.id !== where.id); },
+    },
+    financialTransaction: {
+      create: async ({ data }: any) => { const tx = { ...data, id: `tx-${++sequence}` }; transactions.push(tx); return tx; },
+      delete: async ({ where }: any) => { transactions = transactions.filter(tx => tx.id !== where.id); },
+    },
+    reminderDelivery: { updateMany: async () => ({ count: 0 }) },
+    $transaction: async (fn: any) => fn(db),
+  };
+  const pay = () => financeService.markObligationPaid('user', {
+    obligationId: ob.id, occurrenceKey: '2026-01-15', accountId: 'bank',
+  }, db);
+  const first = await pay();
+  assert.equal(first.alreadyCompleted, false);
+  assert.equal(occurrences.length, 1);
+  assert.equal(occurrences[0].id, first.occurrenceId);
+  assert.equal(occurrences[0].transactionId, first.transactionId);
+  assert.equal(transactions[0].type, 'TRANSFER');
+  assert.equal((await pay()).alreadyCompleted, true);
+  assert.equal(payments.length, 1);
+  occurrences.push({ ...occurrences[0], id: 'legacy', occurrenceKey: '2026-01-15', transactionId: null });
+  const undo = await financeService.revertObligationPayment('user', { obligationId: ob.id }, db);
+  assert.equal(undo.alreadyReversed, false);
+  assert.equal(occurrences.length, 0);
+  assert.equal(payments.length, 0);
+  assert.equal(transactions.length, 0);
+  assert.equal(statement.status, 'OPEN');
+  assert.equal(ob.lastCompletedAt, null);
+  assert.equal(ob.isActive, true);
+  const second = await pay();
+  assert.equal(second.alreadyCompleted, false);
+  assert.notEqual(second.transactionId, first.transactionId);
+  assert.equal(occurrences.length, 1);
+  assert.equal(payments.length, 1);
+});
+
+test('SOL-R004-017 unit: A Loans EMI can be reversed from Bills using its scheduled completion', async () => {
+  const dueDate = new Date('2026-01-15T12:00:00Z');
+  const paidAt = new Date('2026-01-14T12:00:00Z');
+  const loan: any = { id: 'loan', userId: 'user', name: 'Test loan', status: 'ACTIVE',
+    obligationId: 'loan-ob', outstandingPrincipal: new Decimal(10000), nextEmiDate: dueDate,
+    dueDay: 15, emiGeneratesExpense: true };
+  const ob: any = { id: 'loan-ob', userId: 'user', nextDueAt: dueDate, dueAt: dueDate, isActive: true };
+  let occurrence: any = null;
+  let payment: any = null;
+  let transaction: any = null;
+  const db: any = {
+    user: { findUnique: async () => ({ timezone: 'UTC' }) },
+    financialAccount: { findUnique: async () => ({ userId: 'user', isActive: true }) },
+    loan: {
+      findUnique: async () => ({ ...loan, payments: payment ? [payment] : [] }),
+      update: async ({ data }: any) => Object.assign(loan, data),
+    },
+    obligation: {
+      findUnique: async () => ({ ...ob, loan: { ...loan }, occurrences: occurrence ? [{ ...occurrence }] : [] }),
+      update: async ({ data }: any) => Object.assign(ob, data),
+    },
+    obligationOccurrence: {
+      create: async ({ data }: any) => { assert.equal(occurrence, null); occurrence = { ...data, id: 'emi-occ' }; return occurrence; },
+      findMany: async () => occurrence ? [{ ...occurrence }] : [],
+      findFirst: async () => occurrence,
+      deleteMany: async () => { occurrence = null; },
+    },
+    loanPayment: {
+      create: async ({ data }: any) => { payment = { ...data, id: 'emi-pay' }; return payment; },
+      findUnique: async ({ where }: any) => payment && (where.id === payment.id || where.obligationOccurrenceId === payment.obligationOccurrenceId)
+        ? { ...payment, loan: { ...loan } } : null,
+      delete: async () => { payment = null; },
+    },
+    financialTransaction: {
+      create: async ({ data }: any) => { transaction = { ...data, id: 'emi-tx' }; return transaction; },
+      delete: async () => { transaction = null; },
+    },
+    reminderDelivery: { updateMany: async () => ({ count: 0 }), deleteMany: async () => ({ count: 0 }) },
+    $transaction: async (fn: any) => fn(db),
+  };
+  await loanService.recordEmiPayment('user', {
+    loanId: loan.id, accountId: 'bank', amount: 2500, principalPaid: 2000, interestPaid: 500, occurredAt: paidAt,
+  }, db);
+  assert.equal(loan.outstandingPrincipal.toString(), '8000');
+  assert.ok(occurrence, 'Recording from Loans must create a scheduled completion');
+  assert.equal(payment.obligationOccurrenceId, occurrence.id);
+  assert.equal(occurrence.obligationId, ob.id);
+  assert.equal(occurrence.transactionId, transaction.id);
+  assert.equal(occurrence.dueDate.getTime(), dueDate.getTime());
+  assert.equal(occurrence.paidAt.getTime(), paidAt.getTime());
+  assert.equal(occurrence.status, 'COMPLETED');
+  assert.ok(ob.nextDueAt.getTime() > dueDate.getTime());
+  const undo = await financeService.revertObligationPayment('user', { obligationId: ob.id }, db);
+  assert.equal(undo.alreadyReversed, false);
+  assert.equal(undo.loanReversed, true);
+  assert.equal(loan.outstandingPrincipal.toString(), '10000');
+  assert.equal(loan.nextEmiDate.getTime(), dueDate.getTime());
+  assert.equal(ob.nextDueAt.getTime(), dueDate.getTime());
+  assert.equal(ob.lastCompletedAt, null);
+  assert.equal(payment, null);
+  assert.equal(transaction, null);
+  assert.equal(occurrence, null);
+  assert.equal((await financeService.revertObligationPayment('user', { obligationId: ob.id }, db)).alreadyReversed, true);
 });

@@ -793,6 +793,23 @@ export async function recordEmiPayment(
       createdTxId = expenseTx.id;
     }
 
+    // Loans and Bills share the same scheduled completion, created with the payment atomically.
+    let obligationOccurrenceId = parsed.obligationOccurrenceId || null;
+    if (!obligationOccurrenceId && currentLoan.obligationId && currentLoan.nextEmiDate) {
+      const occurrence = await tx.obligationOccurrence.create({
+        data: {
+          userId,
+          obligationId: currentLoan.obligationId,
+          occurrenceKey: getOccurrenceKey(currentLoan.nextEmiDate, userTimezone),
+          dueDate: currentLoan.nextEmiDate,
+          status: 'COMPLETED',
+          paidAt: occurredAtDate,
+          transactionId: createdTxId,
+        }
+      });
+      obligationOccurrenceId = occurrence.id;
+    }
+
     // Create authoritative LoanPayment
     const payment = await tx.loanPayment.create({
       data: {
@@ -805,7 +822,7 @@ export async function recordEmiPayment(
         occurredAt: occurredAtDate,
         accountId: parsed.accountId,
         transactionId: createdTxId,
-        obligationOccurrenceId: parsed.obligationOccurrenceId || null,
+        obligationOccurrenceId,
         note: noteWithTags,
       }
     });
@@ -1667,8 +1684,21 @@ export async function revertEmiPayment(
       }
     });
 
+    // Direct Loans Undo must remove the shared completion too, so Bills can be paid again.
+    if (currentPayment.obligationOccurrenceId) {
+      await tx.obligationOccurrence.deleteMany({ where: { id: currentPayment.obligationOccurrenceId } });
+    }
+
     if (currentLoan.obligationId) {
+      const previousCompletion = await tx.obligationOccurrence.findFirst({
+        where: {
+          obligationId: currentLoan.obligationId,
+          status: { in: ['COMPLETED', 'COMPLETED_HISTORICAL'] },
+        },
+        orderBy: { dueDate: 'desc' },
+      });
       const obUpdateData: any = {
+        lastCompletedAt: previousCompletion?.paidAt || null,
         isActive: true,
         isArchived: false,
       };

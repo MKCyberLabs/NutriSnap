@@ -221,7 +221,7 @@ export async function createCreditCardStatement(
  * - Creates a TRANSFER transaction from fromAccountId to creditCard account
  * - Reduces statement pending balance: statementAmount - sum(payments)
  * - If pending > 0: status = PARTIAL, syncs remaining amount into Obligation.amount
- * - If pending == 0: status = PAID, marks obligation occurrence COMPLETED (transactionId = null), advances nextDueAt
+ * - If pending == 0: status = PAID, marks obligation occurrence COMPLETED linked to the transfer, advances nextDueAt
  * - Strictly does NOT create Income or Expense
  */
 export async function recordCreditCardPayment(
@@ -279,6 +279,14 @@ export async function recordCreditCardPayment(
       throw new Error('Source account cannot be the credit card being paid');
     }
 
+    const findCompletionId = async () => {
+      if (!statement.obligation) return null;
+      const completion = await tx.obligationOccurrence.findFirst({
+        where: { obligationId: statement.obligation.id, dueDate: statement.dueDate, status: 'COMPLETED' },
+      });
+      return completion?.id || null;
+    };
+
     // 3. Re-check idempotency key inside transaction under lock
     if (parsed.idempotencyKey) {
       const keyTag = `[idempotency:${parsed.idempotencyKey}]`;
@@ -294,6 +302,7 @@ export async function recordCreditCardPayment(
         return {
           alreadyProcessed: true,
           payment: existingPayment,
+          occurrenceId: await findCompletionId(),
           transferTx: { id: existingPayment.transactionId },
           newStatus: statement.status,
           pendingAfter: pending.lt(0) ? new Decimal(0) : pending,
@@ -315,6 +324,7 @@ export async function recordCreditCardPayment(
       return {
         alreadyProcessed: true,
         payment: latestPayment,
+        occurrenceId: await findCompletionId(),
         transferTx: latestPayment?.transactionId ? { id: latestPayment.transactionId } : null,
         newStatus: statement.status,
         pendingAfter: new Decimal(0),
@@ -370,11 +380,13 @@ export async function recordCreditCardPayment(
       data: { status: newStatus }
     });
 
+    let occurrence: { id: string } | null = null;
+
     // 8. Update linked Obligation
     if (statement.obligation) {
       const ob = statement.obligation;
       if (isFullyPaid) {
-        // Record occurrence completion with transactionId = null (Finding 3)
+        // Link the canonical completion to the payment transfer for precise Bills Undo.
         const user = await tx.user.findUnique({
           where: { id: userId },
           select: { timezone: true }
@@ -382,7 +394,7 @@ export async function recordCreditCardPayment(
         const tz = user?.timezone || 'UTC';
         const occurrenceKey = getOccurrenceKey(statement.dueDate, tz);
 
-        await tx.obligationOccurrence.upsert({
+        occurrence = await tx.obligationOccurrence.upsert({
           where: {
             obligationId_occurrenceKey: {
               obligationId: ob.id,
@@ -392,7 +404,7 @@ export async function recordCreditCardPayment(
           update: {
             status: 'COMPLETED',
             paidAt: paidAtDate,
-            transactionId: null,
+            transactionId: transferTx.id,
           },
           create: {
             userId,
@@ -401,7 +413,7 @@ export async function recordCreditCardPayment(
             dueDate: statement.dueDate,
             status: 'COMPLETED',
             paidAt: paidAtDate,
-            transactionId: null,
+            transactionId: transferTx.id,
           }
         });
 
@@ -443,6 +455,7 @@ export async function recordCreditCardPayment(
     return {
       payment,
       transferTx,
+      occurrenceId: occurrence?.id || null,
       newStatus,
       pendingAfter,
       isFullyPaid,
@@ -458,6 +471,7 @@ export async function recordCreditCardPayment(
     success: true,
     alreadyProcessed: Boolean(result.alreadyProcessed),
     paymentId: result.payment?.id || null,
+    occurrenceId: result.occurrenceId || null,
     transactionId: result.transferTx?.id || null,
     statementStatus: result.newStatus,
     pendingBalance: result.pendingAfter.toString(),
@@ -623,6 +637,11 @@ export async function revertCreditCardPayment(
         }
       });
 
+      // Remove every alias for this statement instant while preserving other cycles.
+      await tx.obligationOccurrence.deleteMany({
+        where: { obligationId: ob.id, dueDate: statement.dueDate },
+      });
+
       if (otherStatementsSharing.length > 0) {
         const newOb = await tx.obligation.create({
           data: {
@@ -647,27 +666,13 @@ export async function revertCreditCardPayment(
         });
         ob = newOb;
       } else {
-        const user = await tx.user.findUnique({
-          where: { id: userId },
-          select: { timezone: true }
-        });
-        const tz = user?.timezone || 'UTC';
-        const occurrenceKey = getOccurrenceKey(statement.dueDate, tz);
-
-        // If occurrence was completed, delete or remove completion
-        await tx.obligationOccurrence.deleteMany({
-          where: {
-            obligationId: ob.id,
-            occurrenceKey,
-          }
-        });
-
         // Restore nextDueAt and amount and reactivate obligation
         await tx.obligation.update({
           where: { id: ob.id },
           data: {
             amount: restoredPending,
             nextDueAt: statement.dueDate,
+            lastCompletedAt: null,
             isActive: true,
             isArchived: false,
           }

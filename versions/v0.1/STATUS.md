@@ -1,6 +1,11 @@
-# NutriSnap v0.1 — Status / Resume Point
+Status: **FOCUSED_REPAIR_COMPLETE — INDEPENDENT_REVIEW_PENDING**
 
-Status: **V0.1 IMPLEMENTATION & VERIFICATION COMPLETE — REVIEW C PASSED; PR READY**
+Current repair branch: `orchestration/finance-r004-autoloop`, starting HEAD `dbf1fa1f948a2010489d67878c34860c081fe2c1`.
+
+SOL-R001-007, SOL-R004-016, SOL-R004-018, and SOL-R004-017 are repaired with database and unit regression coverage. Typecheck, build, all 99 finance suite tests, and all 148 full local gate tests pass against isolated PostgreSQL (`localhost:5433`).
+
+
+The earlier v0.1 release status was **IMPLEMENTATION & VERIFICATION COMPLETE — REVIEW C PASSED; PR READY**; the historical checkpoint below does not certify these new repairs.
 
 Target branch: `feature/v0.1-health-wealth`
 
@@ -8,7 +13,7 @@ Planning base inherited from: `957a303c6e3f59993ec2cdcb6616b37a84d8774c`
 
 GitHub execution issue: **#131**
 
-## Current phase
+## Prior v0.1 integration phase (historical)
 
 `Phase 13 — PR Ready for Owner Review`
 

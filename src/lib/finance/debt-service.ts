@@ -107,7 +107,7 @@ export async function createDebt(
           accountId: parsed.accountId,
           personalDebtId: debt.id,
           occurredAt: startedAtDate,
-          note: parsed.notes || defaultNote,
+          note: `${parsed.notes || defaultNote} [initialPrincipal:true]`,
         }
       });
       initialTxId = createdTx.id;
@@ -593,7 +593,7 @@ export async function recordAdditionalLend(
   }
 
   const occurredAtDate = parsed.occurredAt ? new Date(parsed.occurredAt) : new Date();
-  const txNote = parsed.note || `Additional lend to ${debt.counterpartyName}`;
+  const txNote = `Additional lend to ${debt.counterpartyName}${parsed.note ? `: ${parsed.note}` : ''}`;
 
   const executeInTransaction = async (tx: any) => {
     const createdTx = await tx.financialTransaction.create({
@@ -673,7 +673,7 @@ export async function recordAdditionalBorrow(
   }
 
   const occurredAtDate = parsed.occurredAt ? new Date(parsed.occurredAt) : new Date();
-  const txNote = parsed.note || `Additional borrow from ${debt.counterpartyName}`;
+  const txNote = `Additional borrow from ${debt.counterpartyName}${parsed.note ? `: ${parsed.note}` : ''}`;
 
   const executeInTransaction = async (tx: any) => {
     const createdTx = await tx.financialTransaction.create({

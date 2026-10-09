@@ -3,7 +3,7 @@ import test from 'node:test';
 import { Prisma, PrismaClient } from '../../../prisma/generated/client';
 import * as debtService from './debt-service';
 import * as financeService from './finance-service';
-import { calculateMonthlyTotals } from './finance';
+import { calculateMonthlyTotals, calculateDebtOutstanding } from './finance';
 
 const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
 
@@ -622,5 +622,68 @@ test('V2-200: Personal Debt (Friends & Family) Test Suite (V2-T020..V2-T030)', a
     );
   } finally {
     await db.$disconnect();
+  }
+});
+
+
+test('SOL-R004-016: Snapshot and posted debt retain opening principal after additional movements', async (t) => {
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const user = await db.user.create({ data: {
+    email: `opening-debt-${Date.now()}@test.local`, name: 'Opening Debt Regression',
+    password: 'test-password', timezone: 'UTC',
+  } });
+  t.after(async () => {
+    await db.financialTransaction.deleteMany({ where: { userId: user.id } });
+    await db.personalDebt.deleteMany({ where: { userId: user.id } });
+    await db.financialAccount.deleteMany({ where: { userId: user.id } });
+    await db.user.delete({ where: { id: user.id } });
+    await db.$disconnect();
+  });
+  const account = (await financeService.createAccount(user.id, {
+    name: 'Debt Regression Bank', type: 'BANK', openingBalance: 50000,
+  }, db)).account;
+  for (const direction of ['RECEIVABLE', 'PAYABLE'] as const) {
+    for (const posted of [false, true]) {
+      const created = await debtService.createDebt(user.id, {
+        direction, counterpartyName: 'Test friend', originalAmount: 5000,
+        ...(posted ? { accountId: account.id } : {}),
+      }, db);
+      if (posted) {
+        const initial = await db.financialTransaction.findUniqueOrThrow({ where: { id: created.debt.initialTransactionId! } });
+        assert.ok(initial.note?.includes('[initialPrincipal:true]'));
+      }
+      const additional = direction === 'RECEIVABLE' ? debtService.recordAdditionalLend : debtService.recordAdditionalBorrow;
+      const repay = direction === 'RECEIVABLE' ? debtService.recordDebtCollection : debtService.recordDebtRepayment;
+      const added = await additional(user.id, { debtId: created.debt.id, accountId: account.id, amount: 1000 }, db);
+      assert.equal(added.newOutstanding, '6000', `${direction}, posted=${posted}`);
+      const paid = await repay(user.id, { debtId: created.debt.id, accountId: account.id, amount: 2000 }, db);
+      assert.equal(paid.remainingOutstanding, '4000');
+      const reloaded = await debtService.getDebts(user.id, {}, db);
+      assert.equal(reloaded.find((d: { id: string; outstandingAmount: string }) => d.id === created.debt.id)!.outstandingAmount, '4000');
+      const equalOpening = await additional(user.id, {
+        debtId: created.debt.id, accountId: account.id, amount: 5000, note: 'Second advance',
+      }, db);
+      assert.equal(equalOpening.newOutstanding, '9000');
+    }
+  }
+});
+
+
+test('SOL-R004-016 unit: Opening debt is counted exactly once for snapshots, tagged and legacy ledger entries', () => {
+  for (const direction of ['RECEIVABLE', 'PAYABLE']) {
+    const principalType = direction === 'RECEIVABLE' ? 'LEND' : 'BORROW';
+    const paymentType = direction === 'RECEIVABLE' ? 'DEBT_COLLECT' : 'DEBT_REPAY';
+    const additional = { type: principalType, amount: '1000', note: 'Additional movement' };
+    const repayment = { type: paymentType, amount: '2000' };
+    for (const initial of [[], [{ type: principalType, amount: '5000', note: 'Opening [initialPrincipal:true]' }],
+      [{ type: principalType, amount: '5000', note: 'Legacy opening' }]]) {
+      assert.equal(calculateDebtOutstanding(direction, '5000', [...initial, additional]).toString(), '6000');
+      assert.equal(calculateDebtOutstanding(direction, '5000', [...initial, additional, repayment]).toString(), '4000');
+    }
+    assert.equal(calculateDebtOutstanding(direction, '5000', [{ type: paymentType, amount: '5000' }]).toString(), '0');
+    // An additional advance equal to the snapshot opening is still an additional advance.
+    assert.equal(calculateDebtOutstanding(direction, '5000', [{ type: principalType, amount: '5000', note: 'Additional advance' }]).toString(), '10000');
+    // Repayments equal to the opening must not be misclassified as posted principal.
+    assert.equal(calculateDebtOutstanding(direction, '5000', [additional, { type: paymentType, amount: '5000' }]).toString(), '1000');
   }
 });

@@ -329,7 +329,7 @@ export function formatINR(amount: Prisma.Decimal | number | string): string {
  * Computes outstanding balance for a PersonalDebt.
  * For RECEIVABLE: sum(LEND) - sum(DEBT_COLLECT)
  * For PAYABLE:    sum(BORROW) - sum(DEBT_REPAY)
- * If no ledger transaction exists (e.g. untracked initial cash), base is originalAmount.
+ * Opening principal is added unless an initial LEND/BORROW already posted it.
  * Invariant: Outstanding must never be negative.
  */
 export function calculateDebtOutstanding(
@@ -338,33 +338,36 @@ export function calculateDebtOutstanding(
   transactions: Array<{
     type: string;
     amount: Prisma.Decimal | number | string;
+    note?: string | null;
   }>
 ): Prisma.Decimal {
   const orig = new Prisma.Decimal(originalAmount);
   let lendsOrBorrows = new Prisma.Decimal(0);
   let collectsOrRepays = new Prisma.Decimal(0);
-  let hasLedgerMovement = false;
+  const principalType = direction === 'RECEIVABLE' ? 'LEND' : 'BORROW';
+  const hasInitialPosted = transactions.some(t => t.type === principalType && (
+    t.note?.includes('[initialPrincipal:true]') ||
+    (new Prisma.Decimal(t.amount).equals(orig) && !t.note?.startsWith('Additional'))
+  ));
 
   for (const t of transactions) {
     const amt = new Prisma.Decimal(t.amount);
     if (direction === 'RECEIVABLE') {
       if (t.type === 'LEND') {
         lendsOrBorrows = lendsOrBorrows.plus(amt);
-        hasLedgerMovement = true;
       } else if (t.type === 'DEBT_COLLECT') {
         collectsOrRepays = collectsOrRepays.plus(amt);
       }
     } else if (direction === 'PAYABLE') {
       if (t.type === 'BORROW') {
         lendsOrBorrows = lendsOrBorrows.plus(amt);
-        hasLedgerMovement = true;
       } else if (t.type === 'DEBT_REPAY') {
         collectsOrRepays = collectsOrRepays.plus(amt);
       }
     }
   }
 
-  const totalPrincipal = hasLedgerMovement ? lendsOrBorrows : orig;
+  const totalPrincipal = hasInitialPosted ? lendsOrBorrows : orig.plus(lendsOrBorrows);
   const outstanding = totalPrincipal.minus(collectsOrRepays);
 
   return outstanding.greaterThan(0) ? outstanding : new Prisma.Decimal(0);

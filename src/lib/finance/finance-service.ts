@@ -1488,58 +1488,27 @@ export async function archiveObligation(
 export function matchesOccurrence(
   occ: { occurrenceKey?: string | null; dueDate?: Date | null },
   reqKey: string,
-  tz: string = 'UTC'
+  tz: string = 'UTC',
+  occurrenceScheduledDate?: Date
 ): boolean {
   if (!reqKey || !occ) return false;
+  const key = reqKey.trim();
+  if (!occ.dueDate) return occ.occurrenceKey === key;
+  const dueTime = occ.dueDate.getTime();
+  if (Number.isNaN(dueTime)) return false;
+  // A legacy alias cannot override the authoritative scheduled instant.
+  if (occurrenceScheduledDate && dueTime !== occurrenceScheduledDate.getTime()) return false;
 
-  // 1. Exact key match
-  if (occ.occurrenceKey === reqKey) return true;
-
-  // 2. Exact instant match if reqKey contains 'T' and dueDate is valid
-  const occTime = occ.dueDate ? new Date(occ.dueDate).getTime() : NaN;
-  if (reqKey.includes('T') && !isNaN(occTime)) {
-    const reqDate = new Date(reqKey);
-    if (!isNaN(reqDate.getTime()) && reqDate.getTime() === occTime) {
-      return true;
-    }
-    const reqUtcDate = new Date(reqKey.endsWith('Z') ? reqKey : reqKey + 'Z');
-    if (!isNaN(reqUtcDate.getTime()) && reqUtcDate.getTime() === occTime) {
-      return true;
-    }
+  const localKey = getOccurrenceKey(occ.dueDate, tz);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+    return key === localKey.slice(0, 10);
   }
-
-  // 3. Timezone-aware local and UTC key matches against occ.dueDate
-  if (occ.dueDate && !isNaN(occTime)) {
-    const occLocalKey = getOccurrenceKey(occ.dueDate, tz);
-    const occUtcKey = getOccurrenceKey(occ.dueDate, 'UTC');
-    if (reqKey === occLocalKey || reqKey === occUtcKey) {
-      return true;
-    }
-
-    // 4. Date-only request match against occ's local calendar date in tz
-    const occLocalDate = occLocalKey.substring(0, 10);
-    const trimmedReq = reqKey.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedReq)) {
-      if (trimmedReq === occLocalDate) {
-        return true;
-      }
-    }
+  // Offset-free timestamp keys are local or UTC schedule representations,
+  // never dates parsed in the host timezone. Both must agree with dueDate.
+  if (key === localKey || key === getOccurrenceKey(occ.dueDate, 'UTC')) return true;
+  if (/(Z|[+-]\d{2}:\d{2})$/.test(key)) {
+    return new Date(key).getTime() === dueTime;
   }
-
-  // 5. If occ.occurrenceKey was stored as date-only (e.g. '2026-10-10') and reqKey is timestamp
-  const trimmedOccKey = (occ.occurrenceKey || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedOccKey)) {
-    if (reqKey.includes('T')) {
-      const reqDate = new Date(reqKey);
-      if (!isNaN(reqDate.getTime())) {
-        const reqLocalDate = getOccurrenceKey(reqDate, tz).substring(0, 10);
-        if (trimmedOccKey === reqLocalDate) {
-          return true;
-        }
-      }
-    }
-  }
-
   return false;
 }
 
@@ -1661,10 +1630,6 @@ export async function markObligationPaid(
 
   const isCurrentOccurrence = (() => {
     if (occurrenceKey === canonicalActiveKey || occurrenceKey === utcKey) return true;
-    if (occurrenceKey.includes('T')) {
-      const d = new Date(occurrenceKey);
-      return !isNaN(d.getTime()) && d.getTime() === obligation.nextDueAt.getTime();
-    }
     return occurrenceKey.trim() === localDate;
   })();
 
@@ -1735,7 +1700,6 @@ export async function markObligationPaid(
   const scheduledUtcIso = occurrenceScheduledDate.toISOString().slice(0, 16);
   const scheduledUserTzKey = getOccurrenceKey(occurrenceScheduledDate, tz);
   const scheduledUserTzDate = scheduledUserTzKey.slice(0, 10);
-  const scheduledUtcDate = scheduledUtcIso.slice(0, 10);
 
   const candidateKeys = isCurrentOccurrence
     ? Array.from(new Set([
@@ -1751,7 +1715,6 @@ export async function markObligationPaid(
         scheduledUtcIso,
         scheduledUserTzKey,
         scheduledUserTzDate,
-        ...(scheduledUtcDate !== scheduledUserTzDate ? [scheduledUtcDate] : []),
       ]));
 
   // 4. Early check if occurrence is already completed (fast idempotency check)
@@ -1768,7 +1731,7 @@ export async function markObligationPaid(
     });
 
     for (const occ of pastCompletions) {
-      if (matchesOccurrence(occ, occurrenceKey, tz) || candidateKeys.includes(occ.occurrenceKey)) {
+      if (matchesOccurrence(occ, occurrenceKey, tz, occurrenceScheduledDate)) {
         existingCompletion = occ;
         break;
       }
@@ -1781,6 +1744,7 @@ export async function markObligationPaid(
         where: {
           obligationId,
           occurrenceKey: { in: candidateKeys },
+          dueDate: occurrenceScheduledDate,
           status: { in: ['COMPLETED', 'COMPLETED_HISTORICAL'] },
         },
         include: { transaction: true }
@@ -1796,9 +1760,14 @@ export async function markObligationPaid(
           },
           include: { transaction: true }
         });
-        if (existingCompletion) break;
+        if (existingCompletion && matchesOccurrence(existingCompletion, occurrenceKey, tz, occurrenceScheduledDate)) break;
+        existingCompletion = null;
       }
     }
+  }
+
+  if (existingCompletion && !matchesOccurrence(existingCompletion, occurrenceKey, tz, occurrenceScheduledDate)) {
+    existingCompletion = null;
   }
 
   if (existingCompletion) {
@@ -1891,39 +1860,13 @@ export async function markObligationPaid(
       note: `Paid: ${obligation.title}`,
     }, db);
 
-    // SOL-R002-001: Store created paymentId/transactionId on ObligationOccurrence for statement-linked obligations
-    let occurrenceRecordId: string | null = null;
-    if (typeof db.obligationOccurrence?.upsert === 'function') {
-      const occ = await db.obligationOccurrence.upsert({
-        where: {
-          obligationId_occurrenceKey: {
-            obligationId: obligation.id,
-            occurrenceKey: canonicalKey,
-          }
-        },
-        update: {
-          status: 'COMPLETED',
-          paidAt: new Date(),
-          transactionId: ccRes.transactionId || null,
-        },
-        create: {
-          userId,
-          obligationId: obligation.id,
-          occurrenceKey: canonicalKey,
-          dueDate: obligation.nextDueAt,
-          status: 'COMPLETED',
-          paidAt: new Date(),
-          transactionId: ccRes.transactionId || null,
-        }
-      });
-      occurrenceRecordId = occ.id;
-    }
+    // The card service owns the single canonical completion inside its payment transaction.
 
     return {
       success: true,
       alreadyCompleted: Boolean(ccRes.alreadyProcessed),
       alreadyProcessed: Boolean(ccRes.alreadyProcessed),
-      occurrenceId: occurrenceRecordId,
+      occurrenceId: ccRes.occurrenceId,
       transactionId: ccRes.transactionId,
       nextDueAt: obligation.nextDueAt.toISOString(),
       statementStatus: ccRes.statementStatus,
@@ -1984,7 +1927,7 @@ export async function markObligationPaid(
       });
 
       const lockedMatch = lockedPastCompletions.find((occ: any) =>
-        matchesOccurrence(occ, occurrenceKey, tz) || candidateKeys.includes(occ.occurrenceKey)
+        matchesOccurrence(occ, occurrenceKey, tz, occurrenceScheduledDate)
       );
       if (lockedMatch) {
         return {
@@ -2092,10 +2035,6 @@ export async function markObligationPaid(
     const lockLocalDate = lockActiveKey.substring(0, 10);
     const isCurrentUnderLock = (() => {
       if (occurrenceKey === lockActiveKey || occurrenceKey === lockUtcKey) return true;
-      if (occurrenceKey.includes('T')) {
-        const d = new Date(occurrenceKey);
-        return !isNaN(d.getTime()) && d.getTime() === currentObligation.nextDueAt.getTime();
-      }
       return occurrenceKey.trim() === lockLocalDate;
     })();
 
@@ -2339,7 +2278,9 @@ export async function revertObligationPayment(
 
   // SOL-R002-001: Statement-linked obligation reversal
   if (obligation.creditCardStatements && obligation.creditCardStatements.length > 0) {
-    const ccStmt = obligation.creditCardStatements[0];
+    const ccStmt = obligation.creditCardStatements.find((s: any) =>
+      targetOccurrence && s.dueDate.getTime() === targetOccurrence.dueDate.getTime()
+    ) || obligation.creditCardStatements[0];
 
     // If no target occurrence is found, it was already reversed on a previous Undo call
     if (!targetOccurrence) {
@@ -2370,7 +2311,7 @@ export async function revertObligationPayment(
     // If still no payment found, the payment was already reversed
     if (!targetPayment) {
       await db.obligationOccurrence.deleteMany({
-        where: { id: targetOccurrence.id },
+        where: { obligationId: obligation.id, dueDate: ccStmt.dueDate },
       });
       return {
         success: true,
@@ -2385,10 +2326,7 @@ export async function revertObligationPayment(
     // Call revertCreditCardPayment with SPECIFIC paymentId
     const ccRes = await revertCreditCardPayment(userId, { paymentId: targetPayment.id, statementId: ccStmt.id }, db);
 
-    // Clean up occurrence record
-    await db.obligationOccurrence.deleteMany({
-      where: { id: targetOccurrence.id },
-    });
+    // The card reversal transaction removes all aliases for this statement dueDate.
 
     return {
       success: true,
