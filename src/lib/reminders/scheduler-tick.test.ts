@@ -1021,3 +1021,307 @@ test('SOL-R003-004: Delivery completion update matches claimedAttemptCount and l
   assert.equal(updatedAttemptCounts[0], 1, 'Completion update matched claimedAttemptCount = 1');
   assert.equal(updatedLastAttemptAts[0], now, 'Completion update matched lastAttemptAt = now');
 });
+
+test('SOL-R005-002: Expired delivery leases enforce MAX_DELIVERY_ATTEMPTS across obligation, debt, and loan branches', async () => {
+  const now = new Date('2026-10-15T09:00:00.000Z');
+  const expiredLastAttempt = new Date(now.getTime() - 10 * 60 * 1000); // 10 mins ago (> 5m LEASE_TIMEOUT_MS)
+
+  const updatedDeliveries: any[] = [];
+  const mockBot = createMockBot();
+
+  // Test 1: Obligation with expired lease at attemptCount = 3 (MAX_DELIVERY_ATTEMPTS)
+  const mockDbExhaustedOb = {
+    reminder: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: {
+      findMany: async () => [
+        {
+          id: 'ob-exhausted',
+          userId: 'usr-ex-ob',
+          title: 'Exhausted Obligation',
+          kind: 'BILL',
+          amount: new Prisma.Decimal('1000.00'),
+          nextDueAt: now,
+          reminderOffsetsMin: [0],
+          isActive: true,
+          isArchived: false,
+          user: { id: 'usr-ex-ob', telegramId: 'tg-ex-ob', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => ({
+        id: 'del-ex-ob',
+        status: 'SENDING',
+        attemptCount: 3,
+        lastAttemptAt: expiredLastAttempt,
+      }),
+      update: async (args: any) => {
+        updatedDeliveries.push(args);
+        return { id: args.where.id, ...args.data };
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'ob-exhausted' }],
+      obligation: {
+        findUnique: async () => ({
+          id: 'ob-exhausted',
+          nextDueAt: now,
+          isActive: true,
+          isArchived: false,
+        }),
+      },
+      reminder: { findFirst: async () => ({ id: 'rem-ex-ob' }) },
+      reminderDelivery: {
+        findFirst: async () => ({
+          id: 'del-ex-ob',
+          status: 'SENDING',
+          attemptCount: 3,
+          lastAttemptAt: expiredLastAttempt,
+        }),
+        update: async (args: any) => {
+          updatedDeliveries.push(args);
+          return { id: args.where.id, ...args.data };
+        },
+      },
+    }),
+    personalDebt: { findMany: async () => [] },
+    loan: { findMany: async () => [] },
+  };
+
+  const resOb = await processSchedulerTick({
+    prismaClient: mockDbExhaustedOb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  // Verify obligation expired lease at max attempts is marked FAILED and NOT resent
+  assert.equal(resOb.wealthRemindersSent, 0, 'No reminder sent for exhausted obligation');
+  assert.equal(mockBot.sentMessages.length, 0);
+  const obFinalizeUpdate = updatedDeliveries.find((u) => u.where.id === 'del-ex-ob');
+  assert.ok(obFinalizeUpdate, 'Update must be called on expired delivery');
+  assert.equal(obFinalizeUpdate.data.status, 'FAILED', 'Must finalize status as FAILED');
+  assert.equal(obFinalizeUpdate.data.attemptCount, undefined, 'Must NOT increment attemptCount');
+
+  // Test 2: Debt with expired lease at attemptCount = 3 (MAX_DELIVERY_ATTEMPTS)
+  updatedDeliveries.length = 0;
+  mockBot.sentMessages.length = 0;
+
+  const mockDbExhaustedDebt = {
+    reminder: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    personalDebt: {
+      findMany: async () => [
+        {
+          id: 'debt-exhausted',
+          userId: 'usr-ex-debt',
+          personName: 'Ravi',
+          direction: 'RECEIVABLE',
+          originalAmount: new Prisma.Decimal('5000.00'),
+          dueAt: now,
+          reminderOffsetsMin: [0],
+          status: 'OPEN',
+          transactions: [],
+          user: { id: 'usr-ex-debt', telegramId: 'tg-ex-debt', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => null,
+      update: async (args: any) => {
+        updatedDeliveries.push(args);
+        return { id: args.where.id, ...args.data };
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'debt-exhausted' }],
+      personalDebt: {
+        findUnique: async () => ({
+          id: 'debt-exhausted',
+          direction: 'RECEIVABLE',
+          originalAmount: new Prisma.Decimal('5000.00'),
+          dueAt: now,
+          status: 'OPEN',
+          transactions: [],
+        }),
+      },
+      reminder: { findFirst: async () => ({ id: 'rem-ex-debt' }) },
+      reminderDelivery: {
+        findFirst: async () => ({
+          id: 'del-ex-debt',
+          status: 'SENDING',
+          attemptCount: 3,
+          lastAttemptAt: expiredLastAttempt,
+        }),
+        update: async (args: any) => {
+          updatedDeliveries.push(args);
+          return { id: args.where.id, ...args.data };
+        },
+      },
+    }),
+    loan: { findMany: async () => [] },
+  };
+
+  const resDebt = await processSchedulerTick({
+    prismaClient: mockDbExhaustedDebt as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(resDebt.wealthRemindersSent, 0, 'No reminder sent for exhausted debt');
+  assert.equal(mockBot.sentMessages.length, 0);
+  const debtFinalizeUpdate = updatedDeliveries.find((u) => u.where.id === 'del-ex-debt');
+  assert.ok(debtFinalizeUpdate);
+  assert.equal(debtFinalizeUpdate.data.status, 'FAILED');
+  assert.equal(debtFinalizeUpdate.data.attemptCount, undefined);
+
+  // Test 3: Loan with expired lease at attemptCount = 3 (MAX_DELIVERY_ATTEMPTS)
+  updatedDeliveries.length = 0;
+  mockBot.sentMessages.length = 0;
+
+  const mockDbExhaustedLoan = {
+    reminder: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    personalDebt: { findMany: async () => [] },
+    loan: {
+      findMany: async () => [
+        {
+          id: 'loan-exhausted',
+          userId: 'usr-ex-loan',
+          name: 'Personal Loan',
+          lender: 'SBI',
+          emiAmount: new Prisma.Decimal('10000.00'),
+          nextEmiDate: now,
+          obligationId: null,
+          reminderOffsetsMin: [0],
+          status: 'ACTIVE',
+          user: { id: 'usr-ex-loan', telegramId: 'tg-ex-loan', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => null,
+      update: async (args: any) => {
+        updatedDeliveries.push(args);
+        return { id: args.where.id, ...args.data };
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'loan-exhausted' }],
+      loan: {
+        findUnique: async () => ({
+          id: 'loan-exhausted',
+          nextEmiDate: now,
+          status: 'ACTIVE',
+        }),
+      },
+      reminder: { findFirst: async () => ({ id: 'rem-ex-loan' }) },
+      reminderDelivery: {
+        findFirst: async () => ({
+          id: 'del-ex-loan',
+          status: 'SENDING',
+          attemptCount: 3,
+          lastAttemptAt: expiredLastAttempt,
+        }),
+        update: async (args: any) => {
+          updatedDeliveries.push(args);
+          return { id: args.where.id, ...args.data };
+        },
+      },
+    }),
+  };
+
+  const resLoan = await processSchedulerTick({
+    prismaClient: mockDbExhaustedLoan as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(resLoan.wealthRemindersSent, 0, 'No reminder sent for exhausted loan');
+  assert.equal(mockBot.sentMessages.length, 0);
+  const loanFinalizeUpdate = updatedDeliveries.find((u) => u.where.id === 'del-ex-loan');
+  assert.ok(loanFinalizeUpdate);
+  assert.equal(loanFinalizeUpdate.data.status, 'FAILED');
+  assert.equal(loanFinalizeUpdate.data.attemptCount, undefined);
+
+  // Test 4: Expired lease with attemptCount = 2 (< MAX_DELIVERY_ATTEMPTS) IS renewed as attempt 3 and sent
+  updatedDeliveries.length = 0;
+  mockBot.sentMessages.length = 0;
+
+  const mockDbRenewableOb = {
+    reminder: { findMany: async () => [] },
+    userHydrationSetting: { findMany: async () => [] },
+    obligation: {
+      findMany: async () => [
+        {
+          id: 'ob-renewable',
+          userId: 'usr-ren-ob',
+          title: 'Renewable Obligation',
+          kind: 'BILL',
+          amount: new Prisma.Decimal('2000.00'),
+          nextDueAt: now,
+          reminderOffsetsMin: [0],
+          isActive: true,
+          isArchived: false,
+          user: { id: 'usr-ren-ob', telegramId: 'tg-ren-ob', timezone: 'UTC' },
+        },
+      ],
+    },
+    reminderDelivery: {
+      findFirst: async () => ({
+        id: 'del-ren-ob',
+        status: 'SENDING',
+        attemptCount: 2,
+        lastAttemptAt: expiredLastAttempt,
+      }),
+      update: async (args: any) => {
+        updatedDeliveries.push(args);
+        return { id: args.where.id, ...args.data };
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+    $transaction: async (fn: any) => fn({
+      $queryRaw: async () => [{ id: 'ob-renewable' }],
+      obligation: {
+        findUnique: async () => ({
+          id: 'ob-renewable',
+          nextDueAt: now,
+          isActive: true,
+          isArchived: false,
+        }),
+      },
+      reminder: { findFirst: async () => ({ id: 'rem-ren-ob' }) },
+      reminderDelivery: {
+        findFirst: async () => ({
+          id: 'del-ren-ob',
+          status: 'SENDING',
+          attemptCount: 2,
+          lastAttemptAt: expiredLastAttempt,
+        }),
+        update: async (args: any) => {
+          updatedDeliveries.push(args);
+          return { id: args.where.id, ...args.data };
+        },
+      },
+    }),
+    personalDebt: { findMany: async () => [] },
+    loan: { findMany: async () => [] },
+  };
+
+  const resRenew = await processSchedulerTick({
+    prismaClient: mockDbRenewableOb as any,
+    botClient: mockBot,
+    now,
+  });
+
+  assert.equal(resRenew.wealthRemindersSent, 1, 'Renewed reminder is sent');
+  assert.equal(mockBot.sentMessages.length, 1);
+  const renewUpdate = updatedDeliveries.find((u) => u.where.id === 'del-ren-ob' && u.data.status === 'SENDING');
+  assert.ok(renewUpdate);
+  assert.equal(renewUpdate.data.attemptCount, 3, 'attemptCount incremented to 3');
+});

@@ -1526,6 +1526,29 @@ export interface RevertEmiPaymentInput {
   revertToDate?: Date | string;
 }
 
+function getPaymentScheduledDate(payment: {
+  note?: string | null;
+  occurredAt: Date | string;
+  obligationOccurrence?: { dueDate?: Date | string | null } | null;
+}): Date {
+  if (payment.note) {
+    const match = payment.note.match(/\[scheduledDate:([^\]]+)\]/);
+    if (match && match[1]) {
+      const parsedDate = new Date(match[1]);
+      if (!isNaN(parsedDate.getTime())) {
+        return parsedDate;
+      }
+    }
+  }
+  if (payment.obligationOccurrence?.dueDate) {
+    const d = new Date(payment.obligationOccurrence.dueDate);
+    if (!isNaN(d.getTime())) {
+      return d;
+    }
+  }
+  return new Date(payment.occurredAt);
+}
+
 /**
  * Reverts an EMI payment atomically (V2-651 / Architecture Section 11):
  * - Removes the specific LoanPayment record
@@ -1557,11 +1580,19 @@ export async function revertEmiPayment(
   } else if (input.loanId) {
     const payments = await db.loanPayment.findMany({
       where: { loanId: input.loanId, userId },
-      orderBy: { occurredAt: 'desc' },
-      take: 1,
-      include: { loan: true, transaction: true }
+      include: { loan: true, transaction: true, obligationOccurrence: true }
     });
-    payment = payments[0] || null;
+    if (payments.length > 0) {
+      payments.sort((a: any, b: any) => {
+        const schedA = getPaymentScheduledDate(a).getTime();
+        const schedB = getPaymentScheduledDate(b).getTime();
+        if (schedB !== schedA) return schedB - schedA;
+        return new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
+      });
+      payment = payments[0];
+    } else {
+      payment = null;
+    }
   }
 
   if (!payment) {
@@ -1602,7 +1633,8 @@ export async function revertEmiPayment(
     }
 
     const currentPayment = await tx.loanPayment.findUnique({
-      where: { id: payment.id }
+      where: { id: payment.id },
+      include: { obligationOccurrence: true }
     });
 
     if (!currentPayment) {
@@ -1613,6 +1645,30 @@ export async function revertEmiPayment(
         restoredNextEmiDate: currentLoan.nextEmiDate,
         restoredStatus: currentLoan.status,
       };
+    }
+
+    // SOL-R005-001: Enforce latest-only completion reversal rule under loan lock
+    const allLoanPayments = typeof tx.loanPayment?.findMany === 'function'
+      ? await tx.loanPayment.findMany({
+          where: { loanId: currentLoan.id },
+          include: { obligationOccurrence: true }
+        })
+      : [currentPayment];
+
+    const targetPaymentDate = new Date(currentPayment.occurredAt).getTime();
+    const targetScheduledDate = getPaymentScheduledDate(currentPayment).getTime();
+
+    const hasLaterCompletedPayment = allLoanPayments.some((p: any) => {
+      if (p.id === currentPayment.id) return false;
+      const pPaymentDate = new Date(p.occurredAt).getTime();
+      const pScheduledDate = getPaymentScheduledDate(p).getTime();
+      return pPaymentDate > targetPaymentDate || pScheduledDate > targetScheduledDate;
+    });
+
+    if (hasLaterCompletedPayment) {
+      throw new Error(
+        'Cannot revert an earlier payment while a later payment remains completed. Please revert payments in reverse chronological order.'
+      );
     }
 
     // 1. Delete linked FinancialTransaction if one was created

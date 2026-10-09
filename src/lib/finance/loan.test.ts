@@ -2067,13 +2067,26 @@ test('V2-R001-ROUND2-B: Loan occurrence validation, reversal locking, reopen syn
     assert.equal(pay2.success, true);
     assert.equal(pay2.remainingPrincipal, '90000');
 
-    // Run concurrent reversals
-    const [rev1, rev2] = await Promise.all([
-      loanService.revertEmiPayment(userA.id, { loanPaymentId: pay1.paymentId }, db),
+    // SOL-R005-001: Attempting to revert earlier pay1 while later pay2 remains completed is rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(userA.id, { loanPaymentId: pay1.paymentId }, db);
+      },
+      /Cannot revert an earlier payment while a later payment remains completed/
+    );
+
+    // Concurrent duplicate reversals on pay2 serialize under row lock idempotently
+    const [rev2a, rev2b] = await Promise.all([
+      loanService.revertEmiPayment(userA.id, { loanPaymentId: pay2.paymentId }, db),
       loanService.revertEmiPayment(userA.id, { loanPaymentId: pay2.paymentId }, db),
     ]);
+    assert.equal(rev2a.success, true);
+    assert.equal(rev2b.success, true);
+    assert.ok(rev2a.alreadyReversed || rev2b.alreadyReversed, 'One concurrent call should report alreadyReversed');
+
+    // Now that later payment pay2 is reverted, pay1 can be cleanly reverted
+    const rev1 = await loanService.revertEmiPayment(userA.id, { loanPaymentId: pay1.paymentId }, db);
     assert.equal(rev1.success, true);
-    assert.equal(rev2.success, true);
 
     // Fetch the final loan state from DB
     const finalRevLoan = await db.loan.findUnique({ where: { id: revLoanId } });
@@ -3841,6 +3854,125 @@ test('V2-R004-ROUND5-B: CreditCardDialog Payer Accounts Memoization & Selection 
       await db.user.deleteMany({ where: { id: userId } });
     } catch (cleanupErr) {
       console.warn('V2-R004-ROUND5-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});
+
+test('SOL-R005-001: Direct EMI reversal enforces latest-only completion order and fallback selects latest scheduled installment', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test',
+  });
+
+  const timestamp = Date.now();
+  const userId = `usr_emi_latest_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `emilatest_${timestamp}@test.local`,
+        name: 'EMI Latest User',
+        password: 'password123',
+        timezone: 'UTC',
+      }
+    });
+
+    const bank = await db.financialAccount.create({
+      data: {
+        userId: user.id,
+        name: 'EMI Bank',
+        type: 'BANK',
+        openingBalance: new Prisma.Decimal(200000),
+      }
+    });
+
+    // Create loan starting 2026-01-15
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Latest Order Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: '60000.00',
+      emiAmount: '10000.00',
+      nextEmiDate: '2026-01-15T12:00:00.000Z',
+      dueDay: 15,
+      paymentAccountId: bank.id,
+      createLinkedObligation: false,
+    }, db);
+
+    const loanId = loanRes.loan.id;
+
+    // Record installment 1 (Jan 15)
+    const pay1 = await loanService.recordEmiPayment(user.id, {
+      loanId,
+      amount: '10000.00',
+      principalPaid: '5000.00',
+      interestPaid: '5000.00',
+      accountId: bank.id,
+    }, db);
+    assert.equal(pay1.success, true);
+
+    // Verify nextEmiDate advanced to Feb 15
+    const loanAfterPay1 = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(loanAfterPay1?.nextEmiDate?.toISOString(), '2026-02-15T12:00:00.000Z');
+
+    // Record installment 2 (Feb 15)
+    const pay2 = await loanService.recordEmiPayment(user.id, {
+      loanId,
+      amount: '10000.00',
+      principalPaid: '5000.00',
+      interestPaid: '5000.00',
+      accountId: bank.id,
+    }, db);
+    assert.equal(pay2.success, true);
+
+    // Verify nextEmiDate advanced to Mar 15
+    const loanAfterPay2 = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(loanAfterPay2?.nextEmiDate?.toISOString(), '2026-03-15T12:00:00.000Z');
+
+    // 1. Direct reversal of earlier installment pay1 (Jan) while pay2 (Feb) remains completed must be REJECTED
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, { loanPaymentId: pay1.paymentId }, db);
+      },
+      /Cannot revert an earlier payment while a later payment remains completed/,
+      'Must reject reversing Jan installment while Feb installment is completed'
+    );
+
+    // 2. loanId-only fallback must select the latest scheduled completed installment (Feb, pay2)
+    const fallbackRev = await loanService.revertEmiPayment(user.id, { loanId }, db);
+    assert.equal(fallbackRev.success, true);
+    assert.equal(fallbackRev.revertedPaymentId, pay2.paymentId, 'loanId fallback must revert the latest installment (pay2)');
+    assert.equal(fallbackRev.restoredNextEmiDate, '2026-02-15T12:00:00.000Z');
+
+    // Verify DB loan nextEmiDate is restored to Feb 15
+    const loanAfterRev2 = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(loanAfterRev2?.nextEmiDate?.toISOString(), '2026-02-15T12:00:00.000Z');
+
+    // 3. Now that Feb is reverted, Jan installment (pay1) can be safely reverted
+    const rev1 = await loanService.revertEmiPayment(user.id, { loanPaymentId: pay1.paymentId }, db);
+    assert.equal(rev1.success, true);
+    assert.equal(rev1.restoredNextEmiDate, '2026-01-15T12:00:00.000Z');
+
+    // Verify DB loan nextEmiDate is restored to Jan 15
+    const loanAfterRev1 = await db.loan.findUnique({ where: { id: loanId } });
+    assert.equal(loanAfterRev1?.nextEmiDate?.toISOString(), '2026-01-15T12:00:00.000Z');
+    assert.equal(loanAfterRev1?.outstandingPrincipal.toString(), '60000');
+
+    // 4. Repeated undo on already reversed payment reports alreadyReversed: true
+    const repeatRev = await loanService.revertEmiPayment(user.id, { loanPaymentId: pay1.paymentId }, db);
+    assert.equal(repeatRev.alreadyReversed, true);
+
+  } finally {
+    try {
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('SOL-R005-001 cleanup warning:', cleanupErr);
     } finally {
       await db.$disconnect();
     }

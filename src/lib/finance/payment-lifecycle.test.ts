@@ -3582,3 +3582,226 @@ test('SOL-R004-017 unit: A Loans EMI can be reversed from Bills using its schedu
   assert.equal(occurrence, null);
   assert.equal((await financeService.revertObligationPayment('user', { obligationId: ob.id }, db)).alreadyReversed, true);
 });
+
+test('SOL-R001-007 unit: Linked loan matchesLoanActiveEmi strictly matches user-local calendar date and rejects previous UTC date', () => {
+  const loanNextEmiDate = new Date('2026-01-14T10:30:00.000Z');
+  const tz = 'Pacific/Kiritimati'; // UTC+14: Jan 14 10:30 UTC is Jan 15 00:30 local
+
+  // Previous local day (even if matching UTC date 2026-01-14) must NOT match active EMI
+  const prevDateRes = financeService.matchesLoanActiveEmi('2026-01-14', loanNextEmiDate, tz);
+  assert.equal(prevDateRes.isMatch, false, '2026-01-14 must NOT match active EMI in Pacific/Kiritimati');
+  assert.equal(prevDateRes.isOvertaken, true, '2026-01-14 must be marked overtaken');
+
+  // Exact user-local date (2026-01-15) must match active EMI
+  const localDateRes = financeService.matchesLoanActiveEmi('2026-01-15', loanNextEmiDate, tz);
+  assert.equal(localDateRes.isMatch, true, '2026-01-15 must match active EMI');
+  assert.equal(localDateRes.isOvertaken, false);
+  assert.equal(localDateRes.isFuture, false);
+
+  // Future local date (2026-01-16) must NOT match and be marked future
+  const futureDateRes = financeService.matchesLoanActiveEmi('2026-01-16', loanNextEmiDate, tz);
+  assert.equal(futureDateRes.isMatch, false);
+  assert.equal(futureDateRes.isFuture, true);
+
+  // UTC timestamp representation (2026-01-14T10:30) must match
+  const utcTsRes = financeService.matchesLoanActiveEmi('2026-01-14T10:30', loanNextEmiDate, tz);
+  assert.equal(utcTsRes.isMatch, true);
+
+  // Local timestamp representation (2026-01-15T00:30) must match
+  const localTsRes = financeService.matchesLoanActiveEmi('2026-01-15T00:30', loanNextEmiDate, tz);
+  assert.equal(localTsRes.isMatch, true);
+});
+
+test('SOL-R004-017 unit: Bills Undo for historical orphan completions returns alreadyReversed: true without mutating schedule', async () => {
+  const dueDate = new Date('2026-02-15T12:00:00.000Z');
+  let obScheduleUpdated = false;
+  let reminderPurged = false;
+
+  const mockDb = {
+    obligation: {
+      findUnique: async () => ({
+        id: 'ob-orphan',
+        userId: 'user-orphan',
+        title: 'Orphan Linked Bill',
+        nextDueAt: new Date('2026-03-15T12:00:00.000Z'),
+        loan: { id: 'loan-orphan', status: 'ACTIVE' },
+        occurrences: [
+          {
+            id: 'occ-orphan-1',
+            obligationId: 'ob-orphan',
+            dueDate,
+            status: 'COMPLETED',
+            paidAt: new Date(),
+          }
+        ],
+      }),
+      update: async () => {
+        obScheduleUpdated = true;
+      },
+    },
+    loanPayment: {
+      findUnique: async () => null, // Orphan completion: payment record was already deleted/missing
+      findMany: async () => [],
+    },
+    obligationOccurrence: {
+      findMany: async () => [
+        {
+          id: 'occ-orphan-1',
+          obligationId: 'ob-orphan',
+          dueDate,
+          status: 'COMPLETED',
+          paidAt: new Date(),
+        }
+      ],
+      deleteMany: async () => {},
+    },
+    reminderDelivery: {
+      deleteMany: async () => {
+        reminderPurged = true;
+      },
+    },
+    user: {
+      findUnique: async () => ({ timezone: 'UTC' }),
+    },
+    loan: {
+      findUnique: async () => ({
+        id: 'loan-orphan',
+        userId: 'user-orphan',
+        status: 'ACTIVE',
+        outstandingPrincipal: new Decimal(50000),
+        nextEmiDate: new Date('2026-03-15T12:00:00.000Z'),
+      }),
+      update: async () => {},
+    },
+    $transaction: async (fn: any) => fn(mockDb),
+  };
+
+  const res = await financeService.revertObligationPayment('user-orphan', { obligationId: 'ob-orphan' }, mockDb as any);
+  assert.equal(res.alreadyReversed, true, 'Must report alreadyReversed: true');
+  assert.notEqual(res.loanReversed, true, 'Must NOT report loanReversed: true');
+  assert.equal(obScheduleUpdated, false, 'Must NOT mutate obligation schedule when loan payment is already reversed');
+  assert.equal(reminderPurged, false, 'Must NOT purge future reminder deliveries when loan payment is already reversed');
+});
+
+test('SOL-R003-005: getObligations returns fully paid card statement obligations while excluding manually archived bills', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test',
+  });
+
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr_cc_paid_${timestamp}`,
+        email: `ccpaid_${timestamp}@test.com`,
+        name: 'CC Paid Status User',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bankAccount = await db.financialAccount.create({
+      data: {
+        userId: user.id,
+        name: 'Payment Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(100000),
+      }
+    });
+
+    const cardAccount = await db.financialAccount.create({
+      data: {
+        userId: user.id,
+        name: 'Platinum Card',
+        type: 'CREDIT_CARD',
+        creditLimit: new Decimal(200000),
+        openingBalance: new Decimal(0),
+        defaultPaymentAccountId: bankAccount.id,
+      }
+    });
+
+    // 1. Manually archived regular bill (should NOT be returned by getObligations)
+    const archivedBill = await db.obligation.create({
+      data: {
+        userId: user.id,
+        title: 'Archived Gym Membership',
+        kind: 'SUBSCRIPTION',
+        amount: new Decimal(2000),
+        dueAt: new Date('2026-05-01T12:00:00.000Z'),
+        nextDueAt: new Date('2026-05-01T12:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: false,
+        isArchived: true,
+      }
+    });
+
+    // 2. Credit Card Statement with dedicated statement obligation
+    const stmtDate = new Date('2026-05-15T12:00:00.000Z');
+    const stmtObligation = await db.obligation.create({
+      data: {
+        userId: user.id,
+        title: 'Platinum Card Bill (2026-05)',
+        kind: 'BILL',
+        amount: new Decimal(15000),
+        dueAt: stmtDate,
+        nextDueAt: stmtDate,
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+        isArchived: false,
+        accountId: cardAccount.id,
+      }
+    });
+
+    const stmt = await db.creditCardStatement.create({
+      data: {
+        userId: user.id,
+        accountId: cardAccount.id,
+        obligationId: stmtObligation.id,
+        periodKey: '2026-05',
+        statementDate: new Date('2026-05-01T12:00:00.000Z'),
+        statementAmount: new Decimal(15000),
+        dueDate: stmtDate,
+        status: 'OPEN',
+      }
+    });
+
+    // Pay the statement in full via recordCreditCardPayment (archives the obligation)
+    const { recordCreditCardPayment } = await import('./credit-card-service');
+    const payRes = await recordCreditCardPayment(user.id, {
+      statementId: stmt.id,
+      amount: '15000.00',
+      fromAccountId: bankAccount.id,
+      paidAt: new Date('2026-05-10T10:00:00.000Z'),
+    }, db);
+    assert.equal(payRes.success, true);
+    assert.equal(payRes.statementStatus, 'PAID');
+
+    // Verify DB state: obligation was archived by the system
+    const dbOb = await db.obligation.findUnique({ where: { id: stmtObligation.id } });
+    assert.equal(dbOb?.isArchived, true, 'Obligation must be archived when statement is fully paid');
+    assert.equal(dbOb?.isActive, false);
+
+    // Call getObligations: MUST return the paid card statement obligation so Bills UI can render PAID status and Undo!
+    const obligations = await financeService.getObligations(user.id, db);
+    const foundStmtOb = obligations.find((o) => o.id === stmtObligation.id);
+    assert.ok(foundStmtOb, 'getObligations must include system-archived card statement obligation');
+    assert.equal(foundStmtOb.isCreditCardStatement, true);
+    assert.equal(foundStmtOb.creditCardStatement?.status, 'PAID');
+    assert.equal(foundStmtOb.isArchived, true);
+
+    // Manually archived regular bill must NOT be included
+    const foundArchivedBill = obligations.find((o) => o.id === archivedBill.id);
+    assert.equal(foundArchivedBill, undefined, 'Manually archived bill must not be returned');
+
+    // Clean up
+    await db.financialTransaction.deleteMany({ where: { userId: user.id } });
+    await db.creditCardPayment.deleteMany({ where: { userId: user.id } });
+    await db.creditCardStatement.deleteMany({ where: { accountId: cardAccount.id } });
+    await db.obligationOccurrence.deleteMany({ where: { userId: user.id } });
+    await db.obligation.deleteMany({ where: { userId: user.id } });
+    await db.financialAccount.deleteMany({ where: { userId: user.id } });
+    await db.user.delete({ where: { id: user.id } });
+  } finally {
+    await db.$disconnect();
+  }
+});

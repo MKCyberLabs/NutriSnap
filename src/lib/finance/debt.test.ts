@@ -687,3 +687,67 @@ test('SOL-R004-016 unit: Opening debt is counted exactly once for snapshots, tag
     assert.equal(calculateDebtOutstanding(direction, '5000', [additional, { type: paymentType, amount: '5000' }]).toString(), '1000');
   }
 });
+
+test('SOL-R004-016: getMoneyOverview agrees with getDebts and preserves opening principal after additional advance equal to originalAmount', async () => {
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr-debt-ov-${timestamp}`,
+        email: `debtov-${timestamp}@test.local`,
+        name: 'Debt Overview User',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: user.id,
+        name: 'Debt Checking',
+        type: 'BANK',
+        openingBalance: new Prisma.Decimal(50000),
+      }
+    });
+
+    // Create debt with original amount 5000 without initial ledger movement
+    const createRes = await debtService.createDebt(user.id, {
+      counterpartyName: 'Ravi Kumar',
+      direction: 'RECEIVABLE',
+      originalAmount: '5000.00',
+      initialMovement: false,
+    }, db);
+
+    const debtId = createRes.debt.id;
+
+    // Add additional advance equal to original amount (5000) with note
+    await debtService.recordAdditionalLend(user.id, {
+      debtId,
+      amount: '5000.00',
+      accountId: account.id,
+      note: 'Additional advance for festival',
+    }, db);
+
+    // getDebts must compute 5000 (orig) + 5000 (advance) = 10000
+    const debts = await debtService.getDebts(user.id, {}, db);
+    const raviDebt = debts.find((d: any) => d.id === debtId);
+    assert.equal(raviDebt.outstandingAmount, '10000');
+
+    // getMoneyOverview must also compute 10000 receivablesOutstanding (not 5000)
+    const overview = await financeService.getMoneyOverview(user.id, new Date(), db);
+    assert.equal(
+      overview.receivablesOutstanding,
+      '10000.00',
+      'Money overview receivablesOutstanding must agree with getDebts and preserve unposted opening principal after additional advance'
+    );
+
+    // Cleanup
+    await db.financialTransaction.deleteMany({ where: { userId: user.id } });
+    await db.personalDebt.deleteMany({ where: { userId: user.id } });
+    await db.financialAccount.deleteMany({ where: { userId: user.id } });
+    await db.user.delete({ where: { id: user.id } });
+  } finally {
+    await db.$disconnect();
+  }
+});

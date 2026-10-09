@@ -338,6 +338,19 @@ export async function processSchedulerTick(
               return null;
             }
 
+            // SOL-R005-002: If expired lease has exhausted max attempts, mark FAILED and do not renew or resend
+            if (isDelClaimExpired && (del.attemptCount || 0) >= MAX_DELIVERY_ATTEMPTS) {
+              await tx.reminderDelivery.update({
+                where: { id: del.id },
+                data: {
+                  status: 'FAILED',
+                  nextRetryAt: null,
+                  lastAttemptAt: now,
+                },
+              });
+              return null;
+            }
+
             const recheck = shouldDeliverNow({
               scheduledFor: sched.scheduledFor,
               now,
@@ -349,6 +362,10 @@ export async function processSchedulerTick(
               nextRetryAt: del.nextRetryAt ?? null,
             });
             if (!recheck.shouldSend && !isDelClaimExpired) {
+              return null;
+            }
+
+            if ((del.attemptCount || 0) >= MAX_DELIVERY_ATTEMPTS) {
               return null;
             }
 
@@ -662,6 +679,19 @@ export async function processSchedulerTick(
                 return null;
               }
 
+              // SOL-R005-002: If expired lease has exhausted max attempts, mark FAILED and do not renew or resend
+              if (isDelClaimExpired && (del.attemptCount || 0) >= MAX_DELIVERY_ATTEMPTS) {
+                await tx.reminderDelivery.update({
+                  where: { id: del.id },
+                  data: {
+                    status: 'FAILED',
+                    nextRetryAt: null,
+                    lastAttemptAt: now,
+                  },
+                });
+                return null;
+              }
+
               const recheck = shouldDeliverNow({
                 scheduledFor: sched.scheduledFor,
                 now,
@@ -673,6 +703,10 @@ export async function processSchedulerTick(
                 nextRetryAt: del.nextRetryAt ?? null,
               });
               if (!recheck.shouldSend && !isDelClaimExpired) {
+                return null;
+              }
+
+              if ((del.attemptCount || 0) >= MAX_DELIVERY_ATTEMPTS) {
                 return null;
               }
 
@@ -946,6 +980,19 @@ export async function processSchedulerTick(
                 return null;
               }
 
+              // SOL-R005-002: If expired lease has exhausted max attempts, mark FAILED and do not renew or resend
+              if (isDelClaimExpired && (del.attemptCount || 0) >= MAX_DELIVERY_ATTEMPTS) {
+                await tx.reminderDelivery.update({
+                  where: { id: del.id },
+                  data: {
+                    status: 'FAILED',
+                    nextRetryAt: null,
+                    lastAttemptAt: now,
+                  },
+                });
+                return null;
+              }
+
               const recheck = shouldDeliverNow({
                 scheduledFor: sched.scheduledFor,
                 now,
@@ -957,6 +1004,10 @@ export async function processSchedulerTick(
                 nextRetryAt: del.nextRetryAt ?? null,
               });
               if (!recheck.shouldSend && !isDelClaimExpired) {
+                return null;
+              }
+
+              if ((del.attemptCount || 0) >= MAX_DELIVERY_ATTEMPTS) {
                 return null;
               }
 

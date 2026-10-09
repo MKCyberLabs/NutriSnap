@@ -768,7 +768,7 @@ export async function getMoneyOverview(
         where: { userId, status: 'OPEN' },
         include: {
           transactions: {
-            select: { type: true, amount: true },
+            select: { type: true, amount: true, note: true },
           },
         },
         orderBy: { dueAt: 'asc' },
@@ -937,6 +937,7 @@ export interface ObligationItem {
   recurrenceInterval: number | null;
   reminderOffsetsMin: number[];
   isActive: boolean;
+  isArchived?: boolean;
   notes: string | null;
   lastCompletedAt: string | null;
   nextDueAt: string;
@@ -965,7 +966,13 @@ export async function getObligations(
   if (!userId) throw new Error('Unauthorized: missing userId');
 
   const obligations = await db.obligation.findMany({
-    where: { userId, isArchived: false },
+    where: {
+      userId,
+      OR: [
+        { isArchived: false },
+        { creditCardStatements: { some: {} } },
+      ],
+    },
     orderBy: { nextDueAt: 'asc' },
     include: {
       user: { select: { timezone: true } },
@@ -1003,6 +1010,7 @@ export async function getObligations(
       recurrenceInterval: ob.recurrenceInterval,
       reminderOffsetsMin: ob.reminderOffsetsMin,
       isActive: ob.isActive,
+      isArchived: ob.isArchived,
       notes: ob.notes,
       lastCompletedAt: ob.lastCompletedAt ? ob.lastCompletedAt.toISOString() : null,
       nextDueAt: ob.nextDueAt.toISOString(),
@@ -1075,6 +1083,7 @@ export async function getObligationById(
     recurrenceInterval: ob.recurrenceInterval,
     reminderOffsetsMin: ob.reminderOffsetsMin,
     isActive: ob.isActive,
+    isArchived: ob.isArchived,
     notes: ob.notes,
     lastCompletedAt: ob.lastCompletedAt ? ob.lastCompletedAt.toISOString() : null,
     nextDueAt: ob.nextDueAt.toISOString(),
@@ -1526,21 +1535,32 @@ export function matchesLoanActiveEmi(
   const loanLocalKey = getOccurrenceKey(loanNextEmiDate, tz);
   const loanUtcKey = getOccurrenceKey(loanNextEmiDate, 'UTC');
   const loanLocalDate = loanLocalKey.substring(0, 10);
-  const loanUtcDate = loanUtcKey.substring(0, 10);
 
-  // 1. Exact string matches against active loan EMI representations
+  const trimmed = occurrenceKey.trim();
+
+  // 1. Date-only comparison YYYY-MM-DD: strictly match scheduled user-local calendar date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    if (trimmed === loanLocalDate) {
+      return { isMatch: true, isOvertaken: false, isFuture: false };
+    }
+    return {
+      isMatch: false,
+      isOvertaken: trimmed < loanLocalDate,
+      isFuture: trimmed > loanLocalDate,
+    };
+  }
+
+  // 2. Exact string matches against active loan EMI timestamp representations
   if (
-    occurrenceKey === loanLocalKey ||
-    occurrenceKey === loanUtcKey ||
-    occurrenceKey === loanLocalDate ||
-    occurrenceKey === loanUtcDate
+    trimmed === loanLocalKey ||
+    trimmed === loanUtcKey
   ) {
     return { isMatch: true, isOvertaken: false, isFuture: false };
   }
 
-  // 2. Timestamp comparison
-  if (occurrenceKey.includes('T')) {
-    const parsed = new Date(occurrenceKey);
+  // 3. Timestamp comparison
+  if (trimmed.includes('T')) {
+    const parsed = new Date(trimmed);
     if (!isNaN(parsed.getTime())) {
       const parsedTime = parsed.getTime();
       if (parsedTime === loanInstant) {
@@ -1552,19 +1572,6 @@ export function matchesLoanActiveEmi(
         isFuture: parsedTime > loanInstant,
       };
     }
-  }
-
-  // 3. Date-only comparison YYYY-MM-DD against local calendar date in loan's timezone
-  const trimmed = occurrenceKey.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    if (trimmed === loanLocalDate) {
-      return { isMatch: true, isOvertaken: false, isFuture: false };
-    }
-    return {
-      isMatch: false,
-      isOvertaken: trimmed < loanLocalDate,
-      isFuture: trimmed > loanLocalDate,
-    };
   }
 
   return { isMatch: false, isOvertaken: false, isFuture: false };
@@ -1976,13 +1983,17 @@ export async function markObligationPaid(
         };
       }
 
+      // Derive persisted completion key and scheduled instant consistently from locked scheduled instant
+      const loanScheduledInstant = currentLoan.nextEmiDate;
+      const loanCompletionKey = getOccurrenceKey(loanScheduledInstant, tz);
+
       // Record occurrence completion with canonicalKey
       const occurrence = await tx.obligationOccurrence.create({
         data: {
           userId,
           obligationId: currentObligation.id,
-          occurrenceKey: canonicalKey,
-          dueDate: currentObligation.nextDueAt,
+          occurrenceKey: loanCompletionKey,
+          dueDate: loanScheduledInstant,
           status: 'COMPLETED',
           paidAt: new Date(),
           transactionId: null,
@@ -1999,8 +2010,8 @@ export async function markObligationPaid(
         amount: currentObligation.amount || currentLoan.emiAmount || '0',
         accountId: targetAccountId,
         obligationOccurrenceId: occurrence.id,
-        obligationPaymentId: canonicalKey,
-        occurredAt: occurrenceScheduledDate,
+        obligationPaymentId: loanCompletionKey,
+        occurredAt: loanScheduledInstant,
         note: `EMI: ${currentObligation.title}`,
       }, tx);
 
@@ -2402,6 +2413,15 @@ export async function revertObligationPayment(
         },
         tx
       );
+
+      if (loanRes.alreadyReversed) {
+        return {
+          alreadyReversed: true,
+          revertedOccurrenceId: lockedTarget.id,
+          restoredNextDueAt: obligation.nextDueAt ? obligation.nextDueAt.toISOString() : null,
+          loanRes,
+        };
+      }
 
       // Delete occurrence record
       await tx.obligationOccurrence.deleteMany({
