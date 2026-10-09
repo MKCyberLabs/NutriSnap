@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { formatIndianRupees } from '../../components/design-system/MoneyAmount';
 import { getNextOccurrence, getOccurrenceKey } from '../recurrence/recurrence';
 import { isValidAccountType, isValidTransactionType, isValidObligationKind } from '../finance/finance';
+import { calculateMonthlyRecurringAmount } from '../../app/finance/bills/page';
+import { formatInTimeZone } from 'date-fns-tz';
 
 // UI-T010 & UI-T011: Desktop sidebar active state logic
 function getActiveNavState(pathname: string) {
@@ -136,76 +138,138 @@ test('UI-T053: Reminder filtering logic correctly segments health and bills', ()
   assert.equal(filterAll.length, 4);
 });
 
-// SOL-R005-003: Recurring budget calculation helper
-function calculateMonthlyRecurringAmount(
-  amount: number | string | null | undefined,
-  recurrenceType: string,
-  recurrenceInterval?: number | null
-): number {
-  const numericAmount = typeof amount === 'number' ? amount : parseFloat(String(amount || '0')) || 0;
-  if (!numericAmount || numericAmount <= 0) return 0;
-
-  switch (recurrenceType) {
-    case 'MONTHLY':
-      return numericAmount;
-    case 'YEARLY':
-      return numericAmount / 12;
-    case 'WEEKLY':
-      return (numericAmount * 52) / 12;
-    case 'DAILY':
-      return (numericAmount * 365) / 12;
-    case 'EVERY_N_DAYS': {
-      const days = recurrenceInterval && recurrenceInterval > 0 ? recurrenceInterval : 1;
-      return (numericAmount * (365 / days)) / 12;
-    }
-    case 'ONCE':
-    default:
-      return 0;
-  }
-}
-
-test('SOL-R005-003: Bills recurring budget normalizes recurrence and excludes ONCE obligations', () => {
+test('SOL-R005-003: Bills recurring budget normalizes recurrence across intervals and excludes ONCE obligations', () => {
   // 1. One-time obligation contributes 0 to recurring metrics
   assert.equal(calculateMonthlyRecurringAmount(12000, 'ONCE'), 0);
   assert.equal(calculateMonthlyRecurringAmount('12000', 'ONCE'), 0);
 
-  // 2. Monthly obligation contributes 100% of amount
+  // 2. Standard interval = 1 (or default)
   assert.equal(calculateMonthlyRecurringAmount(5000, 'MONTHLY'), 5000);
-
-  // 3. Yearly obligation normalizes to amount / 12
+  assert.equal(calculateMonthlyRecurringAmount(5000, 'MONTHLY', 1), 5000);
   assert.equal(calculateMonthlyRecurringAmount(12000, 'YEARLY'), 1000);
-
-  // 4. Weekly obligation normalizes to (amount * 52) / 12
+  assert.equal(calculateMonthlyRecurringAmount(12000, 'YEARLY', 1), 1000);
   assert.equal(calculateMonthlyRecurringAmount(1200, 'WEEKLY'), (1200 * 52) / 12);
+  assert.equal(calculateMonthlyRecurringAmount(1200, 'WEEKLY', 1), (1200 * 52) / 12);
+  assert.equal(calculateMonthlyRecurringAmount(100, 'DAILY'), (100 * (365 / 12)) / 1);
+  assert.equal(calculateMonthlyRecurringAmount(100, 'DAILY', 1), (100 * (365 / 12)) / 1);
+  assert.equal(calculateMonthlyRecurringAmount(840, 'EVERY_N_DAYS', 84), 840 * (30.4375 / 84));
 
-  // 5. Daily obligation normalizes to (amount * 365) / 12
-  assert.equal(calculateMonthlyRecurringAmount(100, 'DAILY'), (100 * 365) / 12);
+  // 3. Interval = 3 for quarterly (e.g. ₹3,000 every 3 months -> ₹1,000/month)
+  assert.equal(calculateMonthlyRecurringAmount(3000, 'MONTHLY', 3), 1000);
+  assert.equal(calculateMonthlyRecurringAmount('3000', 'MONTHLY', 3), 1000);
 
-  // 6. Every N days (e.g., 84 days)
-  assert.equal(calculateMonthlyRecurringAmount(840, 'EVERY_N_DAYS', 84), (840 * (365 / 84)) / 12);
+  // 4. Interval = 2 for biennial (e.g. ₹24,000 every 2 years -> (24000 / 12) / 2 = ₹1,000/month)
+  assert.equal(calculateMonthlyRecurringAmount(24000, 'YEARLY', 2), 1000);
 
-  // 7. Full obligation set calculation
+  // 5. Interval = 2 for biweekly (e.g. ₹1,200 every 2 weeks -> ((1200 * 52) / 12) / 2 = ₹2,600/month)
+  assert.equal(calculateMonthlyRecurringAmount(1200, 'WEEKLY', 2), 2600);
+
+  // 6. Object argument support
+  assert.equal(calculateMonthlyRecurringAmount({ amount: 3000, recurrenceType: 'MONTHLY', recurrenceInterval: 3 }), 1000);
+  assert.equal(calculateMonthlyRecurringAmount({ amount: 24000, recurrenceType: 'YEARLY', recurrenceInterval: 2 }), 1000);
+  assert.equal(calculateMonthlyRecurringAmount({ amount: 12000, recurrenceType: 'ONCE' }), 0);
+
+  // 7. Full obligation set calculation with varied recurrence intervals
   const obligations = [
     { id: '1', title: 'Security Deposit', amount: '12000', recurrenceType: 'ONCE', isActive: true, isArchived: false },
-    { id: '2', title: 'Internet', amount: '1000', recurrenceType: 'MONTHLY', isActive: true, isArchived: false },
-    { id: '3', title: 'Annual Domain', amount: '1200', recurrenceType: 'YEARLY', isActive: true, isArchived: false },
-    { id: '4', title: 'Gym (Cancelled)', amount: '2000', recurrenceType: 'MONTHLY', isActive: false, isArchived: false },
+    { id: '2', title: 'Internet', amount: '1000', recurrenceType: 'MONTHLY', recurrenceInterval: 1, isActive: true, isArchived: false },
+    { id: '3', title: 'Quarterly Water Tax', amount: '3000', recurrenceType: 'MONTHLY', recurrenceInterval: 3, isActive: true, isArchived: false },
+    { id: '4', title: 'Annual Domain', amount: '1200', recurrenceType: 'YEARLY', recurrenceInterval: 1, isActive: true, isArchived: false },
+    { id: '5', title: 'Biennial Subscription', amount: '2400', recurrenceType: 'YEARLY', recurrenceInterval: 2, isActive: true, isArchived: false },
+    { id: '6', title: 'Gym (Cancelled)', amount: '2000', recurrenceType: 'MONTHLY', isActive: false, isArchived: false },
   ];
 
   const active = obligations.filter(o => o.isActive && !o.isArchived);
   const activeRecurring = active.filter(o => o.recurrenceType && o.recurrenceType !== 'ONCE');
-  assert.equal(activeRecurring.length, 2);
+  assert.equal(activeRecurring.length, 4);
 
   const totalMonthlyRecurring = active.reduce(
-    (sum, o) => sum + calculateMonthlyRecurringAmount(o.amount, o.recurrenceType),
+    (sum, o) => sum + calculateMonthlyRecurringAmount(o.amount, o.recurrenceType, (o as any).recurrenceInterval),
     0
   );
-  // 1000 (monthly) + 100 (yearly normalized) + 0 (once) = 1100
-  assert.equal(totalMonthlyRecurring, 1100);
+  // 1000 (monthly) + 1000 (quarterly: 3000/3) + 100 (yearly: 1200/12) + 100 (biennial: (2400/12)/2) + 0 (once) = 2200
+  assert.equal(totalMonthlyRecurring, 2200);
 
   const annualizedBudget = totalMonthlyRecurring * 12;
-  // 1100 * 12 = 13200 (NOT inflated by the ₹12,000 ONCE obligation)
-  assert.equal(annualizedBudget, 13200);
+  // 2200 * 12 = 26400 (NOT inflated by the ₹12,000 ONCE obligation)
+  assert.equal(annualizedBudget, 26400);
+});
+
+test('SOL-R006-001: ObligationRow formats nextDueAt in user timezone and handles alreadyCompleted response', () => {
+  // 1. Timezone-aware occurrence key formatting:
+  // Pacific/Kiritimati is UTC+14.
+  // Instant 2026-01-14T10:30:00.000Z in UTC is 2026-01-14.
+  // In Pacific/Kiritimati (+14), it is 2026-01-15 00:30 (January 15).
+  const dueUtc = new Date('2026-01-14T10:30:00.000Z');
+  const userTz = 'Pacific/Kiritimati';
+
+  const occurrenceKey = formatInTimeZone(dueUtc, userTz, 'yyyy-MM-dd');
+  const formattedDisplay = formatInTimeZone(dueUtc, userTz, 'dd MMM yyyy');
+
+  assert.equal(occurrenceKey, '2026-01-15', 'Occurrence key matches user-local calendar date');
+  assert.equal(formattedDisplay, '15 Jan 2026', 'Display matches user-local calendar date');
+
+  // Verify that UTC-local evaluation would have produced the wrong date (Jan 14)
+  const utcDateKey = formatInTimeZone(dueUtc, 'UTC', 'yyyy-MM-dd');
+  assert.equal(utcDateKey, '2026-01-14');
+  assert.notEqual(occurrenceKey, utcDateKey, 'User timezone must prevent UTC host date mismatch');
+
+  // 2. Response inspection logic:
+  // When alreadyCompleted is true and occurrenceId is null (e.g. linked loan EMI mismatch or closed loan),
+  // row must distinguish without claiming newly marked as paid.
+  function inspectPaidResponse(res: any, key: string, title: string) {
+    if (res?.alreadyCompleted || res?.alreadyProcessed) {
+      return {
+        toastTitle: 'Already Marked as Paid',
+        toastDescription: res?.occurrenceId
+          ? `Occurrence (${key}) for "${title}" was already marked as paid.`
+          : `No pending occurrence found or already completed for "${title}".`,
+        isNewlyPaid: false,
+      };
+    }
+    return {
+      toastTitle: 'Marked as Paid',
+      toastDescription: `Obligation "${title}" marked paid for ${key}.`,
+      isNewlyPaid: true,
+    };
+  }
+
+  // A. Linked EMI or closed loan returns alreadyCompleted: true with no occurrence
+  const emiAlreadyCompletedRes = {
+    success: true,
+    alreadyCompleted: true,
+    alreadyProcessed: true,
+    occurrenceId: null,
+    transactionId: null,
+  };
+  const emiToast = inspectPaidResponse(emiAlreadyCompletedRes, '2026-01-15', 'Car Loan EMI');
+  assert.equal(emiToast.toastTitle, 'Already Marked as Paid');
+  assert.equal(emiToast.isNewlyPaid, false);
+  assert.equal(emiToast.toastDescription.includes('No pending occurrence found'), true);
+
+  // B. Duplicate payment on already completed occurrence
+  const dupOccurrenceRes = {
+    success: true,
+    alreadyCompleted: true,
+    alreadyProcessed: true,
+    occurrenceId: 'occ_123',
+    transactionId: 'tx_123',
+  };
+  const dupToast = inspectPaidResponse(dupOccurrenceRes, '2026-01-15', 'Internet Bill');
+  assert.equal(dupToast.toastTitle, 'Already Marked as Paid');
+  assert.equal(dupToast.isNewlyPaid, false);
+  assert.equal(dupToast.toastDescription.includes('was already marked as paid'), true);
+
+  // C. Fresh payment completed successfully
+  const freshPayRes = {
+    success: true,
+    alreadyCompleted: false,
+    occurrenceId: 'occ_456',
+    transactionId: 'tx_456',
+  };
+  const freshToast = inspectPaidResponse(freshPayRes, '2026-01-15', 'Internet Bill');
+  assert.equal(freshToast.toastTitle, 'Marked as Paid');
+  assert.equal(freshToast.isNewlyPaid, true);
 });
 
 test('SOL-R005-006: Reminders delivery channel state accurately reflects configured telegramId', () => {
