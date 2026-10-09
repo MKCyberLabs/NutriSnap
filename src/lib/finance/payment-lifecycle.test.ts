@@ -2991,4 +2991,311 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     await db.financialAccount.delete({ where: { id: account.id } });
     await db.user.delete({ where: { id: userIsolated.id } });
   });
+
+  await t.test('SOL-R001-007: Pacific/Kiritimati Midnight Crossing UTC & Local Historical Aliases (both orders)', async () => {
+    const testTime = Date.now();
+    const userKiri = await db.user.create({
+      data: {
+        id: `usr_r5_kiri_${testTime}`,
+        email: `r5_kiri_${testTime}@test.com`,
+        name: 'Kiritimati R5 User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userKiri.id,
+        name: 'Kiritimati Bank R5',
+        type: 'BANK',
+        openingBalance: new Decimal(50000),
+      }
+    });
+
+    // 1. Order A: UTC first ('2026-01-14T10:30'), then local ('2026-01-15T00:30')
+    const obA = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Kiritimati Midnight Bill A',
+        kind: 'BILL',
+        amount: new Decimal('1200.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-14T10:30:00.000Z'),
+        nextDueAt: new Date('2026-09-14T10:30:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const payUtcFirst = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obA.id,
+      occurrenceKey: '2026-01-14T10:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtcFirst.success, true);
+    assert.equal(payUtcFirst.alreadyCompleted, false);
+    assert.ok(payUtcFirst.transactionId);
+
+    const occA = await db.obligationOccurrence.findUnique({
+      where: { id: payUtcFirst.occurrenceId! }
+    });
+    assert.ok(occA);
+    assert.equal(occA.dueDate.toISOString(), '2026-01-14T10:30:00.000Z');
+    assert.equal(occA.occurrenceKey, '2026-01-15T00:30');
+
+    const payLocalSecond = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obA.id,
+      occurrenceKey: '2026-01-15T00:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocalSecond.success, true);
+    assert.equal(payLocalSecond.alreadyCompleted, true);
+    assert.equal(payLocalSecond.transactionId, payUtcFirst.transactionId);
+
+    const occurrencesA = await db.obligationOccurrence.findMany({ where: { obligationId: obA.id } });
+    assert.equal(occurrencesA.length, 1);
+    const expensesA = await db.financialTransaction.findMany({ where: { obligationId: obA.id } });
+    assert.equal(expensesA.length, 1);
+
+    // 2. Order B (vice-versa): Local first ('2026-01-15T00:30'), then UTC ('2026-01-14T10:30')
+    const obB = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Kiritimati Midnight Bill B',
+        kind: 'BILL',
+        amount: new Decimal('1500.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-14T10:30:00.000Z'),
+        nextDueAt: new Date('2026-09-14T10:30:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const payLocalFirst = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obB.id,
+      occurrenceKey: '2026-01-15T00:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocalFirst.success, true);
+    assert.equal(payLocalFirst.alreadyCompleted, false);
+    assert.ok(payLocalFirst.transactionId);
+
+    const occB = await db.obligationOccurrence.findUnique({
+      where: { id: payLocalFirst.occurrenceId! }
+    });
+    assert.ok(occB);
+    assert.equal(occB.dueDate.toISOString(), '2026-01-14T10:30:00.000Z');
+    assert.equal(occB.occurrenceKey, '2026-01-15T00:30');
+
+    const payUtcSecond = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obB.id,
+      occurrenceKey: '2026-01-14T10:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtcSecond.success, true);
+    assert.equal(payUtcSecond.alreadyCompleted, true);
+    assert.equal(payUtcSecond.transactionId, payLocalFirst.transactionId);
+
+    const occurrencesB = await db.obligationOccurrence.findMany({ where: { obligationId: obB.id } });
+    assert.equal(occurrencesB.length, 1);
+    const expensesB = await db.financialTransaction.findMany({ where: { obligationId: obB.id } });
+    assert.equal(expensesB.length, 1);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { userId: userKiri.id } });
+    await db.financialTransaction.deleteMany({ where: { userId: userKiri.id } });
+    await db.obligation.deleteMany({ where: { userId: userKiri.id } });
+    await db.financialAccount.deleteMany({ where: { userId: userKiri.id } });
+    await db.user.delete({ where: { id: userKiri.id } });
+  });
+
+  await t.test('SOL-R001-007: America/New_York Midnight Crossing DST Anchor Deduplication', async () => {
+    const testTime = Date.now();
+    const userNy = await db.user.create({
+      data: {
+        id: `usr_r5_ny_${testTime}`,
+        email: `r5_ny_${testTime}@test.com`,
+        name: 'New York R5 User',
+        password: 'password123',
+        timezone: 'America/New_York',
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userNy.id,
+        name: 'NY Checking R5',
+        type: 'BANK',
+        openingBalance: new Decimal(50000),
+      }
+    });
+
+    // Obligation anchored in September (EDT, UTC-4): 2026-09-16T03:30:00.000Z = Sep 15 23:30 EDT
+    // In January (EST, UTC-5): 23:30 EST = Jan 16 04:30 UTC
+    const ob = await db.obligation.create({
+      data: {
+        userId: userNy.id,
+        title: 'NY Night Utility Bill',
+        kind: 'BILL',
+        amount: new Decimal('300.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-16T03:30:00.000Z'),
+        nextDueAt: new Date('2026-09-16T03:30:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. Pay with UTC key '2026-01-16T04:30'
+    const payUtc = await financeService.markObligationPaid(userNy.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-16T04:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtc.success, true);
+    assert.equal(payUtc.alreadyCompleted, false);
+    assert.ok(payUtc.transactionId);
+
+    const occ = await db.obligationOccurrence.findUnique({
+      where: { id: payUtc.occurrenceId! }
+    });
+    assert.ok(occ);
+    assert.equal(occ.dueDate.toISOString(), '2026-01-16T04:30:00.000Z');
+    assert.equal(occ.occurrenceKey, '2026-01-15T23:30');
+
+    // 2. Pay with local key '2026-01-15T23:30'
+    const payLocal = await financeService.markObligationPaid(userNy.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-15T23:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocal.success, true);
+    assert.equal(payLocal.alreadyCompleted, true);
+    assert.equal(payLocal.transactionId, payUtc.transactionId);
+
+    const occurrences = await db.obligationOccurrence.findMany({ where: { obligationId: ob.id } });
+    assert.equal(occurrences.length, 1);
+    assert.equal(occurrences[0].dueDate.toISOString(), '2026-01-16T04:30:00.000Z');
+    const expenses = await db.financialTransaction.findMany({ where: { obligationId: ob.id } });
+    assert.equal(expenses.length, 1);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { userId: userNy.id } });
+    await db.financialTransaction.deleteMany({ where: { userId: userNy.id } });
+    await db.obligation.deleteMany({ where: { userId: userNy.id } });
+    await db.financialAccount.deleteMany({ where: { userId: userNy.id } });
+    await db.user.delete({ where: { id: userNy.id } });
+  });
+
+  await t.test('SOL-R004-010: Legacy Historical Completion Schedule & Reminder Isolation on Undo', async () => {
+    const testTime = Date.now();
+    const userUtc = await db.user.create({
+      data: {
+        id: `usr_r5_legacy_${testTime}`,
+        email: `r5_legacy_${testTime}@test.com`,
+        name: 'Legacy Historical Undo User',
+        password: 'password123',
+        timezone: 'UTC',
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userUtc.id,
+        name: 'UTC Main Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(25000),
+      }
+    });
+
+    // Monthly UTC obligation next due 2026-09-15T10:00Z
+    const ob = await db.obligation.create({
+      data: {
+        userId: userUtc.id,
+        title: 'Monthly Cloud Subscription',
+        kind: 'SUBSCRIPTION',
+        amount: new Decimal('250.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-15T10:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Seed legacy COMPLETED occurrence for 2026-07-15T10:00Z (status 'COMPLETED', not 'COMPLETED_HISTORICAL')
+    const legacyJulyOcc = await db.obligationOccurrence.create({
+      data: {
+        userId: userUtc.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-07-15T10:00',
+        dueDate: new Date('2026-07-15T10:00:00.000Z'),
+        status: 'COMPLETED',
+        paidAt: new Date('2026-07-15T10:02:00.000Z'),
+      }
+    });
+
+    // Seed reminder and PENDING reminder delivery for September
+    const rem = await db.reminder.create({
+      data: {
+        userId: userUtc.id,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob.title,
+        obligationId: ob.id,
+        isActive: true,
+      }
+    });
+
+    const septDelivery = await db.reminderDelivery.create({
+      data: {
+        userId: userUtc.id,
+        reminderId: rem.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15T10:00',
+        scheduledFor: new Date('2026-09-15T10:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'IN_APP',
+        status: 'PENDING',
+      }
+    });
+
+    // Call revertObligationPayment on July occurrence
+    const revertRes = await financeService.revertObligationPayment(userUtc.id, {
+      obligationId: ob.id,
+      occurrenceId: legacyJulyOcc.id,
+    }, db);
+    assert.equal(revertRes.success, true);
+    assert.equal(revertRes.alreadyReversed, false);
+
+    // Assert: obligation nextDueAt remains September 15, isActive is preserved
+    const obAfter = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.ok(obAfter);
+    assert.equal(obAfter.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'nextDueAt remains September 15');
+    assert.equal(obAfter.isActive, true, 'isActive remains true');
+
+    // Assert: September PENDING delivery is NOT deleted
+    const foundSeptDelivery = await db.reminderDelivery.findUnique({ where: { id: septDelivery.id } });
+    assert.ok(foundSeptDelivery, 'September reminder delivery must NOT be deleted');
+
+    // Assert: only July occurrence is deleted
+    const foundJulyOcc = await db.obligationOccurrence.findUnique({ where: { id: legacyJulyOcc.id } });
+    assert.equal(foundJulyOcc, null, 'July occurrence was cleanly deleted');
+
+    // Clean up
+    await db.reminderDelivery.deleteMany({ where: { userId: userUtc.id } });
+    await db.reminder.deleteMany({ where: { userId: userUtc.id } });
+    await db.obligationOccurrence.deleteMany({ where: { userId: userUtc.id } });
+    await db.obligation.deleteMany({ where: { userId: userUtc.id } });
+    await db.financialAccount.deleteMany({ where: { userId: userUtc.id } });
+    await db.user.delete({ where: { id: userUtc.id } });
+  });
 });

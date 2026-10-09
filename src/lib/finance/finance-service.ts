@@ -1502,6 +1502,10 @@ export function matchesOccurrence(
     if (!isNaN(reqDate.getTime()) && reqDate.getTime() === occTime) {
       return true;
     }
+    const reqUtcDate = new Date(reqKey.endsWith('Z') ? reqKey : reqKey + 'Z');
+    if (!isNaN(reqUtcDate.getTime()) && reqUtcDate.getTime() === occTime) {
+      return true;
+    }
   }
 
   // 3. Timezone-aware local and UTC key matches against occ.dueDate
@@ -1685,34 +1689,29 @@ export async function markObligationPaid(
     if (occurrenceKey.includes('T')) {
       const [datePart, timePart] = occurrenceKey.trim().split('T');
       const [y, m, d] = datePart.split('-').map(Number);
-      const [hh, mm] = timePart.split(':').map(Number);
+      const cleanTime = timePart.replace('Z', '');
+      const timeParts = cleanTime.split(':').map(Number);
+      const hh = timeParts[0];
+      const mm = timeParts[1];
 
       if (tz === 'UTC') {
         return new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
       }
 
-      const scheduledInstant = new Date(new TZDate(y, m - 1, d, targetHour, targetMinute, targetSecond, targetMs, tz).getTime());
-
       if (hh === targetHour && mm === targetMinute) {
-        return scheduledInstant;
-      }
-      if (hh === scheduledInstant.getUTCHours() && mm === scheduledInstant.getUTCMinutes()) {
-        return scheduledInstant;
-      }
-      const parsedKey = new Date(occurrenceKey);
-      if (!isNaN(parsedKey.getTime()) && parsedKey.getTime() === scheduledInstant.getTime()) {
-        return scheduledInstant;
+        // Directly matches user timezone scheduled time
+        return new Date(new TZDate(y, m - 1, d, targetHour, targetMinute, targetSecond, targetMs, tz).getTime());
       }
 
-      const utcCandidate = new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
-      const utcCandidateInTz = new TZDate(utcCandidate, tz);
-      if (utcCandidateInTz.getHours() === targetHour && utcCandidateInTz.getMinutes() === targetMinute) {
-        return utcCandidate;
-      }
-      if (hh === anchorUtcHour && mm === anchorUtcMinute) {
-        return utcCandidate;
+      // Next, evaluate whether this is an absolute UTC timestamp alias:
+      const utcInstant = new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
+      const utcInTz = new TZDate(utcInstant, tz);
+      if (utcInTz.getHours() === targetHour && utcInTz.getMinutes() === targetMinute) {
+        // This absolute UTC instant projects to the user's scheduled local hour and minute!
+        return utcInstant;
       }
 
+      // Fallback: if neither matches, construct localCandidate
       const localCandidate = new Date(new TZDate(y, m - 1, d, hh, mm, targetSecond, targetMs, tz).getTime());
       return localCandidate;
     }
@@ -1733,6 +1732,11 @@ export async function markObligationPaid(
 
   // SOL-R001-007: Build candidate keys only for this resolved occurrence.
   // Historical occurrences must NOT include active occurrence keys.
+  const scheduledUtcIso = occurrenceScheduledDate.toISOString().slice(0, 16);
+  const scheduledUserTzKey = getOccurrenceKey(occurrenceScheduledDate, tz);
+  const scheduledUserTzDate = scheduledUserTzKey.slice(0, 10);
+  const scheduledUtcDate = scheduledUtcIso.slice(0, 10);
+
   const candidateKeys = isCurrentOccurrence
     ? Array.from(new Set([
         occurrenceKey,
@@ -1744,9 +1748,10 @@ export async function markObligationPaid(
     : Array.from(new Set([
         occurrenceKey,
         canonicalKey,
-        getOccurrenceKey(occurrenceScheduledDate, tz),
-        getOccurrenceKey(occurrenceScheduledDate, 'UTC'),
-        getOccurrenceKey(occurrenceScheduledDate, tz).substring(0, 10),
+        scheduledUtcIso,
+        scheduledUserTzKey,
+        scheduledUserTzDate,
+        ...(scheduledUtcDate !== scheduledUserTzDate ? [scheduledUtcDate] : []),
       ]));
 
   // 4. Early check if occurrence is already completed (fast idempotency check)
@@ -1763,7 +1768,7 @@ export async function markObligationPaid(
     });
 
     for (const occ of pastCompletions) {
-      if (matchesOccurrence(occ, occurrenceKey, tz)) {
+      if (matchesOccurrence(occ, occurrenceKey, tz) || candidateKeys.includes(occ.occurrenceKey)) {
         existingCompletion = occ;
         break;
       }
@@ -1771,35 +1776,28 @@ export async function markObligationPaid(
   }
 
   if (!existingCompletion) {
-    if (typeof db.obligationOccurrence?.findUnique === 'function') {
-      existingCompletion = await db.obligationOccurrence.findUnique({
-        where: {
-          obligationId_occurrenceKey: {
-            obligationId,
-            occurrenceKey,
-          }
-        },
-        include: { transaction: true }
-      });
-      if (!existingCompletion && canonicalKey !== occurrenceKey) {
-        existingCompletion = await db.obligationOccurrence.findUnique({
-          where: {
-            obligationId_occurrenceKey: {
-              obligationId,
-              occurrenceKey: canonicalKey,
-            }
-          },
-          include: { transaction: true }
-        });
-      }
-    } else if (typeof db.obligationOccurrence?.findFirst === 'function') {
+    if (typeof db.obligationOccurrence?.findFirst === 'function') {
       existingCompletion = await db.obligationOccurrence.findFirst({
         where: {
           obligationId,
           occurrenceKey: { in: candidateKeys },
+          status: { in: ['COMPLETED', 'COMPLETED_HISTORICAL'] },
         },
         include: { transaction: true }
       });
+    } else if (typeof db.obligationOccurrence?.findUnique === 'function') {
+      for (const key of candidateKeys) {
+        existingCompletion = await db.obligationOccurrence.findUnique({
+          where: {
+            obligationId_occurrenceKey: {
+              obligationId,
+              occurrenceKey: key,
+            }
+          },
+          include: { transaction: true }
+        });
+        if (existingCompletion) break;
+      }
     }
   }
 
@@ -1986,7 +1984,7 @@ export async function markObligationPaid(
       });
 
       const lockedMatch = lockedPastCompletions.find((occ: any) =>
-        matchesOccurrence(occ, occurrenceKey, tz)
+        matchesOccurrence(occ, occurrenceKey, tz) || candidateKeys.includes(occ.occurrenceKey)
       );
       if (lockedMatch) {
         return {
@@ -2591,11 +2589,40 @@ export async function revertObligationPayment(
       }
     });
 
+    const currentDueAt = currentOb?.dueAt || obligation.dueAt;
     const currentNextDue = currentOb?.nextDueAt || obligation.nextDueAt;
     const currentIsActive = currentOb ? currentOb.isActive : obligation.isActive;
     const recType = currentOb?.recurrenceType || obligation.recurrenceType;
 
-    const isHistorical = lockedTarget.status === 'COMPLETED_HISTORICAL';
+    const targetDay = recType === 'MONTHLY'
+      ? (currentOb?.loan?.dueDay ?? (currentDueAt ? new TZDate(currentDueAt, tz).getDate() : undefined))
+      : undefined;
+
+    const rule: RecurrenceRule = {
+      type: recType as any,
+      interval: currentOb?.recurrenceInterval ?? obligation.recurrenceInterval,
+      targetDayOfMonth: targetDay,
+      timezone: tz,
+    };
+
+    const lockedTargetDueTime = new Date(lockedTarget.dueDate).getTime();
+    const anchorTime = new Date(currentDueAt).getTime();
+    const currentNextDueTime = new Date(currentNextDue).getTime();
+
+    let isHistorical = lockedTarget.status === 'COMPLETED_HISTORICAL';
+    if (!isHistorical) {
+      // Legacy compatibility fallback
+      if (lockedTargetDueTime < anchorTime) {
+        isHistorical = true;
+      } else if (recType === 'ONCE') {
+        isHistorical = lockedTargetDueTime !== currentNextDueTime;
+      } else {
+        const expectedNext = getNextOccurrence(rule, currentDueAt, lockedTarget.dueDate);
+        if (!expectedNext || expectedNext.getTime() !== currentNextDueTime) {
+          isHistorical = true;
+        }
+      }
+    }
 
     const restoredDueAt = isHistorical ? currentNextDue : lockedTarget.dueDate;
     const restoredIsActive = isHistorical
