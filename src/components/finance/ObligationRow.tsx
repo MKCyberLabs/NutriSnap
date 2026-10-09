@@ -90,8 +90,10 @@ export function ObligationRow({
       const res = await onUndoPaid({ obligationId: obligation.id });
       if (res && res.error) throw new Error(res.error);
       toast({
-        title: 'Payment Undone',
-        description: `Reverted last payment for "${obligation.title}". Next due date restored.`,
+        title: res?.alreadyReversed ? 'No active payment found' : 'Payment Undone',
+        description: res?.alreadyReversed
+          ? 'No active payment found to undo or already reversed.'
+          : `Reverted last payment for "${obligation.title}". Next due date restored.`,
       });
       onPaidSuccess();
     } catch (err: any) {

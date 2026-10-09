@@ -20,6 +20,16 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2, Plus, Info, Building2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { TZDate } from '@date-fns/tz';
+
+function getUserTimezone(preferredTz?: string): string {
+  if (preferredTz) return preferredTz;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+  } catch {
+    return 'Asia/Kolkata';
+  }
+}
 
 interface LoanFormProps {
   accounts: { id: string; name: string }[];
@@ -30,6 +40,8 @@ interface LoanFormProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onSuccess?: () => void;
+  userTimezone?: string;
+  timezone?: string;
 }
 
 const LOAN_TYPES = [
@@ -43,17 +55,22 @@ const LOAN_TYPES = [
   { value: 'OTHER', label: 'Other Loan' },
 ];
 
-export function formatCalendarDate(dateInput: string | Date | null | undefined): string {
+export function formatCalendarDate(
+  dateInput: string | Date | null | undefined,
+  userTz?: string
+): string {
   if (!dateInput) return '';
   if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
     return dateInput.trim();
   }
   try {
+    const tz = getUserTimezone(userTz);
     const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
     if (isNaN(d.getTime())) return '';
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const tzDate = new TZDate(d, tz);
+    const y = tzDate.getFullYear();
+    const m = String(tzDate.getMonth() + 1).padStart(2, '0');
+    const day = String(tzDate.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   } catch {
     return '';
@@ -69,7 +86,10 @@ export function LoanForm({
   open: controlledOpen,
   onOpenChange,
   onSuccess,
+  userTimezone,
+  timezone,
 }: LoanFormProps) {
+  const configuredTimezone = userTimezone || timezone || loan?.user?.timezone || loan?.userTimezone || loan?.timezone;
   const isEdit = Boolean(loan);
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -120,14 +140,14 @@ export function LoanForm({
       setPaymentAccountId(loan.paymentAccountId || loan.paymentAccount?.id || 'none');
       setProductName(loan.productName || '');
       setMerchant(loan.merchant || '');
-      setNotes(loan.notes || '');
+      setNotes(loan.notes ? loan.notes.replace(/\s*\[noLinkedObligation\]/g, '').trim() : '');
       if (loan.nextEmiDate) {
-        setNextEmiDate(formatCalendarDate(loan.nextEmiDate));
+        setNextEmiDate(formatCalendarDate(loan.nextEmiDate, configuredTimezone));
       } else {
         setNextEmiDate('');
       }
     }
-  }, [loan]);
+  }, [loan, configuredTimezone]);
 
   const resetForm = () => {
     setName('');
@@ -197,7 +217,7 @@ export function LoanForm({
         }
         payload.dueDay = newDueDayVal;
 
-        const initialNextEmiDateStr = formatCalendarDate(loan?.nextEmiDate);
+        const initialNextEmiDateStr = formatCalendarDate(loan?.nextEmiDate, configuredTimezone);
         const currentNextEmiDateStr = nextEmiDate ? nextEmiDate.trim() : '';
 
         const isDueDayEdited = newDueDayVal !== initialDueDay;

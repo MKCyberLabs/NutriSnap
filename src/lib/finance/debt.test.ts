@@ -3,7 +3,7 @@ import test from 'node:test';
 import { Prisma, PrismaClient } from '../../../prisma/generated/client';
 import * as debtService from './debt-service';
 import * as financeService from './finance-service';
-import { calculateMonthlyTotals } from './finance';
+import { calculateMonthlyTotals, calculateDebtOutstanding } from './finance';
 
 const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
 
@@ -397,7 +397,293 @@ test('V2-200: Personal Debt (Friends & Family) Test Suite (V2-T020..V2-T030)', a
       /Debt not found or unauthorized/
     );
 
+    // -------------------------------------------------------------------------
+    // SOL-R002-008: Debt read models expose user.timezone
+    // -------------------------------------------------------------------------
+    const debtReadList = await debtService.getDebts(userA.id, {}, db);
+    assert.ok(debtReadList.length > 0);
+    assert.equal(debtReadList[0].timezone, 'Asia/Kolkata');
+    assert.equal(debtReadList[0].user?.timezone, 'Asia/Kolkata');
+
+    const singleDebtRead = await debtService.getDebtById(userA.id, debtReadList[0].id, db);
+    assert.ok(singleDebtRead);
+    assert.equal(singleDebtRead?.timezone, 'Asia/Kolkata');
+    assert.equal(singleDebtRead?.user?.timezone, 'Asia/Kolkata');
+
+    // -------------------------------------------------------------------------
+    // SOL-R003-007: Concurrent debt repayments idempotency and limits under row lock
+    // -------------------------------------------------------------------------
+    const limitDebt = await debtService.createDebt(userA.id, {
+      direction: 'PAYABLE',
+      counterpartyName: 'Deepak Lock Test',
+      title: 'Concurrency Limit Debt',
+      originalAmount: '3000.00',
+    }, db);
+    const limitDebtId = limitDebt.debt.id;
+
+    // Test 1: Duplicate idempotency key concurrent calls
+    const idempKey = `idemp_debt_${timestamp}`;
+    const [idempRes1, idempRes2] = await Promise.all([
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1000.00',
+        accountId: bankAId,
+        idempotencyKey: idempKey,
+      }, db),
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1000.00',
+        accountId: bankAId,
+        idempotencyKey: idempKey,
+      }, db),
+    ]);
+
+    assert.equal(idempRes1.success, true);
+    assert.equal(idempRes2.success, true);
+    const alreadyProcessedCount = (idempRes1.alreadyProcessed ? 1 : 0) + (idempRes2.alreadyProcessed ? 1 : 0);
+    assert.equal(alreadyProcessedCount, 1, 'Exactly one concurrent call is marked alreadyProcessed');
+
+    // Debt outstanding should now be 2000
+    const debtMid = await debtService.getDebtById(userA.id, limitDebtId, db);
+    assert.equal(debtMid?.outstandingAmount, '2000');
+
+    // Test 2: Concurrent overpayment rejected against remaining balance under row lock
+    // Remaining is 2000. Submit two concurrent payments of 1500 each (total 3000 > 2000).
+    const results = await Promise.allSettled([
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1500.00',
+        accountId: bankAId,
+      }, db),
+      debtService.recordDebtRepayment(userA.id, {
+        debtId: limitDebtId,
+        amount: '1500.00',
+        accountId: bankAId,
+      }, db),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    assert.equal(fulfilled.length, 1, 'Exactly one concurrent repayment succeeds');
+    assert.equal(rejected.length, 1, 'Overpayment rejected under lock');
+    assert.match((rejected[0] as PromiseRejectedResult).reason.message, /Cannot repay more than outstanding balance/);
+
+    const debtFinal = await debtService.getDebtById(userA.id, limitDebtId, db);
+    assert.equal(debtFinal?.outstandingAmount, '500', 'Outstanding balance protected under lock');
+
+    // -------------------------------------------------------------------------
+    // SOL-R004-006: Debt payment archival status check under row lock
+    // -------------------------------------------------------------------------
+    const archPayDebt = await debtService.createDebt(userA.id, {
+      direction: 'PAYABLE',
+      counterpartyName: 'Archival Check Pay',
+      title: 'Archival Lock Test Payable',
+      originalAmount: '2000.00',
+    }, db);
+    const archPayId = archPayDebt.debt.id;
+
+    // Archive the debt
+    await db.personalDebt.update({
+      where: { id: archPayId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    // Repayment on archived debt must be rejected
+    await assert.rejects(
+      async () => {
+        await debtService.recordDebtRepayment(userA.id, {
+          debtId: archPayId,
+          amount: '500.00',
+          accountId: bankAId,
+        }, db);
+      },
+      /archived debt/i,
+      'Repayment on archived debt is strictly rejected under lock'
+    );
+
+    const archRecDebt = await debtService.createDebt(userA.id, {
+      direction: 'RECEIVABLE',
+      counterpartyName: 'Archival Check Rec',
+      title: 'Archival Lock Test Receivable',
+      originalAmount: '3000.00',
+      accountId: bankAId,
+    }, db);
+    const archRecId = archRecDebt.debt.id;
+
+    // Archive the debt
+    await db.personalDebt.update({
+      where: { id: archRecId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    // -------------------------------------------------------------------------
+    // SOL-R004-006: Allow Exact Idempotent Retries for Archived Debt
+    // -------------------------------------------------------------------------
+    const retryDebt = await debtService.createDebt(userA.id, {
+      direction: 'PAYABLE',
+      counterpartyName: 'Archival Retry Counterparty',
+      title: 'Archival Idempotent Retry Test',
+      originalAmount: '5000.00',
+      accountId: bankAId,
+    }, db);
+    const retryDebtId = retryDebt.debt.id;
+
+    // 1. Successful payment with idempotencyKey
+    const firstPay = await debtService.recordDebtRepayment(userA.id, {
+      debtId: retryDebtId,
+      amount: '1500.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-repay-retry-key-001',
+    }, db);
+    assert.equal(firstPay.alreadyProcessed, false);
+    assert.ok(firstPay.transactionId);
+
+    // 2. Archive the debt
+    await db.personalDebt.update({
+      where: { id: retryDebtId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    // 3. Exact idempotent retry on archived debt MUST succeed and return existing transaction
+    const retryPay = await debtService.recordDebtRepayment(userA.id, {
+      debtId: retryDebtId,
+      amount: '1500.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-repay-retry-key-001',
+    }, db);
+    assert.equal(retryPay.alreadyProcessed, true, 'Retry on archived debt returns alreadyProcessed: true');
+    assert.equal(retryPay.transactionId, firstPay.transactionId, 'Retry returns original transactionId');
+
+    // Verify no duplicate repayment transactions created
+    const repayTxs = await db.financialTransaction.count({
+      where: { personalDebtId: retryDebtId, type: 'DEBT_REPAY' }
+    });
+    assert.equal(repayTxs, 1, 'Exactly one repayment transaction exists after idempotent retry');
+
+    // 4. New payment with fresh idempotency key on archived debt must be rejected
+    await assert.rejects(
+      async () => {
+        await debtService.recordDebtRepayment(userA.id, {
+          debtId: retryDebtId,
+          amount: '1000.00',
+          accountId: bankAId,
+          idempotencyKey: 'arch-repay-new-uncommitted-key',
+        }, db);
+      },
+      /Cannot record payment on an archived debt/,
+      'New payment on archived debt with unused idempotency key is rejected'
+    );
+
+    // 5. Receivable collection idempotent retry test
+    const retryRecDebt = await debtService.createDebt(userA.id, {
+      direction: 'RECEIVABLE',
+      counterpartyName: 'Archival Rec Retry',
+      title: 'Archival Receivable Retry Test',
+      originalAmount: '4000.00',
+      accountId: bankAId,
+    }, db);
+    const retryRecId = retryRecDebt.debt.id;
+
+    const firstCollect = await debtService.recordDebtCollection(userA.id, {
+      debtId: retryRecId,
+      amount: '2000.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-collect-retry-key-001',
+    }, db);
+    assert.equal(firstCollect.alreadyProcessed, false);
+    assert.ok(firstCollect.transactionId);
+
+    await db.personalDebt.update({
+      where: { id: retryRecId },
+      data: { status: 'ARCHIVED' }
+    });
+
+    const retryCollect = await debtService.recordDebtCollection(userA.id, {
+      debtId: retryRecId,
+      amount: '2000.00',
+      accountId: bankAId,
+      idempotencyKey: 'arch-collect-retry-key-001',
+    }, db);
+    assert.equal(retryCollect.alreadyProcessed, true, 'Collection retry on archived debt succeeds');
+    assert.equal(retryCollect.transactionId, firstCollect.transactionId);
+
+    // New collection on archived receivable must be rejected
+    await assert.rejects(
+      async () => {
+        await debtService.recordDebtCollection(userA.id, {
+          debtId: retryRecId,
+          amount: '500.00',
+          accountId: bankAId,
+          idempotencyKey: 'arch-collect-new-key',
+        }, db);
+      },
+      /archived debt/i,
+      'New collection on archived debt is rejected'
+    );
   } finally {
     await db.$disconnect();
+  }
+});
+
+
+test('SOL-R004-016: Snapshot and posted debt retain opening principal after additional movements', async (t) => {
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const user = await db.user.create({ data: {
+    email: `opening-debt-${Date.now()}@test.local`, name: 'Opening Debt Regression',
+    password: 'test-password', timezone: 'UTC',
+  } });
+  t.after(async () => {
+    await db.financialTransaction.deleteMany({ where: { userId: user.id } });
+    await db.personalDebt.deleteMany({ where: { userId: user.id } });
+    await db.financialAccount.deleteMany({ where: { userId: user.id } });
+    await db.user.delete({ where: { id: user.id } });
+    await db.$disconnect();
+  });
+  const account = (await financeService.createAccount(user.id, {
+    name: 'Debt Regression Bank', type: 'BANK', openingBalance: 50000,
+  }, db)).account;
+  for (const direction of ['RECEIVABLE', 'PAYABLE'] as const) {
+    for (const posted of [false, true]) {
+      const created = await debtService.createDebt(user.id, {
+        direction, counterpartyName: 'Test friend', originalAmount: 5000,
+        ...(posted ? { accountId: account.id } : {}),
+      }, db);
+      if (posted) {
+        const initial = await db.financialTransaction.findUniqueOrThrow({ where: { id: created.debt.initialTransactionId! } });
+        assert.ok(initial.note?.includes('[initialPrincipal:true]'));
+      }
+      const additional = direction === 'RECEIVABLE' ? debtService.recordAdditionalLend : debtService.recordAdditionalBorrow;
+      const repay = direction === 'RECEIVABLE' ? debtService.recordDebtCollection : debtService.recordDebtRepayment;
+      const added = await additional(user.id, { debtId: created.debt.id, accountId: account.id, amount: 1000 }, db);
+      assert.equal(added.newOutstanding, '6000', `${direction}, posted=${posted}`);
+      const paid = await repay(user.id, { debtId: created.debt.id, accountId: account.id, amount: 2000 }, db);
+      assert.equal(paid.remainingOutstanding, '4000');
+      const reloaded = await debtService.getDebts(user.id, {}, db);
+      assert.equal(reloaded.find((d: { id: string; outstandingAmount: string }) => d.id === created.debt.id)!.outstandingAmount, '4000');
+      const equalOpening = await additional(user.id, {
+        debtId: created.debt.id, accountId: account.id, amount: 5000, note: 'Second advance',
+      }, db);
+      assert.equal(equalOpening.newOutstanding, '9000');
+    }
+  }
+});
+
+
+test('SOL-R004-016 unit: Opening debt is counted exactly once for snapshots, tagged and legacy ledger entries', () => {
+  for (const direction of ['RECEIVABLE', 'PAYABLE']) {
+    const principalType = direction === 'RECEIVABLE' ? 'LEND' : 'BORROW';
+    const paymentType = direction === 'RECEIVABLE' ? 'DEBT_COLLECT' : 'DEBT_REPAY';
+    const additional = { type: principalType, amount: '1000', note: 'Additional movement' };
+    const repayment = { type: paymentType, amount: '2000' };
+    for (const initial of [[], [{ type: principalType, amount: '5000', note: 'Opening [initialPrincipal:true]' }],
+      [{ type: principalType, amount: '5000', note: 'Legacy opening' }]]) {
+      assert.equal(calculateDebtOutstanding(direction, '5000', [...initial, additional]).toString(), '6000');
+      assert.equal(calculateDebtOutstanding(direction, '5000', [...initial, additional, repayment]).toString(), '4000');
+    }
+    assert.equal(calculateDebtOutstanding(direction, '5000', [{ type: paymentType, amount: '5000' }]).toString(), '0');
+    // An additional advance equal to the snapshot opening is still an additional advance.
+    assert.equal(calculateDebtOutstanding(direction, '5000', [{ type: principalType, amount: '5000', note: 'Additional advance' }]).toString(), '10000');
+    // Repayments equal to the opening must not be misclassified as posted principal.
+    assert.equal(calculateDebtOutstanding(direction, '5000', [additional, { type: paymentType, amount: '5000' }]).toString(), '1000');
   }
 });

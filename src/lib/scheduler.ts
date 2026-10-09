@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import {
   calculateDeliverySchedules,
   shouldDeliverNow,
+  formatOccurrenceKey,
   formatTelegramBillReminder,
   formatTelegramDebtReminder,
   formatTelegramLoanEmiReminder,
@@ -285,9 +286,30 @@ export async function processSchedulerTick(
           if (typeof tx.obligation?.findUnique === 'function') {
             const freshOb = await tx.obligation.findUnique({
               where: { id: ob.id },
-              select: { id: true, isActive: true, isArchived: true }
+              select: {
+                id: true,
+                isActive: true,
+                isArchived: true,
+                nextDueAt: true,
+                reminderOffsetsMin: true,
+              }
             });
-            if (!freshOb || !freshOb.isActive || freshOb.isArchived) {
+            if (!freshOb || !freshOb.isActive || freshOb.isArchived || !freshOb.nextDueAt) {
+              return null;
+            }
+
+            // SOL-R001-008: Revalidate nextDueAt, reminder offsets, and schedule status under target lock
+            if (freshOb.nextDueAt.getTime() !== ob.nextDueAt.getTime()) {
+              return null;
+            }
+            const freshOffsets = freshOb.reminderOffsetsMin && freshOb.reminderOffsetsMin.length > 0
+              ? freshOb.reminderOffsetsMin
+              : [0];
+            if (!freshOffsets.includes(sched.offsetMinutes)) {
+              return null;
+            }
+            const freshOccurrenceKey = formatOccurrenceKey(freshOb.nextDueAt);
+            if (freshOccurrenceKey !== sched.occurrenceKey) {
               return null;
             }
           }
@@ -330,11 +352,13 @@ export async function processSchedulerTick(
               return null;
             }
 
-            // Exclusively transition eligible delivery to SENDING
+            // SOL-R003-004: Increment attemptCount on renewal as fencing token
+            const nextAttemptCount = (del.attemptCount || 0) + 1;
             const updated = await tx.reminderDelivery.update({
               where: { id: del.id },
               data: {
                 status: 'SENDING',
+                attemptCount: nextAttemptCount,
                 lastAttemptAt: now,
               },
             });
@@ -360,7 +384,22 @@ export async function processSchedulerTick(
             });
           }
 
-          // Create new exclusively claimed delivery
+          // Evaluate eligibility for brand new delivery claim
+          const newEligibility = shouldDeliverNow({
+            scheduledFor: sched.scheduledFor,
+            now,
+            snoozedUntil: null,
+            isStale: sched.isStale,
+            deliveryStatus: null,
+            attemptCount: 0,
+            lastAttemptAt: null,
+            nextRetryAt: null,
+          });
+          if (!newEligibility.shouldSend) {
+            return null;
+          }
+
+          // Create new exclusively claimed delivery with attemptCount: 1
           del = await tx.reminderDelivery.create({
             data: {
               userId: ob.userId,
@@ -371,7 +410,7 @@ export async function processSchedulerTick(
               offsetMinutes: sched.offsetMinutes,
               channel: 'TELEGRAM',
               status: 'SENDING',
-              attemptCount: 0,
+              attemptCount: 1,
               lastAttemptAt: now,
             },
           });
@@ -410,8 +449,9 @@ export async function processSchedulerTick(
             reply_markup: payload.reply_markup,
           });
 
+          const claimedAttemptCount = delivery.attemptCount || 1;
           const successState = evaluateDeliverySuccess({
-            currentAttemptCount: delivery.attemptCount || 0,
+            currentAttemptCount: claimedAttemptCount - 1,
             sentAt: now,
           });
 
@@ -419,27 +459,38 @@ export async function processSchedulerTick(
             status: successState.status,
             sentAt: successState.sentAt,
             telegramMessageId: sent.message_id,
-            attemptCount: successState.attemptCount,
+            attemptCount: claimedAttemptCount,
             lastAttemptAt: successState.lastAttemptAt,
             nextRetryAt: successState.nextRetryAt,
           };
 
+          let updateRes: any = null;
           if (typeof db.reminderDelivery?.updateMany === 'function') {
-            await db.reminderDelivery.updateMany({
-              where: { id: delivery.id, status: 'SENDING' },
+            updateRes = await db.reminderDelivery.updateMany({
+              where: {
+                id: delivery.id,
+                status: 'SENDING',
+                attemptCount: claimedAttemptCount,
+                ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+              },
               data: updateSuccessData,
             });
           } else if (typeof db.reminderDelivery?.update === 'function') {
-            await db.reminderDelivery.update({
+            updateRes = await db.reminderDelivery.update({
               where: { id: delivery.id },
               data: updateSuccessData,
             });
           }
+          if (updateRes && typeof updateRes.count === 'number' && updateRes.count === 0) {
+            console.warn(`[Scheduler] Delivery ${delivery.id} was fenced out (0 rows updated)`);
+            continue;
+          }
           result.wealthRemindersSent++;
           console.log(`[Scheduler] Sent bill reminder ${ob.title} to user ${ob.user.id}`);
         } catch (sendErr: any) {
+          const claimedAttemptCount = delivery.attemptCount || 1;
           const failureState = evaluateDeliveryFailure({
-            currentAttemptCount: delivery.attemptCount || 0,
+            currentAttemptCount: claimedAttemptCount - 1,
             failedAt: now,
             failureReason: sendErr?.message || 'Send error',
           });
@@ -447,14 +498,19 @@ export async function processSchedulerTick(
           const updateFailData = {
             status: failureState.status,
             failureReason: failureState.failureReason,
-            attemptCount: failureState.attemptCount,
+            attemptCount: claimedAttemptCount,
             lastAttemptAt: failureState.lastAttemptAt,
             nextRetryAt: failureState.nextRetryAt,
           };
 
           if (typeof db.reminderDelivery?.updateMany === 'function') {
             await db.reminderDelivery.updateMany({
-              where: { id: delivery.id, status: 'SENDING' },
+              where: {
+                id: delivery.id,
+                status: 'SENDING',
+                attemptCount: claimedAttemptCount,
+                ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+              },
               data: updateFailData,
             });
           } else if (typeof db.reminderDelivery?.update === 'function') {
@@ -524,6 +580,22 @@ export async function processSchedulerTick(
               if (!currentDebt || currentDebt.status !== 'OPEN' || !currentDebt.dueAt) {
                 return null;
               }
+
+              // SOL-R001-008: Revalidate dueAt, offsets, and schedule identity under lock
+              if (currentDebt.dueAt.getTime() !== debt.dueAt.getTime()) {
+                return null;
+              }
+              const freshOffsets = currentDebt.reminderOffsetsMin && currentDebt.reminderOffsetsMin.length > 0
+                ? currentDebt.reminderOffsetsMin
+                : [0];
+              if (!freshOffsets.includes(sched.offsetMinutes)) {
+                return null;
+              }
+              const freshOccurrenceKey = formatOccurrenceKey(currentDebt.dueAt);
+              if (freshOccurrenceKey !== sched.occurrenceKey) {
+                return null;
+              }
+
               const currentOutstanding = calculateDebtOutstanding(
                 currentDebt.direction,
                 currentDebt.originalAmount,
@@ -604,14 +676,32 @@ export async function processSchedulerTick(
                 return null;
               }
 
+              // SOL-R003-004: Increment attemptCount on renewal as fencing token
+              const nextAttemptCount = (del.attemptCount || 0) + 1;
               const updated = await tx.reminderDelivery.update({
                 where: { id: del.id },
                 data: {
                   status: 'SENDING',
+                  attemptCount: nextAttemptCount,
                   lastAttemptAt: now,
                 },
               });
               return updated;
+            }
+
+            // SOL-R003-001: Evaluate shouldDeliverNow before creating new delivery claim
+            const newEligibility = shouldDeliverNow({
+              scheduledFor: sched.scheduledFor,
+              now,
+              snoozedUntil: null,
+              isStale: sched.isStale,
+              deliveryStatus: null,
+              attemptCount: 0,
+              lastAttemptAt: null,
+              nextRetryAt: null,
+            });
+            if (!newEligibility.shouldSend) {
+              return null;
             }
 
             del = await tx.reminderDelivery.create({
@@ -623,7 +713,7 @@ export async function processSchedulerTick(
                 offsetMinutes: sched.offsetMinutes,
                 channel: 'TELEGRAM',
                 status: 'SENDING',
-                attemptCount: 0,
+                attemptCount: 1,
                 lastAttemptAt: now,
               },
             });
@@ -659,8 +749,9 @@ export async function processSchedulerTick(
               reply_markup: payload.reply_markup,
             });
 
+            const claimedAttemptCount = delivery.attemptCount || 1;
             const successState = evaluateDeliverySuccess({
-              currentAttemptCount: delivery.attemptCount || 0,
+              currentAttemptCount: claimedAttemptCount - 1,
               sentAt: now,
             });
 
@@ -668,27 +759,38 @@ export async function processSchedulerTick(
               status: successState.status,
               sentAt: successState.sentAt,
               telegramMessageId: sent.message_id,
-              attemptCount: successState.attemptCount,
+              attemptCount: claimedAttemptCount,
               lastAttemptAt: successState.lastAttemptAt,
               nextRetryAt: successState.nextRetryAt,
             };
 
+            let updateRes: any = null;
             if (typeof db.reminderDelivery?.updateMany === 'function') {
-              await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING' },
+              updateRes = await db.reminderDelivery.updateMany({
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateSuccessData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {
-              await db.reminderDelivery.update({
+              updateRes = await db.reminderDelivery.update({
                 where: { id: delivery.id },
                 data: updateSuccessData,
               });
             }
+            if (updateRes && typeof updateRes.count === 'number' && updateRes.count === 0) {
+              console.warn(`[Scheduler] Debt delivery ${delivery.id} was fenced out (0 rows updated)`);
+              continue;
+            }
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent debt reminder ${debt.id} to user ${debt.user.id}`);
           } catch (sendErr: any) {
+            const claimedAttemptCount = delivery.attemptCount || 1;
             const failureState = evaluateDeliveryFailure({
-              currentAttemptCount: delivery.attemptCount || 0,
+              currentAttemptCount: claimedAttemptCount - 1,
               failedAt: now,
               failureReason: sendErr?.message || 'Send error',
             });
@@ -696,14 +798,19 @@ export async function processSchedulerTick(
             const updateFailData = {
               status: failureState.status,
               failureReason: failureState.failureReason,
-              attemptCount: failureState.attemptCount,
+              attemptCount: claimedAttemptCount,
               lastAttemptAt: failureState.lastAttemptAt,
               nextRetryAt: failureState.nextRetryAt,
             };
 
             if (typeof db.reminderDelivery?.updateMany === 'function') {
               await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING' },
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateFailData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {
@@ -770,6 +877,15 @@ export async function processSchedulerTick(
                 where: { id: loan.id },
               });
               if (!currentLoan || currentLoan.status !== 'ACTIVE' || !currentLoan.nextEmiDate || currentLoan.obligationId) {
+                return null;
+              }
+
+              // SOL-R001-008: Revalidate nextEmiDate and occurrenceKey under lock
+              if (currentLoan.nextEmiDate.getTime() !== loan.nextEmiDate.getTime()) {
+                return null;
+              }
+              const freshOccurrenceKey = formatOccurrenceKey(currentLoan.nextEmiDate);
+              if (freshOccurrenceKey !== sched.occurrenceKey) {
                 return null;
               }
             }
@@ -844,14 +960,32 @@ export async function processSchedulerTick(
                 return null;
               }
 
+              // SOL-R003-004: Increment attemptCount on renewal as fencing token
+              const nextAttemptCount = (del.attemptCount || 0) + 1;
               const updated = await tx.reminderDelivery.update({
                 where: { id: del.id },
                 data: {
                   status: 'SENDING',
+                  attemptCount: nextAttemptCount,
                   lastAttemptAt: now,
                 },
               });
               return updated;
+            }
+
+            // SOL-R003-001: Evaluate shouldDeliverNow before creating new delivery claim
+            const newEligibility = shouldDeliverNow({
+              scheduledFor: sched.scheduledFor,
+              now,
+              snoozedUntil: null,
+              isStale: sched.isStale,
+              deliveryStatus: null,
+              attemptCount: 0,
+              lastAttemptAt: null,
+              nextRetryAt: null,
+            });
+            if (!newEligibility.shouldSend) {
+              return null;
             }
 
             del = await tx.reminderDelivery.create({
@@ -863,7 +997,7 @@ export async function processSchedulerTick(
                 offsetMinutes: sched.offsetMinutes,
                 channel: 'TELEGRAM',
                 status: 'SENDING',
-                attemptCount: 0,
+                attemptCount: 1,
                 lastAttemptAt: now,
               },
             });
@@ -899,8 +1033,9 @@ export async function processSchedulerTick(
               reply_markup: payload.reply_markup,
             });
 
+            const claimedAttemptCount = delivery.attemptCount || 1;
             const successState = evaluateDeliverySuccess({
-              currentAttemptCount: delivery.attemptCount || 0,
+              currentAttemptCount: claimedAttemptCount - 1,
               sentAt: now,
             });
 
@@ -908,27 +1043,38 @@ export async function processSchedulerTick(
               status: successState.status,
               sentAt: successState.sentAt,
               telegramMessageId: sent.message_id,
-              attemptCount: successState.attemptCount,
+              attemptCount: claimedAttemptCount,
               lastAttemptAt: successState.lastAttemptAt,
               nextRetryAt: successState.nextRetryAt,
             };
 
+            let updateRes: any = null;
             if (typeof db.reminderDelivery?.updateMany === 'function') {
-              await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING' },
+              updateRes = await db.reminderDelivery.updateMany({
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateSuccessData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {
-              await db.reminderDelivery.update({
+              updateRes = await db.reminderDelivery.update({
                 where: { id: delivery.id },
                 data: updateSuccessData,
               });
             }
+            if (updateRes && typeof updateRes.count === 'number' && updateRes.count === 0) {
+              console.warn(`[Scheduler] Loan delivery ${delivery.id} was fenced out (0 rows updated)`);
+              continue;
+            }
             result.wealthRemindersSent++;
             console.log(`[Scheduler] Sent loan EMI reminder ${loan.id} to user ${loan.user.id}`);
           } catch (sendErr: any) {
+            const claimedAttemptCount = delivery.attemptCount || 1;
             const failureState = evaluateDeliveryFailure({
-              currentAttemptCount: delivery.attemptCount || 0,
+              currentAttemptCount: claimedAttemptCount - 1,
               failedAt: now,
               failureReason: sendErr?.message || 'Send error',
             });
@@ -936,14 +1082,19 @@ export async function processSchedulerTick(
             const updateFailData = {
               status: failureState.status,
               failureReason: failureState.failureReason,
-              attemptCount: failureState.attemptCount,
+              attemptCount: claimedAttemptCount,
               lastAttemptAt: failureState.lastAttemptAt,
               nextRetryAt: failureState.nextRetryAt,
             };
 
             if (typeof db.reminderDelivery?.updateMany === 'function') {
               await db.reminderDelivery.updateMany({
-                where: { id: delivery.id, status: 'SENDING' },
+                where: {
+                  id: delivery.id,
+                  status: 'SENDING',
+                  attemptCount: claimedAttemptCount,
+                  ...(delivery.lastAttemptAt ? { lastAttemptAt: delivery.lastAttemptAt } : {}),
+                },
                 data: updateFailData,
               });
             } else if (typeof db.reminderDelivery?.update === 'function') {

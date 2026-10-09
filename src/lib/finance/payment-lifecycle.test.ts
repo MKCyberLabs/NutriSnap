@@ -98,7 +98,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       occurrenceKey: '2026-11-05',
       createExpense: true,
       accountId: bankA.id,
-    });
+    }, db);
 
     assert.equal(payRes.success, true);
     assert.ok(payRes.occurrenceId);
@@ -119,7 +119,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
 
     // Generic transaction delete MUST be blocked (409 Conflict protection)
     await assert.rejects(
-      async () => financeService.deleteTransaction(userAId, payRes.transactionId!),
+      async () => financeService.deleteTransaction(userAId, payRes.transactionId!, db),
       /Linked transaction cannot be deleted directly/
     );
 
@@ -127,7 +127,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     const revertRes = await financeService.revertObligationPayment(userAId, {
       obligationId: obligation.id,
       occurrenceKey: '2026-11-05',
-    });
+    }, db);
 
     assert.equal(revertRes.success, true);
     assert.equal(revertRes.alreadyReversed, false);
@@ -159,7 +159,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     const repeatRevert = await financeService.revertObligationPayment(userAId, {
       obligationId: obligation.id,
       occurrenceKey: '2026-11-05',
-    });
+    }, db);
     assert.equal(repeatRevert.success, true);
     assert.equal(repeatRevert.alreadyReversed, true);
 
@@ -169,7 +169,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       occurrenceKey: '2026-11-05',
       createExpense: true,
       accountId: bankA.id,
-    });
+    }, db);
     assert.equal(rePayRes.success, true);
     assert.equal(rePayRes.alreadyCompleted, false);
     assert.ok(rePayRes.transactionId);
@@ -187,7 +187,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       paymentAccountId: bankA.id,
       nextEmiDate: '2026-11-10T10:00:00.000Z',
       createLinkedObligation: true,
-    });
+    }, db);
 
     const loanId = loanRes.loan.id;
     const loanDb = await db.loan.findUnique({
@@ -206,7 +206,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       principalPaid: 4000,
       interestPaid: 1000,
       occurredAt: emiDate,
-    });
+    }, db);
 
     assert.equal(payRes.success, true);
     assert.equal(payRes.remainingPrincipal, '46000');
@@ -220,7 +220,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
 
     // Generic transaction delete blocked on EMI transaction
     await assert.rejects(
-      async () => financeService.deleteTransaction(userAId, payRes.transactionId!),
+      async () => financeService.deleteTransaction(userAId, payRes.transactionId!, db),
       /Linked transaction cannot be deleted directly/
     );
 
@@ -228,7 +228,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     const revertRes = await loanService.revertEmiPayment(userAId, {
       loanPaymentId: payRes.paymentId,
       revertToDate: emiDate,
-    });
+    }, db);
 
     assert.equal(revertRes.success, true);
     assert.equal(revertRes.alreadyReversed, false);
@@ -251,7 +251,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     // Repeated revert is idempotent
     const repeatRevert = await loanService.revertEmiPayment(userAId, {
       loanPaymentId: payRes.paymentId,
-    });
+    }, db);
     assert.equal(repeatRevert.success, true);
     assert.equal(repeatRevert.alreadyReversed, true);
   });
@@ -303,7 +303,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     await financeService.updateObligation(userAId, ob.id, {
       dueAt: newDate,
       amount: 2700,
-    });
+    }, db);
 
     const pendingDeliveries = await db.reminderDelivery.findMany({
       where: { obligationId: ob.id, status: 'PENDING' }
@@ -315,17 +315,17 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     assert.equal(new Decimal(updatedOb!.amount!).toString(), '2700');
 
     // 3. Pause obligation
-    await financeService.toggleObligationActive(userAId, ob.id, false);
+    await financeService.toggleObligationActive(userAId, ob.id, false, db);
     const pausedOb = await db.obligation.findUnique({ where: { id: ob.id } });
     assert.equal(pausedOb!.isActive, false);
 
     // 4. Resume obligation
-    await financeService.toggleObligationActive(userAId, ob.id, true);
+    await financeService.toggleObligationActive(userAId, ob.id, true, db);
     const resumedOb = await db.obligation.findUnique({ where: { id: ob.id } });
     assert.equal(resumedOb!.isActive, true);
 
     // 5. Hard delete with 0 payment occurrences succeeds
-    const delRes = await financeService.deleteObligation(userAId, ob.id);
+    const delRes = await financeService.deleteObligation(userAId, ob.id, db);
     assert.equal(delRes.success, true);
     const deletedOb = await db.obligation.findUnique({ where: { id: ob.id } });
     assert.equal(deletedOb, null);
@@ -347,15 +347,15 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     await financeService.markObligationPaid(userAId, {
       obligationId: paidOb.id,
       occurrenceKey: '2026-12-01',
-    });
+    }, db);
 
     await assert.rejects(
-      async () => financeService.deleteObligation(userAId, paidOb.id),
+      async () => financeService.deleteObligation(userAId, paidOb.id, db),
       /Cannot delete obligation with payment history/
     );
 
     // Archiving instead succeeds
-    const archRes = await financeService.archiveObligation(userAId, paidOb.id);
+    const archRes = await financeService.archiveObligation(userAId, paidOb.id, db);
     assert.equal(archRes.success, true);
     const archOb = await db.obligation.findUnique({ where: { id: paidOb.id } });
     assert.equal(archOb!.isArchived, true);
@@ -397,7 +397,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       dueDate: '2026-11-10T12:00:00.000Z',
       statementAmount: 30000,
       minimumDue: 1500,
-    });
+    }, db);
 
     assert.equal(stmtRes.success, true);
     assert.equal(stmtRes.statement.status, 'OPEN');
@@ -419,7 +419,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       fromAccountId: bankA.id,
       amount: 10000,
       note: 'Part 1 Payment',
-    });
+    }, db);
 
     assert.equal(pay1.success, true);
     assert.equal(pay1.statementStatus, 'PARTIAL');
@@ -438,7 +438,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
 
     // Verify generic transaction delete is blocked
     await assert.rejects(
-      async () => financeService.deleteTransaction(userAId, pay1.transactionId),
+      async () => financeService.deleteTransaction(userAId, pay1.transactionId, db),
       /Linked transaction cannot be deleted directly/
     );
 
@@ -451,7 +451,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       statementId: stmtId,
       fromAccountId: bankA.id,
       amount: 12000,
-    });
+    }, db);
     assert.equal(pay2.statementStatus, 'PARTIAL');
     assert.equal(new Decimal(pay2.pendingBalance).toString(), '8000');
 
@@ -464,7 +464,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
         statementId: stmtId,
         fromAccountId: bankA.id,
         amount: 10000,
-      }),
+      }, db),
       /cannot exceed pending balance/
     );
 
@@ -473,18 +473,18 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
       statementId: stmtId,
       fromAccountId: bankA.id,
       amount: 8000,
-    });
+    }, db);
     assert.equal(pay3.statementStatus, 'PAID');
     assert.equal(new Decimal(pay3.pendingBalance).toString(), '0');
     assert.equal(pay3.fullyPaid, true);
 
-    // Obligation occurrence created with transactionId = null (Finding 3)
+    // Completion links the final transfer so Bills Undo targets the correct payment.
     const occ = await db.obligationOccurrence.findFirst({
       where: { obligationId: linkedOb.id }
     });
     assert.ok(occ);
     assert.equal(occ.status, 'COMPLETED');
-    assert.equal(occ.transactionId, null);
+    assert.equal(occ.transactionId, pay3.transactionId);
 
     // Obligation deactivated on full payoff
     const obAfterFull = await db.obligation.findUnique({ where: { id: linkedOb.id } });
@@ -495,7 +495,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     // 5. Revert Payment: undo the latest ₹8,000 payment
     const revertPay3 = await creditCardService.revertCreditCardPayment(userAId, {
       paymentId: pay3.paymentId,
-    });
+    }, db);
     assert.equal(revertPay3.success, true);
     assert.equal(revertPay3.restoredStatus, 'PARTIAL');
     assert.equal(new Decimal(revertPay3.pendingBalance).toString(), '8000');
@@ -528,7 +528,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
         statementDate: '2026-11-20',
         dueDate: '2026-12-10',
         statementAmount: 5000,
-      }),
+      }, db),
       /Credit card account not found or unauthorized/
     );
 
@@ -539,7 +539,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
         statementId: stmt!.id,
         fromAccountId: bankB.id,
         amount: 1000,
-      }),
+      }, db),
       /Source payment account not found or unauthorized/
     );
 
@@ -549,7 +549,7 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
         statementId: stmt!.id,
         fromAccountId: cardA.id,
         amount: 1000,
-      }),
+      }, db),
       /Source account cannot be the credit card being paid/
     );
   });
@@ -1877,4 +1877,1708 @@ test('V2-650: Payment Lifecycle, Reminder Management, and Credit Card Tracking',
     const originalFormatted = formatToDateInput(exactOriginal, 'UTC');
     assert.equal(originalFormatted, '2026-10-15');
   });
+
+  await t.test('SOL-R001-004: Kiritimati (+14) UTC scheduler key matches active EMI and advances loan', async () => {
+    const kiritimatiUser = await db.user.create({
+      data: {
+        id: `usr_kiri_${timestamp}`,
+        email: `kiri_${timestamp}@test.com`,
+        name: 'Kiritimati User',
+        password: 'password123',
+        telegramId: `tg_kiri_${timestamp}`,
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const kiriBank = await financeService.createAccount(kiritimatiUser.id, {
+      name: 'Kiritimati Bank',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+
+    // In Kiritimati (+14): Nov 15 12:00 is Nov 14 22:00 UTC
+    const emiDateUtc = new Date('2026-11-14T22:00:00.000Z');
+
+    const testLoan = await db.loan.create({
+      data: {
+        userId: kiritimatiUser.id,
+        name: 'Kiritimati Scooter Loan',
+        lender: 'Pacific Finance',
+        loanType: 'VEHICLE',
+        openingOutstanding: new Decimal('30000.00'),
+        outstandingPrincipal: new Decimal('30000.00'),
+        tenureMonths: 12,
+        emiAmount: new Decimal('2500.00'),
+        startDate: emiDateUtc,
+        nextEmiDate: emiDateUtc,
+        dueDay: 15,
+        status: 'ACTIVE',
+        paymentAccountId: kiriBank.account.id,
+      }
+    });
+
+    const ob = await db.obligation.create({
+      data: {
+        userId: kiritimatiUser.id,
+        title: testLoan.name,
+        kind: 'EMI',
+        amount: testLoan.emiAmount,
+        dueAt: emiDateUtc,
+        nextDueAt: emiDateUtc,
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+    await db.loan.update({ where: { id: testLoan.id }, data: { obligationId: ob.id } });
+
+    // Scheduler generates occurrence key in UTC: '2026-11-14T22:00'
+    const payRes = await financeService.markObligationPaid(kiritimatiUser.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-11-14T22:00',
+      accountId: kiriBank.account.id,
+    }, db);
+
+    assert.equal(payRes.success, true);
+    assert.equal(payRes.alreadyCompleted, false);
+
+    // Verify loan was advanced to next month (Dec 15 local)
+    const loanAfter = await db.loan.findUnique({ where: { id: testLoan.id } });
+    assert.ok(loanAfter?.nextEmiDate);
+    assert.notEqual(loanAfter?.nextEmiDate.toISOString(), emiDateUtc.toISOString());
+
+    // Verify loan payment was created
+    const payment = await db.loanPayment.findFirst({ where: { loanId: testLoan.id } });
+    assert.ok(payment);
+    assert.equal(payment?.amount.toString(), '2500');
+
+    // Clean up
+    await db.loanPayment.deleteMany({ where: { loanId: testLoan.id } });
+    await db.loan.delete({ where: { id: testLoan.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R001-004: Future EMI callback is safely rejected without corrupting loan', async () => {
+    const testLoan = await db.loan.create({
+      data: {
+        userId: userAId,
+        name: 'Future EMI Guard Loan',
+        lender: 'HDFC Bank',
+        loanType: 'PERSONAL',
+        openingOutstanding: new Decimal('50000.00'),
+        outstandingPrincipal: new Decimal('50000.00'),
+        tenureMonths: 12,
+        emiAmount: new Decimal('5000.00'),
+        startDate: new Date('2026-04-10T12:00:00.000Z'),
+        nextEmiDate: new Date('2026-04-10T12:00:00.000Z'), // Active is April
+        dueDay: 10,
+        status: 'ACTIVE',
+        paymentAccountId: bankA.id,
+      }
+    });
+
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: testLoan.name,
+        kind: 'EMI',
+        amount: testLoan.emiAmount,
+        dueAt: testLoan.nextEmiDate!,
+        nextDueAt: testLoan.nextEmiDate!,
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+    await db.loan.update({ where: { id: testLoan.id }, data: { obligationId: ob.id } });
+
+    // Future callback for June arrives while loan is on April
+    const futureRes = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-06-10',
+      accountId: bankA.id,
+    }, db);
+
+    assert.equal(futureRes.success, true);
+    assert.equal(futureRes.alreadyCompleted, true);
+
+    // Verify loan was NOT corrupted or advanced
+    const loanAfter = await db.loan.findUnique({ where: { id: testLoan.id } });
+    assert.equal(loanAfter?.nextEmiDate?.toISOString(), new Date('2026-04-10T12:00:00.000Z').toISOString());
+    assert.equal(loanAfter?.outstandingPrincipal.toString(), '50000');
+
+    // Clean up
+    await db.loan.delete({ where: { id: testLoan.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R001-007: Concurrent date-only and timestamp submissions serialize without duplicate payments', async () => {
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Concurrent Fiber Bill',
+        kind: 'SUBSCRIPTION',
+        amount: new Decimal('1200.00'),
+        dueAt: new Date('2026-09-15T12:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T12:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Simulate concurrent date-only ('2026-09-15') and timestamp ('2026-09-15T12:00') requests
+    const [res1, res2] = await Promise.all([
+      financeService.markObligationPaid(userAId, {
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15',
+        createExpense: true,
+        accountId: bankA.id,
+      }, db),
+      financeService.markObligationPaid(userAId, {
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15T12:00',
+        createExpense: true,
+        accountId: bankA.id,
+      }, db),
+    ]);
+
+    // Exactly one should be initial completion and one should be alreadyCompleted
+    assert.equal(res1.success, true);
+    assert.equal(res2.success, true);
+    const completedCount = (res1.alreadyCompleted ? 0 : 1) + (res2.alreadyCompleted ? 0 : 1);
+    assert.equal(completedCount, 1, 'Exactly one concurrent request succeeds and one is marked alreadyCompleted');
+
+    // Only one occurrence record exists
+    const occs = await db.obligationOccurrence.findMany({ where: { obligationId: ob.id } });
+    assert.equal(occs.length, 1, 'Only one occurrence record created');
+
+    // Only one financial transaction created
+    const txs = await db.financialTransaction.findMany({ where: { obligationId: ob.id } });
+    assert.equal(txs.length, 1, 'Only one transaction created');
+
+    // Clean up
+    await db.financialTransaction.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R001-007: Adjacent daily occurrences in UTC+14 remain distinct and never false-match', async () => {
+    const kiritimatiUser = await db.user.create({
+      data: {
+        id: `usr_kiri_adj_${timestamp}`,
+        email: `kiri_adj_${timestamp}@test.com`,
+        name: 'Kiritimati Adjacent User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    // Day 1: Nov 15 noon in Kiritimati = Nov 14 22:00 UTC
+    const day1Due = new Date('2026-11-14T22:00:00.000Z');
+    const ob = await db.obligation.create({
+      data: {
+        userId: kiritimatiUser.id,
+        title: 'Daily Kiritimati Check',
+        kind: 'BILL',
+        amount: new Decimal('100.00'),
+        dueAt: day1Due,
+        nextDueAt: day1Due,
+        recurrenceType: 'DAILY',
+        isActive: true,
+      }
+    });
+
+    // Mark Day 1 paid with date-only key '2026-11-15'
+    const pay1 = await financeService.markObligationPaid(kiritimatiUser.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-11-15',
+    }, db);
+    assert.equal(pay1.success, true);
+    assert.equal(pay1.alreadyCompleted, false);
+
+    // Verify obligation advanced to Day 2: Nov 16 noon in Kiritimati = Nov 15 22:00 UTC
+    const obAfter1 = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.ok(obAfter1?.nextDueAt);
+
+    // Mark Day 2 paid with UTC key '2026-11-15T22:00' (which starts with '2026-11-15' in UTC)
+    // In old buggy code, '2026-11-15T22:00'.startsWith('2026-11-15') false-matched Day 1!
+    const pay2 = await financeService.markObligationPaid(kiritimatiUser.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-11-15T22:00',
+    }, db);
+    assert.equal(pay2.success, true);
+    assert.equal(pay2.alreadyCompleted, false, 'Day 2 must NOT false-match Day 1');
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R001-007: Historical occurrence completion stored due date does not suppress current day deliveries or payment', async () => {
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Internet Fiber Bill',
+        kind: 'BILL',
+        amount: new Decimal('1200.00'),
+        dueAt: new Date('2026-09-15T12:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T12:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Create a reminder and delivery record for current due date
+    const rem = await db.reminder.create({
+      data: {
+        userId: userAId,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob.title,
+        obligationId: ob.id,
+        isActive: true,
+      }
+    });
+
+    const activeDel = await db.reminderDelivery.create({
+      data: {
+        userId: userAId,
+        reminderId: rem.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15T12:00',
+        scheduledFor: new Date('2026-09-15T12:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // Pay historical occurrence from August
+    const histPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-15',
+      createExpense: false,
+    }, db);
+
+    assert.equal(histPay.success, true);
+    assert.equal(histPay.alreadyCompleted, false);
+
+    // Verify stored occurrence has August dueDate, NOT September nextDueAt
+    const histOcc = await db.obligationOccurrence.findUnique({
+      where: {
+        obligationId_occurrenceKey: {
+          obligationId: ob.id,
+          occurrenceKey: '2026-08-15',
+        }
+      }
+    });
+    assert.ok(histOcc);
+    assert.equal(histOcc.dueDate.toISOString().substring(0, 10), '2026-08-15', 'Historical occurrence stores resolved August dueDate');
+
+    // Verify active delivery for September was NOT acknowledged or suppressed
+    const activeDelAfter = await db.reminderDelivery.findUnique({ where: { id: activeDel.id } });
+    assert.equal(activeDelAfter?.status, 'PENDING', 'September reminder delivery remains PENDING');
+
+    // Pay current occurrence for September - must succeed and NOT be recognized as already completed
+    const currPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-09-15T12:00',
+      createExpense: false,
+    }, db);
+    assert.equal(currPay.success, true);
+    assert.equal(currPay.alreadyCompleted, false, 'Current day payment succeeds and was not blocked by historical payment');
+
+    // September delivery is now acknowledged
+    const activeDelFinal = await db.reminderDelivery.findUnique({ where: { id: activeDel.id } });
+    assert.equal(activeDelFinal?.status, 'ACKNOWLEDGED');
+
+    // Clean up
+    await db.reminderDelivery.deleteMany({ where: { obligationId: ob.id } });
+    await db.reminder.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R004-007: Validate payer account when creating expense on obligation paid', async () => {
+    // Inactive account for User A
+    const inactiveAccount = await db.financialAccount.create({
+      data: {
+        userId: userAId,
+        name: 'Closed Axis Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(1000),
+        isActive: false,
+      }
+    });
+
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Electricity Bill Test Account',
+        kind: 'BILL',
+        amount: new Decimal('1500.00'),
+        dueAt: new Date('2026-10-15T12:00:00.000Z'),
+        nextDueAt: new Date('2026-10-15T12:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. Missing account rejected when createExpense is true and amount is present
+    await assert.rejects(
+      async () => {
+        await financeService.markObligationPaid(userAId, {
+          obligationId: ob.id,
+          occurrenceKey: '2026-10-15T12:00',
+          createExpense: true,
+        }, db);
+      },
+      /Payment account required/,
+      'Missing account is strictly rejected'
+    );
+
+    // Obligation must NOT be completed
+    let occCount = await db.obligationOccurrence.count({ where: { obligationId: ob.id } });
+    assert.equal(occCount, 0, 'Obligation occurrence was not created on missing account error');
+
+    // 2. Foreign account (owned by User B) rejected
+    await assert.rejects(
+      async () => {
+        await financeService.markObligationPaid(userAId, {
+          obligationId: ob.id,
+          occurrenceKey: '2026-10-15T12:00',
+          createExpense: true,
+          accountId: bankB.id,
+        }, db);
+      },
+      /not found or unauthorized/,
+      'Foreign account is strictly rejected'
+    );
+
+    occCount = await db.obligationOccurrence.count({ where: { obligationId: ob.id } });
+    assert.equal(occCount, 0, 'Obligation occurrence was not created on foreign account error');
+
+    // 3. Inactive account rejected
+    await assert.rejects(
+      async () => {
+        await financeService.markObligationPaid(userAId, {
+          obligationId: ob.id,
+          occurrenceKey: '2026-10-15T12:00',
+          createExpense: true,
+          accountId: inactiveAccount.id,
+        }, db);
+      },
+      /inactive payment account/,
+      'Inactive account is strictly rejected'
+    );
+
+    occCount = await db.obligationOccurrence.count({ where: { obligationId: ob.id } });
+    assert.equal(occCount, 0, 'Obligation occurrence was not created on inactive account error');
+
+    // 4. Valid active account succeeds
+    const validPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-10-15T12:00',
+      createExpense: true,
+      accountId: bankA.id,
+    }, db);
+    assert.equal(validPay.success, true);
+    assert.equal(validPay.alreadyCompleted, false);
+    assert.ok(validPay.transactionId);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.financialTransaction.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+    await db.financialAccount.delete({ where: { id: inactiveAccount.id } });
+  });
+
+  await t.test('SOL-R004-002: Latest-only undo prevents reverting earlier completion under lock', async () => {
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Gym Membership Latest Revert',
+        kind: 'SUBSCRIPTION',
+        amount: new Decimal('2500.00'),
+        dueAt: new Date('2026-01-01T10:00:00.000Z'),
+        nextDueAt: new Date('2026-01-01T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Pay occurrence 1 (Jan 2026)
+    const pay1 = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-01T10:00',
+      createExpense: false,
+    }, db);
+    assert.equal(pay1.success, true);
+    const occ1Id = pay1.occurrenceId!;
+
+    // Pay occurrence 2 (Feb 2026)
+    const pay2 = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-02-01T10:00',
+      createExpense: false,
+    }, db);
+    assert.equal(pay2.success, true);
+    const occ2Id = pay2.occurrenceId!;
+
+    // Attempting to revert Jan occurrence while Feb occurrence exists must be rejected
+    await assert.rejects(
+      async () => {
+        await financeService.revertObligationPayment(userAId, {
+          obligationId: ob.id,
+          occurrenceId: occ1Id,
+        }, db);
+      },
+      /reverse chronological order/,
+      'Cannot revert earlier occurrence when later occurrence is completed'
+    );
+
+    // Revert Feb occurrence succeeds
+    const rev2 = await financeService.revertObligationPayment(userAId, {
+      obligationId: ob.id,
+      occurrenceId: occ2Id,
+    }, db);
+    assert.equal(rev2.success, true);
+    assert.equal(rev2.alreadyReversed, false);
+
+    // Now reverting Jan occurrence succeeds
+    const rev1 = await financeService.revertObligationPayment(userAId, {
+      obligationId: ob.id,
+      occurrenceId: occ1Id,
+    }, db);
+    assert.equal(rev1.success, true);
+    assert.equal(rev1.alreadyReversed, false);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R002-008: ObligationForm formatDateForInput in configured timezone', async () => {
+    const { formatDateForInput } = await import('../../components/finance/ObligationForm');
+
+    // Pacific/Kiritimati (UTC+14): 2026-11-14 22:00 UTC is 2026-11-15 12:00 local
+    const kiritimatiDate = formatDateForInput('2026-11-14T22:00:00.000Z', 'Pacific/Kiritimati');
+    assert.equal(kiritimatiDate, '2026-11-15', 'Kiritimati calendar date is Nov 15');
+
+    // Pacific/Honolulu (UTC-10): 2026-11-15 02:00 UTC is 2026-11-14 16:00 local
+    const honoluluDate = formatDateForInput('2026-11-15T02:00:00.000Z', 'Pacific/Honolulu');
+    assert.equal(honoluluDate, '2026-11-14', 'Honolulu calendar date is Nov 14');
+  });
+
+  await t.test('SOL-R002-008: getObligations and getObligationById read models expose user.timezone', async () => {
+    const userKiri = await db.user.create({
+      data: {
+        id: `usr_tz_read_${timestamp}`,
+        email: `tz_read_${timestamp}@test.com`,
+        name: 'Timezone Read Model User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati',
+      }
+    });
+
+    const ob = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Timezone Read Test Bill',
+        kind: 'BILL',
+        amount: new Decimal('750.00'),
+        dueAt: new Date('2026-09-14T22:00:00.000Z'), // 2026-09-15 12:00 in Kiritimati
+        nextDueAt: new Date('2026-09-14T22:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. getObligations exposes user.timezone
+    const obs = await financeService.getObligations(userKiri.id, db);
+    const obItem = obs.find((o) => o.id === ob.id);
+    assert.ok(obItem, 'Obligation returned by getObligations');
+    assert.ok(obItem?.user, 'Obligation exposes user object');
+    assert.equal(obItem?.user?.timezone, 'Pacific/Kiritimati', 'getObligations exposes user.timezone');
+
+    // 2. getObligationById exposes user.timezone
+    const singleOb = await financeService.getObligationById(userKiri.id, ob.id, db);
+    assert.ok(singleOb, 'Obligation returned by getObligationById');
+    assert.ok(singleOb.user, 'getObligationById exposes user object');
+    assert.equal(singleOb.user?.timezone, 'Pacific/Kiritimati', 'getObligationById exposes user.timezone');
+
+    // Clean up
+    await db.obligation.delete({ where: { id: ob.id } });
+    await db.user.delete({ where: { id: userKiri.id } });
+  });
+
+  await t.test('SOL-R001-007: Historical Occurrence Resolution & Canonical Scheduled Instant', async () => {
+    const userKiri = await db.user.create({
+      data: {
+        id: `usr_sol_r001_007_${timestamp}`,
+        email: `sol_r001_007_${timestamp}@test.com`,
+        name: 'Historical Resolution User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userKiri.id,
+        name: 'Kiritimati Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(10000),
+      }
+    });
+
+    // Scheduled at 12:00 local noon in Kiritimati = 22:00 UTC previous day
+    // Anchor dueAt: Sept 14 22:00 UTC = Sept 15 12:00 local
+    const ob = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Kiritimati Monthly Electricity',
+        kind: 'BILL',
+        amount: new Decimal('2000.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-14T22:00:00.000Z'),
+        nextDueAt: new Date('2026-09-14T22:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. Mark historical August occurrence using local key '2026-08-15T12:00'
+    const payLocal = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-15T12:00',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocal.success, true);
+    assert.equal(payLocal.alreadyCompleted, false);
+    assert.ok(payLocal.transactionId);
+
+    // Verify stored occurrence has exact instant 2026-08-14T22:00:00.000Z
+    const occLocal = await db.obligationOccurrence.findUnique({
+      where: { id: payLocal.occurrenceId! }
+    });
+    assert.ok(occLocal);
+    assert.equal(occLocal.dueDate.toISOString(), '2026-08-14T22:00:00.000Z', 'Local key resolves to scheduled UTC instant');
+
+    // 2. Retry with alternate format: UTC key '2026-08-14T22:00'
+    // Must return alreadyCompleted: true and create NO duplicate expense
+    const payUtcRetry = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-14T22:00',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtcRetry.success, true);
+    assert.equal(payUtcRetry.alreadyCompleted, true, 'UTC key recognized as already completed');
+    assert.equal(payUtcRetry.transactionId, payLocal.transactionId, 'Same transactionId returned on UTC retry');
+
+    // 3. Retry with alternate format: date-only key '2026-08-15'
+    const payDateOnlyRetry = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-15',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payDateOnlyRetry.success, true);
+    assert.equal(payDateOnlyRetry.alreadyCompleted, true, 'Date-only key recognized as already completed');
+
+    // Exactly one expense transaction exists for this occurrence
+    const expenseCount = await db.financialTransaction.count({
+      where: { obligationId: ob.id }
+    });
+    assert.equal(expenseCount, 1, 'Exactly one expense created across all representation formats');
+
+    // 4. Preserve non-noon scheduled time for date-only historical completion
+    // Create UTC-scheduled bill at 09:00 UTC
+    const userUtc = await db.user.create({
+      data: {
+        id: `usr_sol_utc_sched_${timestamp}`,
+        email: `utc_sched_${timestamp}@test.com`,
+        name: 'UTC Sched User',
+        password: 'password123',
+        timezone: 'UTC',
+      }
+    });
+
+    const obUtc9 = await db.obligation.create({
+      data: {
+        userId: userUtc.id,
+        title: 'Morning 9am UTC Server Bill',
+        kind: 'BILL',
+        amount: new Decimal('500.00'),
+        dueAt: new Date('2026-09-15T09:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T09:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Mark historical August occurrence with date-only key '2026-08-15'
+    const payDateOnly9 = await financeService.markObligationPaid(userUtc.id, {
+      obligationId: obUtc9.id,
+      occurrenceKey: '2026-08-15',
+      createExpense: false,
+    }, db);
+    assert.equal(payDateOnly9.success, true);
+    assert.equal(payDateOnly9.alreadyCompleted, false);
+
+    const occ9 = await db.obligationOccurrence.findUnique({
+      where: { id: payDateOnly9.occurrenceId! }
+    });
+    assert.ok(occ9);
+    assert.equal(occ9.dueDate.toISOString(), '2026-08-15T09:00:00.000Z', 'Date-only completion preserves 09:00 scheduled time, not 12:00 noon');
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.financialTransaction.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+    await db.financialAccount.delete({ where: { id: account.id } });
+    await db.user.delete({ where: { id: userKiri.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: obUtc9.id } });
+    await db.obligation.delete({ where: { id: obUtc9.id } });
+    await db.user.delete({ where: { id: userUtc.id } });
+  });
+
+  await t.test('SOL-R004-010: Undo of Historical Payment Must Not Rewind Unrelated Active Schedule', async () => {
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Broadband Plan Schedule Isolation',
+        kind: 'BILL',
+        amount: new Decimal('999.00'),
+        dueAt: new Date('2026-09-15T10:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const rem = await db.reminder.create({
+      data: {
+        userId: userAId,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob.title,
+        obligationId: ob.id,
+        isActive: true,
+      }
+    });
+
+    const activeDelSept = await db.reminderDelivery.create({
+      data: {
+        userId: userAId,
+        reminderId: rem.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15T10:00',
+        scheduledFor: new Date('2026-09-15T10:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    // 1. Pay historical occurrence for August 15 while September 15 is current
+    const histPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-08-15T10:00',
+      createExpense: false,
+    }, db);
+    assert.equal(histPay.success, true);
+    assert.equal(histPay.alreadyCompleted, false);
+
+    // Verify nextDueAt remained September 15
+    const obAfterHistPay = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterHistPay?.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'Historical payment leaves nextDueAt at Sept 15');
+
+    // 2. Revert / Undo historical August payment
+    const histUndo = await financeService.revertObligationPayment(userAId, {
+      obligationId: ob.id,
+      occurrenceId: histPay.occurrenceId!,
+    }, db);
+    assert.equal(histUndo.success, true);
+    assert.equal(histUndo.alreadyReversed, false);
+
+    // SOL-R004-010: Undo of historical payment must NOT rewind nextDueAt back to August 15!
+    const obAfterHistUndo = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterHistUndo?.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'Undo of historical payment leaves nextDueAt UNCHANGED at Sept 15');
+    assert.equal(histUndo.restoredNextDueAt, '2026-09-15T10:00:00.000Z', 'Result reports unchanged nextDueAt');
+
+    // Verify active September reminder delivery was NOT deleted or cancelled
+    const delAfterUndo = await db.reminderDelivery.findUnique({ where: { id: activeDelSept.id } });
+    assert.equal(delAfterUndo?.status, 'PENDING', 'September reminder delivery preserved as PENDING');
+
+    // 3. Now pay the active September occurrence
+    const activePay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-09-15T10:00',
+      createExpense: false,
+    }, db);
+    assert.equal(activePay.success, true);
+
+    // nextDueAt advances to October 15
+    const obAfterActivePay = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterActivePay?.nextDueAt.toISOString(), '2026-10-15T10:00:00.000Z', 'Active payment advances schedule to Oct 15');
+
+    // 4. Undo the active September payment -> schedule MUST be restored back to September 15
+    const activeUndo = await financeService.revertObligationPayment(userAId, {
+      obligationId: ob.id,
+      occurrenceId: activePay.occurrenceId!,
+    }, db);
+    assert.equal(activeUndo.success, true);
+    assert.equal(activeUndo.alreadyReversed, false);
+
+    const obAfterActiveUndo = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterActiveUndo?.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'Undo of active payment restores nextDueAt to Sept 15');
+
+    // Clean up
+    await db.reminderDelivery.deleteMany({ where: { obligationId: ob.id } });
+    await db.reminder.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R001-007: Historical Occurrence Resolution Across DST in America/New_York', async () => {
+    const userNy = await db.user.create({
+      data: {
+        id: `usr_sol_dst_ny_${timestamp}`,
+        email: `dst_ny_${timestamp}@test.com`,
+        name: 'New York DST User',
+        password: 'password123',
+        timezone: 'America/New_York',
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userNy.id,
+        name: 'Chase Checking',
+        type: 'BANK',
+        openingBalance: new Decimal(20000),
+      }
+    });
+
+    // Obligation anchored in September (EDT, UTC-4): 2026-09-15T13:00:00.000Z = 09:00 EDT
+    // In January (EST, UTC-5): 09:00 EST = 14:00 UTC
+    const ob = await db.obligation.create({
+      data: {
+        userId: userNy.id,
+        title: 'NY Electric Bill',
+        kind: 'BILL',
+        amount: new Decimal('150.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-15T13:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T13:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. Pay January occurrence using UTC key '2026-01-15T14:00'
+    const payUtc = await financeService.markObligationPaid(userNy.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-15T14:00',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtc.success, true);
+    assert.equal(payUtc.alreadyCompleted, false);
+    assert.ok(payUtc.transactionId);
+
+    // Verify stored occurrence dueDate is exact instant 2026-01-15T14:00:00.000Z
+    const occ = await db.obligationOccurrence.findUnique({
+      where: { id: payUtc.occurrenceId! }
+    });
+    assert.ok(occ);
+    assert.equal(occ.dueDate.toISOString(), '2026-01-15T14:00:00.000Z');
+    assert.equal(occ.occurrenceKey, '2026-01-15T09:00', 'Canonical key is in user timezone 09:00');
+    assert.equal(occ.status, 'COMPLETED_HISTORICAL');
+
+    // 2. Pay January occurrence using local key '2026-01-15T09:00'
+    // Must recognize as already completed and NOT duplicate expense
+    const payLocal = await financeService.markObligationPaid(userNy.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-15T09:00',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocal.success, true);
+    assert.equal(payLocal.alreadyCompleted, true, 'Local key recognized as already completed');
+    assert.equal(payLocal.transactionId, payUtc.transactionId, 'Identical transactionId returned');
+
+    // 3. Retry with date-only key '2026-01-15'
+    const payDateOnly = await financeService.markObligationPaid(userNy.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-15',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payDateOnly.success, true);
+    assert.equal(payDateOnly.alreadyCompleted, true, 'Date-only key recognized as already completed');
+
+    // Total expenses in database for this obligation must be exactly 1
+    const expenseCount = await db.financialTransaction.count({
+      where: { obligationId: ob.id }
+    });
+    assert.equal(expenseCount, 1, 'Exactly one expense created across UTC and local representations');
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.financialTransaction.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+    await db.financialAccount.delete({ where: { id: account.id } });
+    await db.user.delete({ where: { id: userNy.id } });
+  });
+
+  await t.test('SOL-R004-010: Historical Undo Preserves Paused State, Schedule, and Future Deliveries', async () => {
+    const ob = await db.obligation.create({
+      data: {
+        userId: userAId,
+        title: 'Paused Internet Bill Schedule Isolation',
+        kind: 'BILL',
+        amount: new Decimal('1200.00'),
+        dueAt: new Date('2026-09-15T10:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: false,
+      }
+    });
+
+    const rem = await db.reminder.create({
+      data: {
+        userId: userAId,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob.title,
+        obligationId: ob.id,
+        isActive: false,
+      }
+    });
+
+    // Pending reminder delivery for active September occurrence
+    const activeDelSept = await db.reminderDelivery.create({
+      data: {
+        userId: userAId,
+        reminderId: rem.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15T10:00',
+        scheduledFor: new Date('2026-09-15T10:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'TELEGRAM',
+        status: 'PENDING',
+      }
+    });
+
+    const obPaused = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obPaused?.isActive, false, 'Obligation initially paused');
+
+    // 2. Pay historical July occurrence
+    const histPay = await financeService.markObligationPaid(userAId, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-07-15T10:00',
+      createExpense: false,
+    }, db);
+    assert.equal(histPay.success, true);
+    assert.equal(histPay.alreadyCompleted, false);
+
+    const histOcc = await db.obligationOccurrence.findUnique({
+      where: { id: histPay.occurrenceId! }
+    });
+    assert.equal(histOcc?.status, 'COMPLETED_HISTORICAL', 'Tagged as COMPLETED_HISTORICAL');
+
+    // 3. Revert / Undo historical July payment
+    const histUndo = await financeService.revertObligationPayment(userAId, {
+      obligationId: ob.id,
+      occurrenceId: histPay.occurrenceId!,
+    }, db);
+    assert.equal(histUndo.success, true);
+    assert.equal(histUndo.alreadyReversed, false);
+
+    // Verify schedule, paused state, and active deliveries are all preserved
+    const obAfterUndo = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.equal(obAfterUndo?.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'nextDueAt remained September 15');
+    assert.equal(obAfterUndo?.isActive, false, 'Paused state preserved (isActive remained false)');
+
+    const delAfterUndo = await db.reminderDelivery.findUnique({ where: { id: activeDelSept.id } });
+    assert.equal(delAfterUndo?.status, 'PENDING', 'Active September reminder delivery preserved');
+
+    // Clean up
+    await db.reminderDelivery.deleteMany({ where: { obligationId: ob.id } });
+    await db.reminder.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligationOccurrence.deleteMany({ where: { obligationId: ob.id } });
+    await db.obligation.delete({ where: { id: ob.id } });
+  });
+
+  await t.test('SOL-R004-013: User-Timezone Calendar Month Boundaries in Monthly Summaries', async () => {
+    const userKiri = await db.user.create({
+      data: {
+        id: `usr_sol_month_bounds_${timestamp}`,
+        email: `month_bounds_${timestamp}@test.com`,
+        name: 'Kiritimati Month User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userKiri.id,
+        name: 'Kiritimati Savings',
+        type: 'BANK',
+        openingBalance: new Decimal(50000),
+      }
+    });
+
+    // In Pacific/Kiritimati (+14):
+    // 2026-04-30T10:30:00.000Z in UTC is 2026-05-01 00:30 local (inside May)
+    const tx1 = await db.financialTransaction.create({
+      data: {
+        userId: userKiri.id,
+        accountId: account.id,
+        type: 'EXPENSE',
+        amount: new Decimal('1000.00'),
+        category: 'Food',
+        occurredAt: new Date('2026-04-30T10:30:00.000Z'),
+        note: 'May 1st early morning local',
+      }
+    });
+
+    // 2026-05-31T09:30:00.000Z in UTC is 2026-05-31 23:30 local (inside May)
+    const tx2 = await db.financialTransaction.create({
+      data: {
+        userId: userKiri.id,
+        accountId: account.id,
+        type: 'EXPENSE',
+        amount: new Decimal('2000.00'),
+        category: 'Shopping',
+        occurredAt: new Date('2026-05-31T09:30:00.000Z'),
+        note: 'May 31st late night local',
+      }
+    });
+
+    // 2026-05-31T10:30:00.000Z in UTC is 2026-06-01 00:30 local (inside June!)
+    const tx3 = await db.financialTransaction.create({
+      data: {
+        userId: userKiri.id,
+        accountId: account.id,
+        type: 'EXPENSE',
+        amount: new Decimal('4000.00'),
+        category: 'Utilities',
+        occurredAt: new Date('2026-05-31T10:30:00.000Z'),
+        note: 'June 1st early morning local',
+      }
+    });
+
+    // Query May 2026 summary
+    const summaryMay = await financeService.getMonthlyFinanceSummary(
+      userKiri.id,
+      new Date('2026-05-15T12:00:00.000Z'),
+      db
+    );
+    assert.equal(summaryMay.month, '2026-05');
+    assert.equal(summaryMay.transactionCount, 2, 'Includes tx1 and tx2, excludes tx3');
+    assert.equal(summaryMay.expense, '3000', 'Expense sum is 1000 + 2000 = 3000');
+
+    // Query Money Overview
+    const overviewMay = await financeService.getMoneyOverview(
+      userKiri.id,
+      new Date('2026-05-15T12:00:00.000Z'),
+      db
+    );
+    assert.equal(overviewMay.monthlyExpense, '3000.00', 'MoneyOverview correctly scopes to May user timezone bounds');
+
+    // Clean up
+    await db.financialTransaction.deleteMany({ where: { userId: userKiri.id } });
+    await db.financialAccount.delete({ where: { id: account.id } });
+    await db.user.delete({ where: { id: userKiri.id } });
+  });
+
+  await t.test('SOL-R004-012: Isolated db client explicitly passed to all financial and loan service mutations', async () => {
+    const userIsolated = await db.user.create({
+      data: {
+        id: `usr_sol_iso_${timestamp}`,
+        email: `iso_${timestamp}@test.com`,
+        name: 'Isolated DB User',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userIsolated.id,
+        name: 'Isolated Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(50000),
+      }
+    });
+
+    // 1. Loan lifecycle passing db explicitly
+    const loanRes = await loanService.createLoan(userIsolated.id, {
+      name: 'Personal Loan',
+      loanType: 'PERSONAL',
+      lender: 'HDFC Bank',
+      openingOutstanding: 10000,
+      emiAmount: 2000,
+      paymentAccountId: account.id,
+      nextEmiDate: '2026-11-01T10:00:00.000Z',
+      createLinkedObligation: true,
+    }, db);
+    assert.ok(loanRes.loan.id);
+
+    const emiRes = await loanService.recordEmiPayment(userIsolated.id, {
+      loanId: loanRes.loan.id,
+      amount: 2000,
+      accountId: account.id,
+      principalPaid: 1500,
+      interestPaid: 500,
+      occurredAt: new Date('2026-11-01T10:00:00.000Z'),
+    }, db);
+    assert.equal(emiRes.success, true);
+
+    const revertEmiRes = await loanService.revertEmiPayment(userIsolated.id, {
+      loanPaymentId: emiRes.paymentId,
+      revertToDate: new Date('2026-11-01T10:00:00.000Z'),
+    }, db);
+    assert.equal(revertEmiRes.success, true);
+
+    // 2. Standard Obligation lifecycle passing db explicitly
+    const ob = await db.obligation.create({
+      data: {
+        userId: userIsolated.id,
+        title: 'Utility Bill',
+        kind: 'BILL',
+        amount: new Decimal('500.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-11-05T10:00:00.000Z'),
+        nextDueAt: new Date('2026-11-05T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const payRes = await financeService.markObligationPaid(userIsolated.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-11-05',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payRes.success, true);
+    assert.ok(payRes.transactionId);
+
+    // Generic transaction delete blocked using isolated db
+    await assert.rejects(
+      async () => financeService.deleteTransaction(userIsolated.id, payRes.transactionId!, db),
+      /Linked transaction cannot be deleted directly/
+    );
+
+    // Revert obligation payment passing db explicitly
+    const revertObRes = await financeService.revertObligationPayment(userIsolated.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-11-05',
+    }, db);
+    assert.equal(revertObRes.success, true);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { userId: userIsolated.id } });
+    await db.financialTransaction.deleteMany({ where: { userId: userIsolated.id } });
+    await db.obligation.deleteMany({ where: { userId: userIsolated.id } });
+    await db.loan.deleteMany({ where: { userId: userIsolated.id } });
+    await db.financialAccount.delete({ where: { id: account.id } });
+    await db.user.delete({ where: { id: userIsolated.id } });
+  });
+
+  await t.test('SOL-R001-007: Pacific/Kiritimati Midnight Crossing UTC & Local Historical Aliases (both orders)', async () => {
+    const testTime = Date.now();
+    const userKiri = await db.user.create({
+      data: {
+        id: `usr_r5_kiri_${testTime}`,
+        email: `r5_kiri_${testTime}@test.com`,
+        name: 'Kiritimati R5 User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userKiri.id,
+        name: 'Kiritimati Bank R5',
+        type: 'BANK',
+        openingBalance: new Decimal(50000),
+      }
+    });
+
+    // 1. Order A: UTC first ('2026-01-14T10:30'), then local ('2026-01-15T00:30')
+    const obA = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Kiritimati Midnight Bill A',
+        kind: 'BILL',
+        amount: new Decimal('1200.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-14T10:30:00.000Z'),
+        nextDueAt: new Date('2026-09-14T10:30:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const payUtcFirst = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obA.id,
+      occurrenceKey: '2026-01-14T10:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtcFirst.success, true);
+    assert.equal(payUtcFirst.alreadyCompleted, false);
+    assert.ok(payUtcFirst.transactionId);
+
+    const occA = await db.obligationOccurrence.findUnique({
+      where: { id: payUtcFirst.occurrenceId! }
+    });
+    assert.ok(occA);
+    assert.equal(occA.dueDate.toISOString(), '2026-01-14T10:30:00.000Z');
+    assert.equal(occA.occurrenceKey, '2026-01-15T00:30');
+
+    const payLocalSecond = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obA.id,
+      occurrenceKey: '2026-01-15T00:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocalSecond.success, true);
+    assert.equal(payLocalSecond.alreadyCompleted, true);
+    assert.equal(payLocalSecond.transactionId, payUtcFirst.transactionId);
+
+    const occurrencesA = await db.obligationOccurrence.findMany({ where: { obligationId: obA.id } });
+    assert.equal(occurrencesA.length, 1);
+    const expensesA = await db.financialTransaction.findMany({ where: { obligationId: obA.id } });
+    assert.equal(expensesA.length, 1);
+
+    // 2. Order B (vice-versa): Local first ('2026-01-15T00:30'), then UTC ('2026-01-14T10:30')
+    const obB = await db.obligation.create({
+      data: {
+        userId: userKiri.id,
+        title: 'Kiritimati Midnight Bill B',
+        kind: 'BILL',
+        amount: new Decimal('1500.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-14T10:30:00.000Z'),
+        nextDueAt: new Date('2026-09-14T10:30:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    const payLocalFirst = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obB.id,
+      occurrenceKey: '2026-01-15T00:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocalFirst.success, true);
+    assert.equal(payLocalFirst.alreadyCompleted, false);
+    assert.ok(payLocalFirst.transactionId);
+
+    const occB = await db.obligationOccurrence.findUnique({
+      where: { id: payLocalFirst.occurrenceId! }
+    });
+    assert.ok(occB);
+    assert.equal(occB.dueDate.toISOString(), '2026-01-14T10:30:00.000Z');
+    assert.equal(occB.occurrenceKey, '2026-01-15T00:30');
+
+    const payUtcSecond = await financeService.markObligationPaid(userKiri.id, {
+      obligationId: obB.id,
+      occurrenceKey: '2026-01-14T10:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtcSecond.success, true);
+    assert.equal(payUtcSecond.alreadyCompleted, true);
+    assert.equal(payUtcSecond.transactionId, payLocalFirst.transactionId);
+
+    const occurrencesB = await db.obligationOccurrence.findMany({ where: { obligationId: obB.id } });
+    assert.equal(occurrencesB.length, 1);
+    const expensesB = await db.financialTransaction.findMany({ where: { obligationId: obB.id } });
+    assert.equal(expensesB.length, 1);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { userId: userKiri.id } });
+    await db.financialTransaction.deleteMany({ where: { userId: userKiri.id } });
+    await db.obligation.deleteMany({ where: { userId: userKiri.id } });
+    await db.financialAccount.deleteMany({ where: { userId: userKiri.id } });
+    await db.user.delete({ where: { id: userKiri.id } });
+  });
+
+  await t.test('SOL-R001-007: America/New_York Midnight Crossing DST Anchor Deduplication', async () => {
+    const testTime = Date.now();
+    const userNy = await db.user.create({
+      data: {
+        id: `usr_r5_ny_${testTime}`,
+        email: `r5_ny_${testTime}@test.com`,
+        name: 'New York R5 User',
+        password: 'password123',
+        timezone: 'America/New_York',
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userNy.id,
+        name: 'NY Checking R5',
+        type: 'BANK',
+        openingBalance: new Decimal(50000),
+      }
+    });
+
+    // Obligation anchored in September (EDT, UTC-4): 2026-09-16T03:30:00.000Z = Sep 15 23:30 EDT
+    // In January (EST, UTC-5): 23:30 EST = Jan 16 04:30 UTC
+    const ob = await db.obligation.create({
+      data: {
+        userId: userNy.id,
+        title: 'NY Night Utility Bill',
+        kind: 'BILL',
+        amount: new Decimal('300.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-16T03:30:00.000Z'),
+        nextDueAt: new Date('2026-09-16T03:30:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // 1. Pay with UTC key '2026-01-16T04:30'
+    const payUtc = await financeService.markObligationPaid(userNy.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-16T04:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payUtc.success, true);
+    assert.equal(payUtc.alreadyCompleted, false);
+    assert.ok(payUtc.transactionId);
+
+    const occ = await db.obligationOccurrence.findUnique({
+      where: { id: payUtc.occurrenceId! }
+    });
+    assert.ok(occ);
+    assert.equal(occ.dueDate.toISOString(), '2026-01-16T04:30:00.000Z');
+    assert.equal(occ.occurrenceKey, '2026-01-15T23:30');
+
+    // 2. Pay with local key '2026-01-15T23:30'
+    const payLocal = await financeService.markObligationPaid(userNy.id, {
+      obligationId: ob.id,
+      occurrenceKey: '2026-01-15T23:30',
+      createExpense: true,
+      accountId: account.id,
+    }, db);
+    assert.equal(payLocal.success, true);
+    assert.equal(payLocal.alreadyCompleted, true);
+    assert.equal(payLocal.transactionId, payUtc.transactionId);
+
+    const occurrences = await db.obligationOccurrence.findMany({ where: { obligationId: ob.id } });
+    assert.equal(occurrences.length, 1);
+    assert.equal(occurrences[0].dueDate.toISOString(), '2026-01-16T04:30:00.000Z');
+    const expenses = await db.financialTransaction.findMany({ where: { obligationId: ob.id } });
+    assert.equal(expenses.length, 1);
+
+    // Clean up
+    await db.obligationOccurrence.deleteMany({ where: { userId: userNy.id } });
+    await db.financialTransaction.deleteMany({ where: { userId: userNy.id } });
+    await db.obligation.deleteMany({ where: { userId: userNy.id } });
+    await db.financialAccount.deleteMany({ where: { userId: userNy.id } });
+    await db.user.delete({ where: { id: userNy.id } });
+  });
+
+  await t.test('SOL-R004-010: Legacy Historical Completion Schedule & Reminder Isolation on Undo', async () => {
+    const testTime = Date.now();
+    const userUtc = await db.user.create({
+      data: {
+        id: `usr_r5_legacy_${testTime}`,
+        email: `r5_legacy_${testTime}@test.com`,
+        name: 'Legacy Historical Undo User',
+        password: 'password123',
+        timezone: 'UTC',
+      }
+    });
+
+    const account = await db.financialAccount.create({
+      data: {
+        userId: userUtc.id,
+        name: 'UTC Main Bank',
+        type: 'BANK',
+        openingBalance: new Decimal(25000),
+      }
+    });
+
+    // Monthly UTC obligation next due 2026-09-15T10:00Z
+    const ob = await db.obligation.create({
+      data: {
+        userId: userUtc.id,
+        title: 'Monthly Cloud Subscription',
+        kind: 'SUBSCRIPTION',
+        amount: new Decimal('250.00'),
+        accountId: account.id,
+        dueAt: new Date('2026-09-15T10:00:00.000Z'),
+        nextDueAt: new Date('2026-09-15T10:00:00.000Z'),
+        recurrenceType: 'MONTHLY',
+        isActive: true,
+      }
+    });
+
+    // Seed legacy COMPLETED occurrence for 2026-07-15T10:00Z (status 'COMPLETED', not 'COMPLETED_HISTORICAL')
+    const legacyJulyOcc = await db.obligationOccurrence.create({
+      data: {
+        userId: userUtc.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-07-15T10:00',
+        dueDate: new Date('2026-07-15T10:00:00.000Z'),
+        status: 'COMPLETED',
+        paidAt: new Date('2026-07-15T10:02:00.000Z'),
+      }
+    });
+
+    // Seed reminder and PENDING reminder delivery for September
+    const rem = await db.reminder.create({
+      data: {
+        userId: userUtc.id,
+        domain: 'FINANCE',
+        type: 'OBLIGATION',
+        title: ob.title,
+        obligationId: ob.id,
+        isActive: true,
+      }
+    });
+
+    const septDelivery = await db.reminderDelivery.create({
+      data: {
+        userId: userUtc.id,
+        reminderId: rem.id,
+        obligationId: ob.id,
+        occurrenceKey: '2026-09-15T10:00',
+        scheduledFor: new Date('2026-09-15T10:00:00.000Z'),
+        offsetMinutes: 0,
+        channel: 'IN_APP',
+        status: 'PENDING',
+      }
+    });
+
+    // Call revertObligationPayment on July occurrence
+    const revertRes = await financeService.revertObligationPayment(userUtc.id, {
+      obligationId: ob.id,
+      occurrenceId: legacyJulyOcc.id,
+    }, db);
+    assert.equal(revertRes.success, true);
+    assert.equal(revertRes.alreadyReversed, false);
+
+    // Assert: obligation nextDueAt remains September 15, isActive is preserved
+    const obAfter = await db.obligation.findUnique({ where: { id: ob.id } });
+    assert.ok(obAfter);
+    assert.equal(obAfter.nextDueAt.toISOString(), '2026-09-15T10:00:00.000Z', 'nextDueAt remains September 15');
+    assert.equal(obAfter.isActive, true, 'isActive remains true');
+
+    // Assert: September PENDING delivery is NOT deleted
+    const foundSeptDelivery = await db.reminderDelivery.findUnique({ where: { id: septDelivery.id } });
+    assert.ok(foundSeptDelivery, 'September reminder delivery must NOT be deleted');
+
+    // Assert: only July occurrence is deleted
+    const foundJulyOcc = await db.obligationOccurrence.findUnique({ where: { id: legacyJulyOcc.id } });
+    assert.equal(foundJulyOcc, null, 'July occurrence was cleanly deleted');
+
+    // Clean up
+    await db.reminderDelivery.deleteMany({ where: { userId: userUtc.id } });
+    await db.reminder.deleteMany({ where: { userId: userUtc.id } });
+    await db.obligationOccurrence.deleteMany({ where: { userId: userUtc.id } });
+    await db.obligation.deleteMany({ where: { userId: userUtc.id } });
+    await db.financialAccount.deleteMany({ where: { userId: userUtc.id } });
+    await db.user.delete({ where: { id: userUtc.id } });
+  });
+
+  await t.test('SOL-R001-007: Adjacent historical date-only payments at 00:30 in UTC+14 stay distinct', async () => {
+    await db.user.update({ where: { id: userAId }, data: { timezone: 'Pacific/Kiritimati' } });
+    try {
+      const ob = await db.obligation.create({ data: {
+        userId: userAId, title: 'Daily midnight regression', kind: 'BILL',
+        amount: new Decimal(100), accountId: bankA.id,
+        dueAt: new Date('2026-01-13T10:30:00Z'),
+        nextDueAt: new Date('2026-01-19T10:30:00Z'), recurrenceType: 'DAILY',
+      } });
+      const pay = (key: string) => financeService.markObligationPaid(userAId, {
+        obligationId: ob.id, occurrenceKey: key, createExpense: true, accountId: bankA.id,
+      }, db);
+      const jan14 = await pay('2026-01-14');
+      const jan15 = await pay('2026-01-15');
+      assert.equal(jan14.alreadyCompleted, false);
+      assert.equal(jan15.alreadyCompleted, false);
+      assert.notEqual(jan15.occurrenceId, jan14.occurrenceId);
+      for (const key of ['2026-01-14T10:30', '2026-01-15T00:30']) {
+        const retry = await pay(key);
+        assert.equal(retry.alreadyCompleted, true);
+        assert.equal(retry.occurrenceId, jan15.occurrenceId);
+        assert.equal(retry.transactionId, jan15.transactionId);
+      }
+      assert.equal(await db.obligationOccurrence.count({ where: { obligationId: ob.id } }), 2);
+      assert.equal(await db.financialTransaction.count({ where: { obligationId: ob.id } }), 2);
+      const earlier = await db.obligationOccurrence.findUniqueOrThrow({ where: { id: jan14.occurrenceId! } });
+      assert.equal(earlier.dueDate.toISOString(), '2026-01-13T10:30:00.000Z');
+      assert.equal(financeService.matchesOccurrence(earlier, '2026-01-14T10:30', 'Pacific/Kiritimati'), false);
+      await assert.rejects(financeService.revertObligationPayment(userAId, {
+        obligationId: ob.id, occurrenceKey: '2026-01-14',
+      }, db), /earlier occurrence/);
+      const undo = await financeService.revertObligationPayment(userAId, {
+        obligationId: ob.id, occurrenceKey: '2026-01-14T10:30',
+      }, db);
+      assert.equal(undo.revertedOccurrenceId, jan15.occurrenceId);
+      assert.ok(await db.obligationOccurrence.findUnique({ where: { id: jan14.occurrenceId! } }));
+    } finally {
+      await db.user.update({ where: { id: userAId }, data: { timezone: 'Asia/Kolkata' } });
+    }
+  });
+
+  await t.test('SOL-R004-018: Date-only card Paid creates one completion and Undo allows repayment', async () => {
+    const createdStatement = (await creditCardService.createCreditCardStatement(userAId, {
+      accountId: cardA.id, periodKey: '2027-01',
+      statementDate: new Date('2027-01-01T12:00:00Z'),
+      dueDate: new Date('2027-01-15T12:00:00Z'), statementAmount: 5000,
+    }, db)).statement;
+    const statement = await db.creditCardStatement.findUniqueOrThrow({ where: { id: createdStatement.id } });
+    const pay = () => financeService.markObligationPaid(userAId, {
+      obligationId: statement.obligationId!, occurrenceKey: '2027-01-15', accountId: bankA.id,
+    }, db);
+    const first = await pay();
+    const occurrences = await db.obligationOccurrence.findMany({ where: { obligationId: statement.obligationId! } });
+    assert.equal(occurrences.length, 1);
+    assert.equal(occurrences[0].id, first.occurrenceId);
+    assert.equal(occurrences[0].transactionId, first.transactionId);
+    // Historical timestamp completions were unlinked; the duplicate date-only row held the transfer.
+    await db.obligationOccurrence.update({ where: { id: occurrences[0].id }, data: { transactionId: null } });
+    const legacy = await db.obligationOccurrence.create({ data: {
+      userId: userAId, obligationId: statement.obligationId!, occurrenceKey: '2027-01-15',
+      dueDate: new Date(statement.dueDate), status: 'COMPLETED',
+      paidAt: new Date(occurrences[0].paidAt.getTime() + 1), transactionId: first.transactionId,
+    } });
+    const undo = await financeService.revertObligationPayment(userAId, {
+      obligationId: statement.obligationId!, occurrenceId: legacy.id,
+    }, db);
+    assert.equal(undo.alreadyReversed, false);
+    assert.equal(await db.obligationOccurrence.count({ where: { obligationId: statement.obligationId! } }), 0);
+    assert.equal(await db.creditCardPayment.count({ where: { statementId: statement.id } }), 0);
+    assert.equal(await db.financialTransaction.findUnique({ where: { id: first.transactionId! } }), null);
+    const reopened = await db.creditCardStatement.findUniqueOrThrow({ where: { id: statement.id } });
+    assert.equal(reopened.status, 'OPEN');
+    const second = await pay();
+    assert.equal(second.alreadyCompleted, false);
+    assert.notEqual(second.transactionId, first.transactionId);
+    assert.equal(await db.obligationOccurrence.count({ where: { obligationId: statement.obligationId! } }), 1);
+  });
+
+  await t.test('SOL-R004-017: EMI recorded from Loans is linked and Bills Undo reverses principal and schedule', async () => {
+    const dueDate = new Date('2027-02-15T10:00:00Z');
+    const loan = (await loanService.createLoan(userAId, {
+      name: 'Loans to Bills regression', loanType: 'PERSONAL', lender: 'Test Bank',
+      openingOutstanding: 10000, emiAmount: 2500, paymentAccountId: bankA.id,
+      nextEmiDate: dueDate, createLinkedObligation: true, emiGeneratesExpense: true,
+    }, db)).loan;
+    const res = await loanService.recordEmiPayment(userAId, {
+      loanId: loan.id, accountId: bankA.id, amount: 2500, principalPaid: 2000,
+      interestPaid: 500, occurredAt: new Date('2027-02-14T10:00:00Z'),
+    }, db);
+    const payment = await db.loanPayment.findUniqueOrThrow({ where: { id: res.paymentId } });
+    assert.ok(payment.obligationOccurrenceId);
+    const occurrence = await db.obligationOccurrence.findUniqueOrThrow({ where: { id: payment.obligationOccurrenceId } });
+    assert.equal(occurrence.obligationId, loan.obligationId);
+    assert.equal(occurrence.dueDate.toISOString(), dueDate.toISOString());
+    assert.equal(occurrence.paidAt!.toISOString(), payment.occurredAt.toISOString());
+    assert.equal(occurrence.transactionId, res.transactionId);
+    assert.equal(occurrence.status, 'COMPLETED');
+    const paidLoan = await db.loan.findUniqueOrThrow({ where: { id: loan.id } });
+    assert.equal(paidLoan.outstandingPrincipal.toString(), '8000');
+    assert.ok(paidLoan.nextEmiDate!.getTime() > dueDate.getTime());
+    const undo = await financeService.revertObligationPayment(userAId, { obligationId: loan.obligationId! }, db);
+    assert.equal(undo.alreadyReversed, false);
+    assert.equal(undo.loanReversed, true);
+    const restored = await db.loan.findUniqueOrThrow({ where: { id: loan.id } });
+    assert.equal(restored.outstandingPrincipal.toString(), '10000');
+    assert.equal(restored.nextEmiDate!.toISOString(), dueDate.toISOString());
+    const restoredOb = await db.obligation.findUniqueOrThrow({ where: { id: loan.obligationId! } });
+    assert.equal(restoredOb.nextDueAt.toISOString(), dueDate.toISOString());
+    assert.equal(restoredOb.lastCompletedAt, null);
+    assert.equal(await db.loanPayment.findUnique({ where: { id: payment.id } }), null);
+    assert.equal(await db.financialTransaction.findUnique({ where: { id: res.transactionId! } }), null);
+    assert.equal(await db.obligationOccurrence.findUnique({ where: { id: occurrence.id } }), null);
+    assert.equal((await financeService.revertObligationPayment(userAId, { obligationId: loan.obligationId! }, db)).alreadyReversed, true);
+  });
+
+});
+
+
+test('SOL-R001-007 unit: Scheduled instant controls local date-only and UTC/local timestamp aliases', () => {
+  const dueDate = new Date('2026-01-14T10:30:00Z');
+  const previous = { occurrenceKey: '2026-01-14', dueDate: new Date('2026-01-13T10:30:00Z') };
+  const current = { occurrenceKey: '2026-01-15', dueDate };
+  for (const hostTimezone of ['UTC', 'America/Los_Angeles', 'Asia/Kolkata']) {
+    const originalTimezone = process.env.TZ;
+    process.env.TZ = hostTimezone;
+    try {
+      for (const key of ['2026-01-15', '2026-01-15T00:30', '2026-01-14T10:30', '2026-01-14T10:30:00Z']) {
+        assert.equal(financeService.matchesOccurrence(previous, key, 'Pacific/Kiritimati'), false, `${hostTimezone}: ${key}`);
+        assert.equal(financeService.matchesOccurrence(current, key, 'Pacific/Kiritimati'), true, `${hostTimezone}: ${key}`);
+      }
+      assert.equal(financeService.matchesOccurrence(current, '2026-01-14', 'Pacific/Kiritimati'), false);
+      assert.equal(financeService.matchesOccurrence(current, '2026-01-15T01:30', 'Pacific/Kiritimati'), false);
+      assert.equal(financeService.matchesOccurrence(previous, '2026-01-14', 'Pacific/Kiritimati', dueDate), false);
+    } finally {
+      if (originalTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTimezone;
+    }
+  }
+});
+
+test('SOL-R004-018 unit: Card Paid and Undo share one completion and allow a second payment', async () => {
+  const dueDate = new Date('2026-01-15T12:00:00Z');
+  const ob: any = { id: 'card-ob', userId: 'user', title: 'Card bill', amount: new Decimal(5000),
+    dueAt: dueDate, nextDueAt: dueDate, accountId: 'card', recurrenceType: 'ONCE' };
+  const statement: any = { id: 'statement', userId: 'user', accountId: 'card', periodKey: '2026-01',
+    dueDate, statementAmount: new Decimal(5000), status: 'OPEN', account: { name: 'Test card' } };
+  let occurrences: any[] = [];
+  let payments: any[] = [];
+  let transactions: any[] = [];
+  let sequence = 0;
+  const db: any = {
+    user: { findUnique: async () => ({ timezone: 'UTC' }) },
+    financialAccount: { findUnique: async () => ({ id: 'bank', userId: 'user', type: 'BANK', isActive: true }) },
+    obligation: {
+      findUnique: async () => ({ ...ob, creditCardStatements: [statement], occurrences: [...occurrences] }),
+      update: async ({ data }: any) => Object.assign(ob, data),
+    },
+    obligationOccurrence: {
+      findMany: async () => [...occurrences],
+      findFirst: async () => occurrences[0] || null,
+      upsert: async ({ where, create, update }: any) => {
+        const prior = occurrences.find(o => o.occurrenceKey === where.obligationId_occurrenceKey.occurrenceKey);
+        if (prior) return Object.assign(prior, update);
+        const occurrence = { ...create, id: `occ-${++sequence}` };
+        occurrences.push(occurrence);
+        return occurrence;
+      },
+      deleteMany: async ({ where }: any) => {
+        assert.equal(where.obligationId, ob.id);
+        assert.equal(where.dueDate.getTime(), dueDate.getTime());
+        occurrences = occurrences.filter(o => o.dueDate.getTime() !== where.dueDate.getTime());
+      },
+    },
+    creditCardStatement: {
+      findUnique: async () => ({ ...statement, obligation: ob, payments: [...payments] }),
+      findMany: async () => [],
+      update: async ({ data }: any) => Object.assign(statement, data),
+    },
+    creditCardPayment: {
+      create: async ({ data }: any) => { const p = { ...data, id: `pay-${++sequence}` }; payments.push(p); return p; },
+      findUnique: async ({ where }: any) => payments.find(p => p.id === where.id) || null,
+      findFirst: async ({ where }: any) => payments.find(p => p.transactionId === where.transactionId) || null,
+      findMany: async () => [...payments],
+      delete: async ({ where }: any) => { payments = payments.filter(p => p.id !== where.id); },
+    },
+    financialTransaction: {
+      create: async ({ data }: any) => { const tx = { ...data, id: `tx-${++sequence}` }; transactions.push(tx); return tx; },
+      delete: async ({ where }: any) => { transactions = transactions.filter(tx => tx.id !== where.id); },
+    },
+    reminderDelivery: { updateMany: async () => ({ count: 0 }) },
+    $transaction: async (fn: any) => fn(db),
+  };
+  const pay = () => financeService.markObligationPaid('user', {
+    obligationId: ob.id, occurrenceKey: '2026-01-15', accountId: 'bank',
+  }, db);
+  const first = await pay();
+  assert.equal(first.alreadyCompleted, false);
+  assert.equal(occurrences.length, 1);
+  assert.equal(occurrences[0].id, first.occurrenceId);
+  assert.equal(occurrences[0].transactionId, first.transactionId);
+  assert.equal(transactions[0].type, 'TRANSFER');
+  assert.equal((await pay()).alreadyCompleted, true);
+  assert.equal(payments.length, 1);
+  occurrences.push({ ...occurrences[0], id: 'legacy', occurrenceKey: '2026-01-15', transactionId: null });
+  const undo = await financeService.revertObligationPayment('user', { obligationId: ob.id }, db);
+  assert.equal(undo.alreadyReversed, false);
+  assert.equal(occurrences.length, 0);
+  assert.equal(payments.length, 0);
+  assert.equal(transactions.length, 0);
+  assert.equal(statement.status, 'OPEN');
+  assert.equal(ob.lastCompletedAt, null);
+  assert.equal(ob.isActive, true);
+  const second = await pay();
+  assert.equal(second.alreadyCompleted, false);
+  assert.notEqual(second.transactionId, first.transactionId);
+  assert.equal(occurrences.length, 1);
+  assert.equal(payments.length, 1);
+});
+
+test('SOL-R004-017 unit: A Loans EMI can be reversed from Bills using its scheduled completion', async () => {
+  const dueDate = new Date('2026-01-15T12:00:00Z');
+  const paidAt = new Date('2026-01-14T12:00:00Z');
+  const loan: any = { id: 'loan', userId: 'user', name: 'Test loan', status: 'ACTIVE',
+    obligationId: 'loan-ob', outstandingPrincipal: new Decimal(10000), nextEmiDate: dueDate,
+    dueDay: 15, emiGeneratesExpense: true };
+  const ob: any = { id: 'loan-ob', userId: 'user', nextDueAt: dueDate, dueAt: dueDate, isActive: true };
+  let occurrence: any = null;
+  let payment: any = null;
+  let transaction: any = null;
+  const db: any = {
+    user: { findUnique: async () => ({ timezone: 'UTC' }) },
+    financialAccount: { findUnique: async () => ({ userId: 'user', isActive: true }) },
+    loan: {
+      findUnique: async () => ({ ...loan, payments: payment ? [payment] : [] }),
+      update: async ({ data }: any) => Object.assign(loan, data),
+    },
+    obligation: {
+      findUnique: async () => ({ ...ob, loan: { ...loan }, occurrences: occurrence ? [{ ...occurrence }] : [] }),
+      update: async ({ data }: any) => Object.assign(ob, data),
+    },
+    obligationOccurrence: {
+      create: async ({ data }: any) => { assert.equal(occurrence, null); occurrence = { ...data, id: 'emi-occ' }; return occurrence; },
+      findMany: async () => occurrence ? [{ ...occurrence }] : [],
+      findFirst: async () => occurrence,
+      deleteMany: async () => { occurrence = null; },
+    },
+    loanPayment: {
+      create: async ({ data }: any) => { payment = { ...data, id: 'emi-pay' }; return payment; },
+      findUnique: async ({ where }: any) => payment && (where.id === payment.id || where.obligationOccurrenceId === payment.obligationOccurrenceId)
+        ? { ...payment, loan: { ...loan } } : null,
+      delete: async () => { payment = null; },
+    },
+    financialTransaction: {
+      create: async ({ data }: any) => { transaction = { ...data, id: 'emi-tx' }; return transaction; },
+      delete: async () => { transaction = null; },
+    },
+    reminderDelivery: { updateMany: async () => ({ count: 0 }), deleteMany: async () => ({ count: 0 }) },
+    $transaction: async (fn: any) => fn(db),
+  };
+  await loanService.recordEmiPayment('user', {
+    loanId: loan.id, accountId: 'bank', amount: 2500, principalPaid: 2000, interestPaid: 500, occurredAt: paidAt,
+  }, db);
+  assert.equal(loan.outstandingPrincipal.toString(), '8000');
+  assert.ok(occurrence, 'Recording from Loans must create a scheduled completion');
+  assert.equal(payment.obligationOccurrenceId, occurrence.id);
+  assert.equal(occurrence.obligationId, ob.id);
+  assert.equal(occurrence.transactionId, transaction.id);
+  assert.equal(occurrence.dueDate.getTime(), dueDate.getTime());
+  assert.equal(occurrence.paidAt.getTime(), paidAt.getTime());
+  assert.equal(occurrence.status, 'COMPLETED');
+  assert.ok(ob.nextDueAt.getTime() > dueDate.getTime());
+  const undo = await financeService.revertObligationPayment('user', { obligationId: ob.id }, db);
+  assert.equal(undo.alreadyReversed, false);
+  assert.equal(undo.loanReversed, true);
+  assert.equal(loan.outstandingPrincipal.toString(), '10000');
+  assert.equal(loan.nextEmiDate.getTime(), dueDate.getTime());
+  assert.equal(ob.nextDueAt.getTime(), dueDate.getTime());
+  assert.equal(ob.lastCompletedAt, null);
+  assert.equal(payment, null);
+  assert.equal(transaction, null);
+  assert.equal(occurrence, null);
+  assert.equal((await financeService.revertObligationPayment('user', { obligationId: ob.id }, db)).alreadyReversed, true);
 });

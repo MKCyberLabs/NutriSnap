@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -38,10 +38,25 @@ interface CreditCardDialogProps {
     type: string;
     creditLimit?: string | number | null;
     currentBalance: string | number;
+    defaultPaymentAccountId?: string | null;
   };
   accounts: { id: string; name: string; type: string }[];
   trigger?: React.ReactNode;
   onRefresh?: () => void;
+}
+
+export function generateRepaymentIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `cc-repay-${crypto.randomUUID()}`;
+  }
+  return `cc-repay-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+export function isEligiblePayerAccount(
+  candidate: { id: string; type?: string | null },
+  targetAccountId: string
+): boolean {
+  return candidate.id !== targetAccountId && candidate.type !== 'CREDIT_CARD';
 }
 
 export function CreditCardDialog({
@@ -66,13 +81,49 @@ export function CreditCardDialog({
     format(new Date(Date.now() + 20 * 86400000), 'yyyy-MM-dd')
   );
 
+
   // Record Payment Form State
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
-  const [selectedFromAccountId, setSelectedFromAccountId] = useState(
-    accounts.find((a) => a.id !== account.id)?.id || ''
+  const isEligiblePayer = (a: any) => a.id !== account.id && a.type !== 'CREDIT_CARD';
+  const payerAccounts = useMemo(
+    () => (accounts || []).filter((a: any) => a.id !== account.id && a.type !== 'CREDIT_CARD'),
+    [accounts, account.id]
   );
+
+  const [selectedFromAccountId, setSelectedFromAccountId] = useState<string>(() => {
+    const defaultId =
+      cardData?.account?.defaultPaymentAccountId ||
+      cardData?.defaultPaymentAccount?.id ||
+      account.defaultPaymentAccountId;
+    if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+      return defaultId;
+    }
+    return payerAccounts[0]?.id || '';
+  });
   const [paymentNote, setPaymentNote] = useState('');
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState<string>('');
+
+  useEffect(() => {
+    const defaultId =
+      cardData?.account?.defaultPaymentAccountId ||
+      cardData?.defaultPaymentAccount?.id ||
+      account.defaultPaymentAccountId;
+    setSelectedFromAccountId((current: string) => {
+      if (current && payerAccounts.some((a) => a.id === current)) {
+        return current;
+      }
+      if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+        return defaultId;
+      }
+      return payerAccounts[0]?.id || '';
+    });
+  }, [
+    cardData?.account?.defaultPaymentAccountId,
+    cardData?.defaultPaymentAccount?.id,
+    account.defaultPaymentAccountId,
+    payerAccounts,
+  ]);
 
   const loadDetails = useCallback(async () => {
     const session = getAuthSession();
@@ -149,11 +200,17 @@ export function CreditCardDialog({
 
     setSubmitting(true);
     try {
+      const idempotencyKey = paymentIdempotencyKey || generateRepaymentIdempotencyKey();
+      if (!paymentIdempotencyKey) {
+        setPaymentIdempotencyKey(idempotencyKey);
+      }
+
       await recordCreditCardPayment(session.id, {
         statementId: cardData.activeStatement.id,
         fromAccountId: selectedFromAccountId,
         amount: parseFloat(payAmount).toFixed(2),
         note: paymentNote.trim() || undefined,
+        idempotencyKey,
       });
 
       toast({
@@ -163,6 +220,7 @@ export function CreditCardDialog({
       setPaymentModalOpen(false);
       setPayAmount('');
       setPaymentNote('');
+      setPaymentIdempotencyKey('');
       await loadDetails();
       if (onRefresh) onRefresh();
     } catch (err: any) {
@@ -171,6 +229,7 @@ export function CreditCardDialog({
         description: err?.message,
         variant: 'destructive',
       });
+      // SOL-R004-003: Keep paymentIdempotencyKey stable across errors/retries of the same submission
     } finally {
       setSubmitting(false);
     }
@@ -200,7 +259,6 @@ export function CreditCardDialog({
   };
 
   const activeStatement = cardData?.activeStatement;
-  const payerAccounts = accounts.filter((a) => a.id !== account.id);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -316,6 +374,20 @@ export function CreditCardDialog({
                       size="sm"
                       onClick={() => {
                         setPayAmount(activeStatement.pendingBalance);
+                        setPaymentIdempotencyKey(generateRepaymentIdempotencyKey());
+                        const defaultId =
+                          cardData?.account?.defaultPaymentAccountId ||
+                          cardData?.defaultPaymentAccount?.id ||
+                          account.defaultPaymentAccountId;
+                        setSelectedFromAccountId((current: string) => {
+                          if (current && payerAccounts.some((a) => a.id === current)) {
+                            return current;
+                          }
+                          if (defaultId && payerAccounts.some((a) => a.id === defaultId)) {
+                            return defaultId;
+                          }
+                          return payerAccounts[0]?.id || '';
+                        });
                         setPaymentModalOpen(true);
                       }}
                       className="h-8 px-3 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
@@ -437,7 +509,17 @@ export function CreditCardDialog({
         </Dialog>
 
         {/* Modal: Record Payment */}
-        <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
+        <Dialog
+          open={paymentModalOpen}
+          onOpenChange={(isOpen) => {
+            setPaymentModalOpen(isOpen);
+            if (isOpen) {
+              setPaymentIdempotencyKey((prev) => prev || generateRepaymentIdempotencyKey());
+            } else {
+              setPaymentIdempotencyKey('');
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-[420px] rounded-2xl bg-white p-6 border border-[#E2E8F0]">
             <DialogHeader className="pb-3 border-b border-[#E2E8F0]">
               <DialogTitle className="text-base font-semibold text-[#1E293B]">
@@ -452,14 +534,26 @@ export function CreditCardDialog({
                   onValueChange={setSelectedFromAccountId}
                 >
                   <SelectTrigger className="h-10 text-sm rounded-xl border-[#E2E8F0]">
-                    <SelectValue placeholder="Select Bank/Cash Account" />
+                    <SelectValue
+                      placeholder={
+                        payerAccounts.length === 0
+                          ? 'No eligible bank, cash or wallet account available'
+                          : 'Select Bank/Cash Account'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent className="bg-white rounded-xl border border-[#E2E8F0]">
-                    {payerAccounts.map((a) => (
-                      <SelectItem key={a.id} value={a.id} className="text-sm">
-                        {a.name}
+                    {payerAccounts.length === 0 ? (
+                      <SelectItem value="none" disabled className="text-sm text-[#64748B]">
+                        No eligible bank, cash or wallet account available
                       </SelectItem>
-                    ))}
+                    ) : (
+                      payerAccounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id} className="text-sm">
+                          {a.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -492,7 +586,7 @@ export function CreditCardDialog({
 
               <Button
                 type="submit"
-                disabled={submitting || !selectedFromAccountId}
+                disabled={submitting || !selectedFromAccountId || payerAccounts.length === 0}
                 className="w-full h-10 rounded-xl bg-[#6D28D9] text-white hover:bg-[#5B21B6] font-semibold text-sm transition-colors mt-2"
               >
                 {submitting ? 'Recording...' : 'Confirm Bill Payment'}

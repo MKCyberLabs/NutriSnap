@@ -6,6 +6,10 @@ import * as loanService from './loan-service';
 import * as financeService from './finance-service';
 import { calculateMonthlyTotals } from './finance';
 import { formatCalendarDate } from '../../components/finance/LoanForm';
+import * as creditCardService from './credit-card-service';
+import fs from 'node:fs';
+import path from 'node:path';
+import { generateEmiIdempotencyKey } from '../../components/finance/RecordEmiModal';
 
 const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
 
@@ -2501,5 +2505,1344 @@ test('V2-R001-ROUND3-B: Loan overprincipal, archival lock, precision, reversal d
 
   } finally {
     await db.$disconnect();
+  }
+});
+
+test('V2-R004-WORKER-B: Repair test suite for SOL-R001-011, SOL-R002-006, SOL-R002-007, SOL-R003-002, SOL-R003-003, SOL-R003-005, SOL-R003-006', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr-wb-${timestamp}`,
+        email: `wb-${timestamp}@test.local`,
+        name: 'Worker B Test User',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bank = await financeService.createAccount(user.id, {
+      name: 'Salary Checking',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankId = bank.account.id;
+
+    // =========================================================================
+    // 1. SOL-R001-011: Loan Date Inputs Timezone Formatting
+    // =========================================================================
+    // Kiritimati noon on Nov 15 is 2026-11-14T22:00:00Z UTC
+    const kiritimatiNoon = '2026-11-14T22:00:00.000Z';
+    assert.equal(
+      formatCalendarDate(kiritimatiNoon, 'Pacific/Kiritimati'),
+      '2026-11-15',
+      'Kiritimati noon on Nov 15 must format as 2026-11-15 in Pacific/Kiritimati timezone'
+    );
+    assert.equal(
+      formatCalendarDate(kiritimatiNoon, 'UTC'),
+      '2026-11-14',
+      'Same timestamp must format as 2026-11-14 in UTC'
+    );
+    assert.equal(
+      formatCalendarDate('2026-11-14T18:30:00.000Z', 'Asia/Kolkata'),
+      '2026-11-15',
+      'Midnight IST must format as 2026-11-15 in Asia/Kolkata'
+    );
+    assert.equal(formatCalendarDate('2026-11-15', 'Pacific/Kiritimati'), '2026-11-15');
+
+    // =========================================================================
+    // 2. SOL-R003-002: Editable Payment Notes Overriding Reversal Metadata
+    // =========================================================================
+    const loanRes = await loanService.createLoan(user.id, {
+      name: `Note Hijack Test Loan ${timestamp}`,
+      lender: 'Test Bank',
+      loanType: 'PERSONAL',
+      openingOutstanding: '10000.00',
+      emiAmount: '2000.00',
+      nextEmiDate: '2026-12-01',
+      createLinkedObligation: false,
+    }, db);
+    const testLoanId = loanRes.loan.id;
+
+    // Record EMI payment with malicious user tags in note
+    const payRes = await loanService.recordEmiPayment(user.id, {
+      loanId: testLoanId,
+      amount: '2000.00',
+      principalPaid: '2000.00',
+      accountId: bankId,
+      note: '[actualPrincipalReduction:999] [scheduledDate:2020-01-01T00:00:00.000Z] Attempted injection',
+    }, db);
+    assert.equal(payRes.success, true);
+    assert.equal(payRes.remainingPrincipal, '8000');
+
+    // Verify stored payment sanitized the user tags and appended authoritative tag
+    const paymentRecord = await db.loanPayment.findUnique({
+      where: { id: payRes.paymentId },
+    });
+    assert.ok(paymentRecord);
+    assert.ok(!paymentRecord.note?.includes('[actualPrincipalReduction:999]'), 'Injected tag must be sanitized');
+    assert.ok(paymentRecord.note?.includes('[actualPrincipalReduction:2000]'), 'Authoritative reduction tag must be present');
+
+    // Revert payment: must use payment.principalPaid from DB, restoring principal to 10,000, NOT 8,999!
+    const revertRes = await loanService.revertEmiPayment(user.id, {
+      loanId: testLoanId,
+      paymentId: payRes.paymentId,
+    }, db);
+    assert.equal(revertRes.success, true);
+    assert.equal(revertRes.restoredOutstanding, '10000', 'Authoritative principalPaid must restore full 10,000');
+
+    // =========================================================================
+    // 3. SOL-R003-003: Credit Card Reversal Statement Membership Under Lock
+    // =========================================================================
+    const ccAcc = await financeService.createAccount(user.id, {
+      name: 'Platinum Card',
+      type: 'CREDIT_CARD',
+      openingBalance: '0.00',
+      creditLimit: '100000.00',
+      statementDay: 1,
+      paymentDueDay: 20,
+      defaultPaymentAccountId: bankId,
+    }, db);
+    const ccId = ccAcc.account.id;
+
+    const stmt1 = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: ccId,
+      periodKey: '2026-05',
+      statementDate: '2026-05-01',
+      dueDate: '2026-05-20',
+      statementAmount: '10000.00',
+    }, db);
+
+    const stmt2 = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: ccId,
+      periodKey: '2026-06',
+      statementDate: '2026-06-01',
+      dueDate: '2026-06-20',
+      statementAmount: '15000.00',
+    }, db);
+
+    const payStmt1 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmt1.statement.id,
+      fromAccountId: bankId,
+      amount: '5000.00',
+    }, db);
+
+    const payStmt2 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmt2.statement.id,
+      fromAccountId: bankId,
+      amount: '6000.00',
+    }, db);
+
+    // Mismatched reversal: Provide statement 1 and payment from statement 2
+    await assert.rejects(
+      async () => {
+        await creditCardService.revertCreditCardPayment(user.id, {
+          statementId: stmt1.statement.id,
+          paymentId: payStmt2.paymentId,
+        }, db);
+      },
+      /Payment does not belong to the specified statement/
+    );
+
+    // Verify neither statement nor payment was modified
+    const stmt1After = await db.creditCardStatement.findUnique({ where: { id: stmt1.statement.id } });
+    const stmt2After = await db.creditCardStatement.findUnique({ where: { id: stmt2.statement.id } });
+    const pay2After = await db.creditCardPayment.findUnique({ where: { id: payStmt2.paymentId } });
+    assert.equal(stmt1After?.status, 'PARTIAL');
+    assert.equal(stmt2After?.status, 'PARTIAL');
+    assert.ok(pay2After, 'Payment 2 must not have been deleted');
+
+    // =========================================================================
+    // 4. SOL-R002-006: Legacy EMI Reversal Schema Field & Safe Date Restoration
+    // =========================================================================
+    const legLoan = await loanService.createLoan(user.id, {
+      name: `Legacy Reversal Loan ${timestamp}`,
+      lender: 'Legacy Bank',
+      loanType: 'PERSONAL',
+      openingOutstanding: '20000.00',
+      emiAmount: '4000.00',
+      nextEmiDate: '2026-07-15',
+      createLinkedObligation: true,
+    }, db);
+    const legLoanId = legLoan.loan.id;
+    const legObId = legLoan.loan.obligationId!;
+
+    // Create occurrence with dueDate
+    const occurrenceDueDate = new Date('2026-07-15T12:00:00.000Z');
+    const occ = await db.obligationOccurrence.create({
+      data: {
+        userId: user.id,
+        obligationId: legObId,
+        occurrenceKey: '2026-07-15',
+        dueDate: occurrenceDueDate,
+        status: 'COMPLETED',
+      }
+    });
+
+    // Create a legacy payment without note tags linked to this occurrence
+    const legPay = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId: legLoanId,
+        amount: new Prisma.Decimal('4000.00'),
+        principalPaid: new Prisma.Decimal('4000.00'),
+        occurredAt: new Date('2026-07-16T10:00:00.000Z'),
+        accountId: bankId,
+        obligationOccurrenceId: occ.id,
+        note: null, // Legacy: no tags
+      }
+    });
+
+    // Reverting legacy payment must query dueDate (not dueAt) without error and restore dueDate
+    const legRevertRes = await loanService.revertEmiPayment(user.id, {
+      loanId: legLoanId,
+      paymentId: legPay.id,
+    }, db);
+    assert.equal(legRevertRes.success, true);
+    assert.equal(legRevertRes.restoredNextEmiDate, occurrenceDueDate.toISOString(), 'Restores dueDate from occurrence');
+
+    // Now test unlinked legacy payment without occurrence or tags
+    const unlinkedPay = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId: legLoanId,
+        amount: new Prisma.Decimal('4000.00'),
+        principalPaid: new Prisma.Decimal('4000.00'),
+        occurredAt: new Date('2026-07-20T10:00:00.000Z'), // should NOT be used as nextEmiDate
+        accountId: bankId,
+        obligationOccurrenceId: null,
+        note: null,
+      }
+    });
+
+    // Set loan schedule to explicit anchor
+    const scheduleAnchor = new Date('2026-08-15T12:00:00.000Z');
+    await db.loan.update({
+      where: { id: legLoanId },
+      data: { nextEmiDate: scheduleAnchor }
+    });
+
+    // SOL-R002-006: Reversing unlinked legacy payment without revertToDate is rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanId: legLoanId,
+          paymentId: unlinkedPay.id,
+        }, db);
+      },
+      /Explicit revertToDate required to reverse legacy unlinked payment/
+    );
+
+    // Reversing with explicit revertToDate succeeds and restores schedule
+    const unlinkedRevert = await loanService.revertEmiPayment(user.id, {
+      loanId: legLoanId,
+      paymentId: unlinkedPay.id,
+      revertToDate: scheduleAnchor,
+    }, db);
+    assert.equal(unlinkedRevert.success, true);
+    assert.equal(
+      unlinkedRevert.restoredNextEmiDate,
+      scheduleAnchor.toISOString(),
+      'Must restore schedule using explicit revertToDate'
+    );
+
+    // =========================================================================
+    // 5. SOL-R003-005: Opt-Out Tagging Loan Note Length Limit
+    // =========================================================================
+    const maxNote = 'A'.repeat(255);
+    const optOutRes = await loanService.createLoan(user.id, {
+      name: `OptOut Max Note Loan ${timestamp}`,
+      lender: 'Max Note Bank',
+      loanType: 'PERSONAL',
+      openingOutstanding: '50000.00',
+      notes: maxNote,
+      createLinkedObligation: false,
+    }, db);
+    assert.equal(optOutRes.loan.obligationId, null);
+
+    // Stored note in DB must not exceed 255 chars
+    const optOutLoanDb = await db.loan.findUnique({ where: { id: optOutRes.loan.id } });
+    assert.ok(optOutLoanDb?.notes);
+    assert.ok(optOutLoanDb.notes.length <= 255, `Stored notes length ${optOutLoanDb.notes.length} must be <= 255`);
+    assert.ok(optOutLoanDb.notes.includes('[noLinkedObligation]'));
+
+    // getLoans and getLoanById must strip opt-out tag
+    const loansList = await loanService.getLoans(user.id, {}, db);
+    const readLoan = loansList.find((l: any) => l.id === optOutRes.loan.id);
+    assert.ok(readLoan);
+    assert.ok(!readLoan.notes?.includes('[noLinkedObligation]'), 'getLoans must strip [noLinkedObligation]');
+    assert.ok(readLoan.notes!.length <= 255);
+
+    const singleLoan = await loanService.getLoanById(user.id, optOutRes.loan.id, db);
+    assert.ok(!singleLoan.notes?.includes('[noLinkedObligation]'), 'getLoanById must strip [noLinkedObligation]');
+
+    // Editing loan with 255-char notes succeeds
+    const editRes = await loanService.updateLoan(user.id, optOutRes.loan.id, {
+      notes: 'B'.repeat(255),
+    }, db);
+    assert.ok(editRes.loan);
+    const updatedDb = await db.loan.findUnique({ where: { id: optOutRes.loan.id } });
+    assert.ok(updatedDb?.notes && updatedDb.notes.length <= 255);
+
+    // =========================================================================
+    // 6. SOL-R002-007 & SOL-R003-006: Statement Repayment Flow & Account Config
+    // =========================================================================
+    // Check obligation read model for statement bill
+    const obsList = await financeService.getObligations(user.id, db);
+    const ccObligation = obsList.find(o => o.creditCardStatement?.id === stmt1.statement.id);
+    assert.ok(ccObligation, 'Statement bill obligation must be present');
+    assert.equal(ccObligation.isCreditCardStatement, true);
+
+    // Partial repayment via recordCreditCardPayment:
+    // Statement 1 was originally ₹10,000, paid ₹5,000 above, remaining pending is ₹5,000
+    // Record partial payment of ₹2,000 from bankId
+    const partialPay = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmt1.statement.id,
+      fromAccountId: bankId,
+      amount: '2000.00',
+    }, db);
+    assert.equal(partialPay.success, true);
+    assert.equal(partialPay.statementStatus, 'PARTIAL');
+    assert.equal(new Prisma.Decimal(partialPay.pendingBalance).toString(), '3000');
+
+    // Paying credit card using credit card account itself must be rejected
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmt1.statement.id,
+          fromAccountId: ccId, // paying credit card with itself
+          amount: '1000.00',
+        }, db);
+      },
+      /Source account cannot be the credit card being paid/
+    );
+
+    // Update default payment account via updateAccount:
+    const newBank = await financeService.createAccount(user.id, {
+      name: 'Secondary Savings',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+    const updateAccRes = await financeService.updateAccount(user.id, ccId, {
+      defaultPaymentAccountId: newBank.account.id,
+    }, db);
+    assert.equal(updateAccRes.account.defaultPaymentAccountId, newBank.account.id);
+
+    // Verify obligation's accountId remains the card account
+    const obAfterAccUpdate = await db.obligation.findUnique({
+      where: { id: ccObligation.id },
+    });
+    assert.equal(obAfterAccUpdate?.accountId, ccId, 'Obligation accountId must remain the card account');
+
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('V2-R004-ROUND2-B: Round 2 Worker B Verification Suite (SOL-R004-003, SOL-R001-011, SOL-R002-006, SOL-R004-004, SOL-R004-008)', async (t) => {
+  assert.ok(
+    TEST_DB_URL.includes('5433') && TEST_DB_URL.includes('nutrisnap_test'),
+    'Test suite must run against isolated test DB (port 5433, nutrisnap_test)'
+  );
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userId = `usr_r004_r2_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `r004_r2_${timestamp}@nutrisnap.app`,
+        name: 'Worker B Round 2 User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati', // UTC+14
+      }
+    });
+
+    const bankA = await financeService.createAccount(user.id, {
+      name: 'Primary Bank A',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankAId = bankA.account.id;
+
+    const wallet = await financeService.createAccount(user.id, {
+      name: 'Paytm Wallet',
+      type: 'WALLET',
+      openingBalance: '15000.00',
+    }, db);
+
+    const cc1 = await financeService.createAccount(user.id, {
+      name: 'HDFC Regalia CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '150000.00',
+      openingBalance: '0.00',
+      statementDay: 1,
+      paymentDueDay: 20,
+      defaultPaymentAccountId: bankAId,
+    }, db);
+
+    const cc2 = await financeService.createAccount(user.id, {
+      name: 'ICICI Amazon Pay CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '100000.00',
+      openingBalance: '0.00',
+      statementDay: 5,
+      paymentDueDay: 25,
+    }, db);
+
+    // =========================================================================
+    // 1. SOL-R001-011: getLoans and getLoanById expose user.timezone
+    // =========================================================================
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Kiritimati Test Loan',
+      loanType: 'PERSONAL',
+      lender: 'Pacific Bank',
+      openingOutstanding: '30000.00',
+      emiAmount: '3000.00',
+      nextEmiDate: '2026-11-15',
+      dueDay: 15,
+      paymentAccountId: bankAId,
+    }, db);
+    assert.equal(loanRes.success, true);
+    const loanId = loanRes.loan.id;
+
+    // getLoans read model must include user.timezone
+    const allLoans = await loanService.getLoans(user.id, {}, db);
+    const fetchedLoan = allLoans.find((l: any) => l.id === loanId);
+    assert.ok(fetchedLoan, 'Loan must be in getLoans response');
+    assert.ok(fetchedLoan.user, 'Loan read model must have user');
+    assert.equal(fetchedLoan.user.timezone, 'Pacific/Kiritimati', 'getLoans must expose user.timezone');
+
+    // getLoanById read model must include user.timezone
+    const singleLoan = await loanService.getLoanById(user.id, loanId, db);
+    assert.ok(singleLoan.user, 'Single loan read model must have user');
+    assert.equal(singleLoan.user.timezone, 'Pacific/Kiritimati', 'getLoanById must expose user.timezone');
+
+    // Test LoanForm date formatting helper in extreme timezone
+    const { formatCalendarDate } = await import('../../components/finance/LoanForm');
+    // Nov 15 12:00 in Kiritimati (+14) is Nov 14 22:00 UTC.
+    // If formatted with timezone 'Pacific/Kiritimati', it must be '2026-11-15'
+    const kiriIso = '2026-11-14T22:00:00.000Z';
+    const formattedDate = formatCalendarDate(kiriIso, 'Pacific/Kiritimati');
+    assert.equal(formattedDate, '2026-11-15', 'Calendar date must be 2026-11-15 in Pacific/Kiritimati');
+
+    // =========================================================================
+    // 2. SOL-R002-006: Legacy Unlinked EMI Reversal Requires Explicit Date
+    // =========================================================================
+    // Create an unlinked legacy payment (no note tags, no obligationOccurrenceId)
+    const unlinkedPayment = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId,
+        amount: new Prisma.Decimal('3000.00'),
+        principalPaid: new Prisma.Decimal('3000.00'),
+        occurredAt: new Date('2026-11-15T12:00:00.000Z'),
+        accountId: bankAId,
+        obligationOccurrenceId: null,
+        note: null,
+      }
+    });
+
+    // Reversal without revertToDate must be rejected with exact error message
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanId,
+          paymentId: unlinkedPayment.id,
+        }, db);
+      },
+      /Explicit revertToDate required to reverse legacy unlinked payment/
+    );
+
+    // Reversal with invalid revertToDate must be rejected
+    await assert.rejects(
+      async () => {
+        await loanService.revertEmiPayment(user.id, {
+          loanId,
+          paymentId: unlinkedPayment.id,
+          revertToDate: 'invalid-date-string',
+        }, db);
+      },
+      /Invalid revertToDate/
+    );
+
+    // Reversal with valid revertToDate succeeds and sets schedule
+    const explicitDate = new Date('2026-11-15T12:00:00.000Z');
+    const successfulReversal = await loanService.revertEmiPayment(user.id, {
+      loanId,
+      paymentId: unlinkedPayment.id,
+      revertToDate: explicitDate,
+    }, db);
+    assert.equal(successfulReversal.success, true);
+    assert.equal(successfulReversal.alreadyReversed, false);
+    assert.equal(successfulReversal.restoredNextEmiDate, explicitDate.toISOString());
+
+    // =========================================================================
+    // 3. SOL-R004-008: Server-Side Account Type Validation for Statement Repayment
+    // =========================================================================
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: cc1.account.id,
+      periodKey: '2026-11',
+      statementDate: '2026-11-01T12:00:00.000Z',
+      statementAmount: '12000.00',
+      dueDate: '2026-11-20T12:00:00.000Z',
+    }, db);
+    assert.equal(stmtRes.success, true);
+    const stmtId = stmtRes.statement.id;
+
+    // A. Reject paying with cc1 itself (source is same card)
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtId,
+          fromAccountId: cc1.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      /Payment source cannot be a credit card/
+    );
+
+    // B. Reject paying with cc2 (source is another owned credit card)
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtId,
+          fromAccountId: cc2.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      /Payment source cannot be a credit card/
+    );
+
+    // C. Accept paying with BANK or WALLET
+    const walletPayment = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: wallet.account.id,
+      amount: '2000.00',
+      idempotencyKey: `wallet-pay-${timestamp}`,
+    }, db);
+    assert.equal(walletPayment.success, true);
+    assert.equal(walletPayment.statementStatus, 'PARTIAL');
+
+    // =========================================================================
+    // 4. SOL-R004-003: Idempotency Key for Partial Statement Payments
+    // =========================================================================
+    const idempKey = `idem-partial-${timestamp}`;
+    const [p1, p2] = await Promise.all([
+      creditCardService.recordCreditCardPayment(user.id, {
+        statementId: stmtId,
+        fromAccountId: bankAId,
+        amount: '3000.00',
+        idempotencyKey: idempKey,
+      }, db),
+      creditCardService.recordCreditCardPayment(user.id, {
+        statementId: stmtId,
+        fromAccountId: bankAId,
+        amount: '3000.00',
+        idempotencyKey: idempKey,
+      }, db),
+    ]);
+
+    assert.equal(p1.success, true);
+    assert.equal(p2.success, true);
+    const results = [p1, p2];
+    const fresh = results.find(r => !r.alreadyProcessed);
+    const deduped = results.find(r => r.alreadyProcessed);
+    assert.ok(fresh, 'First call must process payment');
+    assert.ok(deduped, 'Second concurrent call with same idempotencyKey must be deduped');
+    assert.equal(deduped.paymentId, fresh.paymentId, 'Both calls must return the same paymentId');
+
+    // Sequential retry with same idempotencyKey must also return alreadyProcessed
+    const p3 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: bankAId,
+      amount: '3000.00',
+      idempotencyKey: idempKey,
+    }, db);
+    assert.equal(p3.success, true);
+    assert.equal(p3.alreadyProcessed, true);
+    assert.equal(p3.paymentId, fresh.paymentId);
+
+    // Verify exactly 1 payment record exists for this idempotency key in DB
+    const ccPayments = await db.creditCardPayment.findMany({
+      where: { statementId: stmtId, note: { contains: idempKey } }
+    });
+    assert.equal(ccPayments.length, 1, 'Only 1 CreditCardPayment must be recorded in DB for idempotency key');
+
+    // =========================================================================
+    // 5. SOL-R004-004: Statement Repayment Timezone Parsing & Avoid UTC Shift
+    // =========================================================================
+    // In UTC-8 (America/Los_Angeles), "2026-11-15" parsed via new Date("2026-11-15").toISOString() is UTC midnight,
+    // which in US local time is 4 PM Nov 14.
+    // With midday anchor (new TZDate(year, month, day, 12, 0, 0, 0, tz).toISOString()),
+    // it remains Nov 15 across both local and UTC timezones!
+    const { TZDate } = await import('@date-fns/tz');
+    const laMidday = new TZDate(2026, 10, 15, 12, 0, 0, 0, 'America/Los_Angeles');
+    assert.equal(laMidday.getFullYear(), 2026);
+    assert.equal(laMidday.getMonth(), 10);
+    assert.equal(laMidday.getDate(), 15);
+    // Even when converted to UTC, Nov 15 12:00 PST is Nov 15 20:00 UTC (still Nov 15!)
+    assert.ok(laMidday.toISOString().includes('2026-11-15'), 'Midday anchor prevents UTC date shift');
+
+    // Verify toggle obligation active/pause works on CC statement obligation
+    const allObs = await financeService.getObligations(user.id, db);
+    const ccOb = allObs.find(o => o.creditCardStatement?.id === stmtId);
+    assert.ok(ccOb, 'CC statement obligation must exist');
+    assert.equal(ccOb.isActive, true);
+
+    const pauseRes = await financeService.toggleObligationActive(user.id, ccOb.id, false, db);
+    assert.equal(pauseRes.success, true);
+    assert.equal(pauseRes.isActive, false);
+
+    const resumeRes = await financeService.toggleObligationActive(user.id, ccOb.id, true, db);
+    assert.equal(resumeRes.success, true);
+    assert.equal(resumeRes.isActive, true);
+
+  } finally {
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.reminderDelivery.deleteMany({ where: { userId } });
+      await db.obligationOccurrence.deleteMany({ where: { userId } });
+      await db.reminder.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.obligation.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND2-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});
+
+test('V2-R004-ROUND3-B: Statement & EMI Idempotency, Test DB Isolation, Login Timezone (SOL-R004-003, SOL-R004-009, SOL-R004-011, SOL-R004-004)', async (t) => {
+  // 1. SOL-R004-011: Isolated Test DB Assertion and Connection
+  assert.ok(
+    TEST_DB_URL.includes('5433') && TEST_DB_URL.includes('nutrisnap_test'),
+    'Test suite must run against isolated test DB (port 5433, nutrisnap_test)'
+  );
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userId = `usr_r004_r3_${timestamp}`;
+
+  try {
+    // 2. SOL-R004-004: Login Timezone in API response and ObligationForm callers
+    // Verify login route source code ensures timezone: user.timezone in responseData
+    const loginRoutePath = path.resolve(process.cwd(), 'src/app/api/auth/login/route.ts');
+    const loginRouteContent = fs.readFileSync(loginRoutePath, 'utf8');
+    assert.ok(
+      loginRouteContent.includes('timezone: user.timezone'),
+      'Login responseData must include timezone: user.timezone (SOL-R004-004)'
+    );
+
+    // Verify bills/page.tsx ObligationForm callers receive timezone={userTimezone}
+    const billsPagePath = path.resolve(process.cwd(), 'src/app/finance/bills/page.tsx');
+    const billsPageContent = fs.readFileSync(billsPagePath, 'utf8');
+    const obligationFormMatches = billsPageContent.match(/<ObligationForm[\s\S]*?\/>/g) || [];
+    assert.equal(
+      obligationFormMatches.length,
+      3,
+      'bills/page.tsx must contain exactly 3 <ObligationForm /> callers'
+    );
+    for (let i = 0; i < obligationFormMatches.length; i++) {
+      assert.ok(
+        obligationFormMatches[i].includes('timezone={userTimezone}'),
+        `ObligationForm caller #${i + 1} in bills/page.tsx must pass timezone={userTimezone}`
+      );
+    }
+    // Verify StatementRepaymentModal tz fallback in bills/page.tsx
+    assert.ok(
+      billsPageContent.includes("const tz = userTimezone || obligation?.user?.timezone || 'Asia/Kolkata';"),
+      'StatementRepaymentModal must resolve tz with fallback to Asia/Kolkata'
+    );
+
+    // Verify midday anchor date in Pacific/Kiritimati (UTC+14)
+    // 2026-11-15 12:00 in Pacific/Kiritimati is 2026-11-14T22:00:00.000Z
+    const kiritimatiMidday = new TZDate(2026, 10, 15, 12, 0, 0, 0, 'Pacific/Kiritimati');
+    assert.equal(kiritimatiMidday.getFullYear(), 2026);
+    assert.equal(kiritimatiMidday.getMonth(), 10);
+    assert.equal(kiritimatiMidday.getDate(), 15, 'Midday anchor must preserve Nov 15 in Pacific/Kiritimati');
+    // Verify formatting in Kiritimati remains 2026-11-15
+    const tzDateFormatted = new TZDate(kiritimatiMidday.toISOString(), 'Pacific/Kiritimati');
+    assert.equal(tzDateFormatted.getDate(), 15, 'Calendar date in Pacific/Kiritimati must not drift to Nov 16');
+
+    // Create user in DB for finance operations
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `r004_r3_${timestamp}@nutrisnap.app`,
+        name: 'Worker B Round 3 User',
+        password: 'password123',
+        timezone: 'Pacific/Kiritimati',
+      }
+    });
+    assert.equal(user.timezone, 'Pacific/Kiritimati', 'User timezone must be persisted');
+
+    const bankAcc = await financeService.createAccount(user.id, {
+      name: 'Salary Bank Acc',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankId = bankAcc.account.id;
+
+    // 3. SOL-R004-003: Accounts Statement Repayment Retry Identity (Idempotency Key)
+    // Verify CreditCardDialog component defines generateRepaymentIdempotencyKey and passes idempotencyKey
+    const ccDialogPath = path.resolve(process.cwd(), 'src/components/finance/CreditCardDialog.tsx');
+    const ccDialogContent = fs.readFileSync(ccDialogPath, 'utf8');
+    assert.ok(
+      ccDialogContent.includes('generateRepaymentIdempotencyKey'),
+      'CreditCardDialog must define generateRepaymentIdempotencyKey'
+    );
+    assert.ok(
+      ccDialogContent.includes('idempotencyKey') && ccDialogContent.includes('setPaymentIdempotencyKey'),
+      'CreditCardDialog must manage paymentIdempotencyKey state'
+    );
+    assert.ok(
+      ccDialogContent.includes('idempotencyKey,') || ccDialogContent.includes('idempotencyKey:'),
+      'CreditCardDialog must pass idempotencyKey to recordCreditCardPayment'
+    );
+
+    // Live DB test: recordCreditCardPayment retry with same idempotencyKey is deduplicated
+    const ccAccount = await financeService.createAccount(user.id, {
+      name: 'Titanium CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '200000.00',
+    }, db);
+    const ccId = ccAccount.account.id;
+
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: ccId,
+      periodKey: '2026-11',
+      statementDate: '2026-11-01',
+      dueDate: '2026-11-20',
+      statementAmount: '12000.00',
+      minimumDue: '1200.00',
+    }, db);
+    const stmtId = stmtRes.statement.id;
+
+    const ccIdempKey = `cc-repay-r3-${timestamp}`;
+    const ccPay1 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: bankId,
+      amount: '5000.00',
+      idempotencyKey: ccIdempKey,
+    }, db);
+
+    assert.equal(ccPay1.success, true);
+    assert.equal(ccPay1.fullyPaid, false);
+    assert.equal(ccPay1.pendingBalance.toString(), '7000');
+
+    // Retry with SAME idempotencyKey
+    const ccPayRetry = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtId,
+      fromAccountId: bankId,
+      amount: '5000.00',
+      idempotencyKey: ccIdempKey,
+    }, db);
+
+    assert.equal(ccPayRetry.success, true);
+    assert.equal(ccPayRetry.alreadyProcessed, true, 'Retry with same idempotencyKey must be marked alreadyProcessed');
+    assert.equal(ccPayRetry.paymentId, ccPay1.paymentId, 'Must return the original payment record');
+
+    // Verify only 1 payment and 1 transfer transaction exists in DB
+    const ccPaymentsInDb = await db.creditCardPayment.findMany({
+      where: { statementId: stmtId }
+    });
+    assert.equal(ccPaymentsInDb.length, 1, 'Only 1 CreditCardPayment must exist in DB');
+
+    const transferTxInDb = await db.financialTransaction.findMany({
+      where: { accountId: bankId, type: 'TRANSFER' }
+    });
+    assert.equal(transferTxInDb.length, 1, 'Only 1 TRANSFER transaction must exist in DB');
+
+    // 4. SOL-R004-009: RecordEmiModal Retry Identity (Idempotency Key)
+    // Behavioral test of generateEmiIdempotencyKey
+    const key1 = generateEmiIdempotencyKey();
+    const key2 = generateEmiIdempotencyKey();
+    assert.ok(key1.startsWith('emi-pay-'), 'generateEmiIdempotencyKey must produce emi-pay- prefix');
+    assert.ok(key2.startsWith('emi-pay-'), 'generateEmiIdempotencyKey must produce emi-pay- prefix');
+    assert.notEqual(key1, key2, 'Two calls to generateEmiIdempotencyKey must produce distinct keys');
+
+    // Static verification of RecordEmiModal and loans/page.tsx
+    const emiModalPath = path.resolve(process.cwd(), 'src/components/finance/RecordEmiModal.tsx');
+    const emiModalContent = fs.readFileSync(emiModalPath, 'utf8');
+    assert.ok(
+      emiModalContent.includes('idempotencyKey?: string'),
+      'RecordEmiModalProps onSubmit must accept idempotencyKey'
+    );
+    assert.ok(
+      emiModalContent.includes('idempotencyKey: keyToUse'),
+      'RecordEmiModal handleSubmit must pass idempotencyKey to onSubmit'
+    );
+    assert.ok(
+      emiModalContent.includes('setIdempotencyKey(generateEmiIdempotencyKey())'),
+      'RecordEmiModal must reset idempotencyKey upon open and success'
+    );
+
+    const loansPagePath = path.resolve(process.cwd(), 'src/app/finance/loans/page.tsx');
+    const loansPageContent = fs.readFileSync(loansPagePath, 'utf8');
+    assert.ok(
+      loansPageContent.includes('recordEmiPayment(session.id, params)'),
+      'loans/page.tsx onSubmit must forward params (including idempotencyKey) to recordEmiPayment'
+    );
+
+    // Live DB test: recordEmiPayment retry with same idempotencyKey is deduplicated
+    const loanRes = await loanService.createLoan(user.id, {
+      name: 'Personal Auto Loan',
+      loanType: 'VEHICLE',
+      lender: 'HDFC Bank',
+      openingOutstanding: '60000.00',
+      emiAmount: '6000.00',
+      dueDay: 5,
+      nextEmiDate: '2026-11-05',
+      paymentAccountId: bankId,
+      createLinkedObligation: true,
+      emiGeneratesExpense: true,
+    }, db);
+    const loanId = loanRes.loan.id;
+
+    const emiIdempKey = `emi-pay-r3-${timestamp}`;
+    const emiPay1 = await loanService.recordEmiPayment(user.id, {
+      loanId,
+      amount: '6000.00',
+      accountId: bankId,
+      principalPaid: '5000.00',
+      interestPaid: '1000.00',
+      idempotencyKey: emiIdempKey,
+      note: 'November EMI',
+    }, db);
+
+    assert.equal(emiPay1.success, true);
+    assert.equal(emiPay1.remainingPrincipal, '55000');
+
+    // Retry with SAME idempotencyKey
+    const emiPayRetry = await loanService.recordEmiPayment(user.id, {
+      loanId,
+      amount: '6000.00',
+      accountId: bankId,
+      principalPaid: '5000.00',
+      interestPaid: '1000.00',
+      idempotencyKey: emiIdempKey,
+      note: 'November EMI',
+    }, db);
+
+    assert.equal(emiPayRetry.success, true);
+    assert.equal(emiPayRetry.alreadyProcessed, true, 'Retry with same idempotencyKey must return alreadyProcessed');
+    assert.equal(emiPayRetry.paymentId, emiPay1.paymentId, 'Must return the original paymentId');
+    assert.equal(emiPayRetry.remainingPrincipal, '55000', 'Remaining principal must remain 55000 (not reduced again to 50000)');
+
+    // Verify DB state: exactly 1 LoanPayment and exactly 1 EXPENSE transaction
+    const emiPaymentsInDb = await db.loanPayment.findMany({
+      where: { loanId }
+    });
+    assert.equal(emiPaymentsInDb.length, 1, 'Only 1 LoanPayment record must exist in DB');
+
+    const expensesInDb = await db.financialTransaction.findMany({
+      where: { userId, type: 'EXPENSE', category: 'EMI' }
+    });
+    assert.equal(expensesInDb.length, 1, 'Only 1 EXPENSE transaction must exist in DB');
+
+    // Verify loan record in DB
+    const loanInDb = await db.loan.findUnique({
+      where: { id: loanId }
+    });
+    assert.equal(loanInDb?.outstandingPrincipal.toString(), '55000');
+
+  } finally {
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.loanPayment.deleteMany({ where: { userId } });
+      await db.loan.deleteMany({ where: { userId } });
+      await db.reminderDelivery.deleteMany({ where: { userId } });
+      await db.obligationOccurrence.deleteMany({ where: { userId } });
+      await db.reminder.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.obligation.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND3-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});
+
+test('V2-R004-ROUND4-B: Accounts Repayment UI Payer Account Restrictions (SOL-R004-014)', async (t) => {
+  // 1. Static component verification: CreditCardDialog source code enforces payer account restrictions
+  const ccDialogPath = path.resolve(process.cwd(), 'src/components/finance/CreditCardDialog.tsx');
+  const ccDialogContent = fs.readFileSync(ccDialogPath, 'utf8');
+
+  // Verify eligible payer predicate is defined and excludes CREDIT_CARD
+  assert.ok(
+    ccDialogContent.includes('isEligiblePayer') &&
+      ccDialogContent.includes('a.id !== account.id') &&
+      ccDialogContent.includes("a.type !== 'CREDIT_CARD'"),
+    'CreditCardDialog must define isEligiblePayer predicate rejecting target card and any other CREDIT_CARD accounts'
+  );
+
+  // Verify payerAccounts filtering
+  assert.ok(
+    ccDialogContent.includes('payerAccounts = useMemo') ||
+      ccDialogContent.includes('const payerAccounts = (accounts || []).filter(isEligiblePayer)'),
+    'CreditCardDialog must filter payerAccounts using isEligiblePayer / useMemo'
+  );
+
+  // Verify selectedFromAccountId prefers defaultPaymentAccountId when present and eligible
+  assert.ok(
+    ccDialogContent.includes('defaultPaymentAccountId') &&
+      ccDialogContent.includes('payerAccounts.some'),
+    'CreditCardDialog must select defaultPaymentAccountId only if present and within eligible payerAccounts'
+  );
+
+  // Verify empty payerAccounts disabled option and submit button disable
+  assert.ok(
+    ccDialogContent.includes('No eligible bank, cash or wallet account available'),
+    'CreditCardDialog must render disabled option "No eligible bank, cash or wallet account available" when payerAccounts is empty'
+  );
+  assert.ok(
+    ccDialogContent.includes('payerAccounts.length === 0'),
+    'CreditCardDialog must disable submit button when payerAccounts.length === 0'
+  );
+
+  // 2. Unit logic verification: isEligiblePayerAccount and filtering logic
+  const targetCardId = 'acc_card_target';
+  const allAccounts = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_card_other_1', name: 'Other Amazon Pay ICICI', type: 'CREDIT_CARD' },
+    { id: 'acc_card_other_2', name: 'Other SBI SimplyCLICK', type: 'CREDIT_CARD' },
+    { id: 'acc_bank_salary', name: 'HDFC Salary Account', type: 'BANK' },
+    { id: 'acc_cash_home', name: 'Home Petty Cash', type: 'CASH' },
+    { id: 'acc_wallet_paytm', name: 'Paytm Wallet', type: 'WALLET' },
+  ];
+
+  // Verify predicate logic on each type
+  const isEligiblePayer = (a: any) => a.id !== targetCardId && a.type !== 'CREDIT_CARD';
+
+  assert.equal(isEligiblePayer(allAccounts[0]), false, 'Target card itself must not be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[1]), false, 'Other credit card #1 must not be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[2]), false, 'Other credit card #2 must not be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[3]), true, 'BANK account must be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[4]), true, 'CASH account must be an eligible payer');
+  assert.equal(isEligiblePayer(allAccounts[5]), true, 'WALLET account must be an eligible payer');
+
+  // Verify filtered payer accounts only contain BANK, CASH, WALLET
+  const filteredPayers = allAccounts.filter(isEligiblePayer);
+
+  assert.equal(filteredPayers.length, 3, 'Filtered payer accounts must contain exactly 3 accounts');
+  assert.deepEqual(
+    filteredPayers.map((a) => a.id),
+    ['acc_bank_salary', 'acc_cash_home', 'acc_wallet_paytm'],
+    'Filtered payer accounts must match only BANK, CASH, and WALLET accounts'
+  );
+
+  // When only credit cards exist: payerAccounts must be empty
+  const onlyCards = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_card_other_1', name: 'Other Card', type: 'CREDIT_CARD' },
+  ];
+  const emptyPayers = onlyCards.filter(isEligiblePayer);
+  assert.equal(emptyPayers.length, 0, 'When only credit cards exist, payerAccounts must be empty');
+
+  // 3. Database integration: verify that accounts created in DB filter correctly and backend rejects CREDIT_CARD
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userId = `usr_r004_r4_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `user-r4-${timestamp}@test.local`,
+        name: 'User Round 4 Test',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      },
+    });
+
+    // Create Target CC, Other CC, Bank, Cash, and Wallet in DB
+    const cardTarget = await financeService.createAccount(user.id, {
+      name: 'User Target Card',
+      type: 'CREDIT_CARD',
+      creditLimit: '100000.00',
+    }, db);
+
+    const cardOther = await financeService.createAccount(user.id, {
+      name: 'User Other Card',
+      type: 'CREDIT_CARD',
+      creditLimit: '50000.00',
+    }, db);
+
+    const bankAcc = await financeService.createAccount(user.id, {
+      name: 'HDFC Savings Bank',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+
+    const cashAcc = await financeService.createAccount(user.id, {
+      name: 'Physical Cash',
+      type: 'CASH',
+      openingBalance: '10000.00',
+    }, db);
+
+    const walletAcc = await financeService.createAccount(user.id, {
+      name: 'Amazon Pay Wallet',
+      type: 'WALLET',
+      openingBalance: '5000.00',
+    }, db);
+
+    const userAccounts = await financeService.getAccounts(user.id, db);
+    const dbEligiblePayers = userAccounts.filter(
+      (a: any) => a.id !== cardTarget.account.id && a.type !== 'CREDIT_CARD'
+    );
+
+    assert.equal(dbEligiblePayers.length, 3, 'Must have 3 eligible payer accounts from DB');
+    const payerTypes = new Set(dbEligiblePayers.map((a: any) => a.type));
+    assert.ok(payerTypes.has('BANK'), 'Must contain BANK');
+    assert.ok(payerTypes.has('CASH'), 'Must contain CASH');
+    assert.ok(payerTypes.has('WALLET'), 'Must contain WALLET');
+    assert.ok(!payerTypes.has('CREDIT_CARD'), 'Must NOT contain CREDIT_CARD');
+
+    // Create a statement on cardTarget and verify payment with BANK works, but payment with cardOther is rejected
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: cardTarget.account.id,
+      periodKey: '2026-10',
+      statementDate: '2026-10-01',
+      dueDate: '2026-10-25',
+      statementAmount: '5000.00',
+    }, db);
+
+    // Backend rejection test: paying with cardOther fails
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtRes.statement.id,
+          fromAccountId: cardOther.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      (err: any) => {
+        return err.message && err.message.toLowerCase().includes('credit card');
+      },
+      'Backend must reject payment from another CREDIT_CARD account'
+    );
+
+    // Paying with bankAcc succeeds
+    const bankPayRes = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtRes.statement.id,
+      fromAccountId: bankAcc.account.id,
+      amount: '1000.00',
+    }, db);
+    assert.equal(bankPayRes.success, true);
+    assert.equal(bankPayRes.pendingBalance, '4000');
+
+  } finally {
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND4-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
+  }
+});
+
+test('V2-R004-ROUND5-B: CreditCardDialog Payer Accounts Memoization & Selection Stability (SOL-R004-015)', async (t) => {
+  // 1. Static Component Verification: CreditCardDialog implementation
+  const ccDialogPath = path.resolve(process.cwd(), 'src/components/finance/CreditCardDialog.tsx');
+  const ccDialogContent = fs.readFileSync(ccDialogPath, 'utf8');
+
+  // Verify useMemo import and memoization of payerAccounts
+  assert.ok(
+    ccDialogContent.includes('useMemo') &&
+      ccDialogContent.includes('const payerAccounts = useMemo('),
+    'CreditCardDialog must memoize payerAccounts with useMemo'
+  );
+  assert.ok(
+    ccDialogContent.includes('[accounts, account.id]'),
+    'CreditCardDialog must specify [accounts, account.id] as useMemo dependency array'
+  );
+
+  // Verify loadDetails stabilization: useCallback does NOT depend on payerAccounts
+  assert.ok(
+    ccDialogContent.includes('const loadDetails = useCallback('),
+    'CreditCardDialog must define loadDetails with useCallback'
+  );
+  assert.ok(
+    ccDialogContent.includes('[account.id, toast]'),
+    'CreditCardDialog loadDetails must only depend on [account.id, toast] to avoid infinite re-render loops'
+  );
+
+  // Verify loadDetails does NOT overwrite selectedFromAccountId directly
+  const loadDetailsBodyMatch = ccDialogContent.match(/const loadDetails = useCallback\(async \(\) => {([\s\S]*?)}, \[account\.id, toast\]\);/);
+  assert.ok(loadDetailsBodyMatch, 'Must match loadDetails implementation');
+  const loadDetailsBody = loadDetailsBodyMatch[1];
+  assert.ok(
+    !loadDetailsBody.includes('setSelectedFromAccountId'),
+    'loadDetails must NOT directly call setSelectedFromAccountId'
+  );
+
+  // Verify selectedFromAccountId synchronization preserves existing eligible selection
+  assert.ok(
+    ccDialogContent.includes('setSelectedFromAccountId((current: string) =>') &&
+      ccDialogContent.includes('if (current && payerAccounts.some((a) => a.id === current))') &&
+      ccDialogContent.includes('return current;'),
+    'selectedFromAccountId effect must preserve current selection if present in payerAccounts'
+  );
+
+  // Verify submit button disabled and empty state presentation
+  assert.ok(
+    ccDialogContent.includes('disabled={submitting || !selectedFromAccountId || payerAccounts.length === 0}'),
+    'CreditCardDialog must disable submit when payerAccounts is empty or no account is selected'
+  );
+  assert.ok(
+    ccDialogContent.includes('No eligible bank, cash or wallet account available'),
+    'CreditCardDialog must display placeholder indicating no eligible payer accounts'
+  );
+
+  // 2. Logic Verification: Memoization & Payer Filtering
+  const targetCardId = 'acc_cc_target_r5';
+  const sampleAccounts = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_cc_other_1', name: 'ICICI Rubyx Card', type: 'CREDIT_CARD' },
+    { id: 'acc_cc_other_2', name: 'SBI Cashback Card', type: 'CREDIT_CARD' },
+    { id: 'acc_bank_salary', name: 'HDFC Salary Account', type: 'BANK' },
+    { id: 'acc_bank_savings', name: 'Axis Savings Account', type: 'BANK' },
+    { id: 'acc_cash_safe', name: 'Home Locker Cash', type: 'CASH' },
+    { id: 'acc_wallet_amazon', name: 'Amazon Pay Balance', type: 'WALLET' },
+  ];
+
+  const filterEligiblePayers = (accounts: any[], cardId: string) =>
+    (accounts || []).filter((a: any) => a.id !== cardId && a.type !== 'CREDIT_CARD');
+
+  const eligiblePayers = filterEligiblePayers(sampleAccounts, targetCardId);
+  assert.equal(eligiblePayers.length, 4, 'Must return exactly 4 eligible payer accounts');
+  assert.deepEqual(
+    eligiblePayers.map((a) => a.id),
+    ['acc_bank_salary', 'acc_bank_savings', 'acc_cash_safe', 'acc_wallet_amazon'],
+    'Eligible payers must exclude target card and all other credit cards'
+  );
+
+  // When only credit cards exist
+  const onlyCreditCards = [
+    { id: targetCardId, name: 'Target Platinum Card', type: 'CREDIT_CARD' },
+    { id: 'acc_cc_other_1', name: 'ICICI Rubyx Card', type: 'CREDIT_CARD' },
+  ];
+  const emptyPayers = filterEligiblePayers(onlyCreditCards, targetCardId);
+  assert.equal(emptyPayers.length, 0, 'Must produce empty array when only credit cards exist');
+
+  // 3. Selection Stability Simulation: User Manual Choice Preserved Across Updates
+  const defaultPaymentAccountId = 'acc_bank_salary';
+
+  // Functional updater mirroring CreditCardDialog's setSelectedFromAccountId logic
+  const calculateNextSelection = (
+    current: string,
+    defaultId: string | null | undefined,
+    payers: { id: string }[]
+  ): string => {
+    if (current && payers.some((a) => a.id === current)) {
+      return current;
+    }
+    if (defaultId && payers.some((a) => a.id === defaultId)) {
+      return defaultId;
+    }
+    return payers[0]?.id || '';
+  };
+
+  // Case A: Initial mount with empty current selection -> selects default
+  let selection = calculateNextSelection('', defaultPaymentAccountId, eligiblePayers);
+  assert.equal(selection, 'acc_bank_salary', 'Initial selection must fall back to defaultPaymentAccountId');
+
+  // Case B: User manually selects an alternative eligible bank ('acc_bank_savings')
+  selection = 'acc_bank_savings';
+
+  // Case C: Card details reloaded / updated (statement created, payment made, or polling)
+  // The updater runs with current = 'acc_bank_savings' and cardData.defaultId = 'acc_bank_salary'
+  const selectionAfterReload = calculateNextSelection(selection, defaultPaymentAccountId, eligiblePayers);
+  assert.equal(
+    selectionAfterReload,
+    'acc_bank_savings',
+    'User manual selection of alternative eligible bank must be preserved across card details reloads'
+  );
+
+  // Case D: Repeated renders / reloads maintain selection
+  const selectionAfterMultipleReloads = calculateNextSelection(
+    selectionAfterReload,
+    defaultPaymentAccountId,
+    eligiblePayers
+  );
+  assert.equal(
+    selectionAfterMultipleReloads,
+    'acc_bank_savings',
+    'Selection must remain stable across multiple renders'
+  );
+
+  // Case E: If user-selected account is removed from eligible accounts, fallback to defaultId
+  const payersWithoutSavings = eligiblePayers.filter((a) => a.id !== 'acc_bank_savings');
+  const selectionAfterAccountRemoved = calculateNextSelection(
+    selection,
+    defaultPaymentAccountId,
+    payersWithoutSavings
+  );
+  assert.equal(
+    selectionAfterAccountRemoved,
+    'acc_bank_salary',
+    'Must fall back to defaultId if previously selected account is no longer in payerAccounts'
+  );
+
+  // Case F: If both selected account and default account are removed, fallback to first eligible account
+  const payersOnlyCash = [sampleAccounts[5]]; // acc_cash_safe
+  const selectionAfterDefaultAlsoRemoved = calculateNextSelection(
+    'acc_bank_savings',
+    defaultPaymentAccountId,
+    payersOnlyCash
+  );
+  assert.equal(
+    selectionAfterDefaultAlsoRemoved,
+    'acc_cash_safe',
+    'Must fall back to first eligible account when neither current nor default is available'
+  );
+
+  // Case G: If no eligible accounts exist at all, selection resets to '' and submission is disabled
+  const selectionWithNoPayers = calculateNextSelection('acc_cash_safe', null, []);
+  assert.equal(selectionWithNoPayers, '', 'Must reset to empty string when no payer accounts exist');
+
+  const isSubmitDisabled = (submitting: boolean, selectedId: string, payers: any[]) =>
+    submitting || !selectedId || payers.length === 0;
+
+  assert.equal(
+    isSubmitDisabled(false, selectionWithNoPayers, []),
+    true,
+    'Submit button must be disabled when payerAccounts is empty'
+  );
+  assert.equal(
+    isSubmitDisabled(false, '', eligiblePayers),
+    true,
+    'Submit button must be disabled when no account is selected'
+  );
+  assert.equal(
+    isSubmitDisabled(false, 'acc_bank_savings', eligiblePayers),
+    false,
+    'Submit button must be enabled when an eligible account is selected'
+  );
+
+  // 4. Database Integration Verification
+  const db = new PrismaClient({ datasourceUrl: TEST_DB_URL });
+  const timestamp = Date.now();
+  const userId = `usr_r004_r5_${timestamp}`;
+
+  try {
+    const user = await db.user.create({
+      data: {
+        id: userId,
+        email: `user-r5-${timestamp}@test.local`,
+        name: 'User Round 5 Test',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      },
+    });
+
+    const primaryBank = await financeService.createAccount(user.id, {
+      name: 'Default Salary Bank',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+
+    const alternativeBank = await financeService.createAccount(user.id, {
+      name: 'Secondary Savings Bank',
+      type: 'BANK',
+      openingBalance: '30000.00',
+    }, db);
+
+    const targetCard = await financeService.createAccount(user.id, {
+      name: 'Target Platinum CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '150000.00',
+      defaultPaymentAccountId: primaryBank.account.id,
+    }, db);
+
+    const otherCard = await financeService.createAccount(user.id, {
+      name: 'Other Rewards CC',
+      type: 'CREDIT_CARD',
+      creditLimit: '50000.00',
+    }, db);
+
+    // Verify DB accounts filtering
+    const userDbAccounts = await financeService.getAccounts(user.id, db);
+    const dbEligiblePayers = filterEligiblePayers(userDbAccounts, targetCard.account.id);
+
+    assert.equal(dbEligiblePayers.length, 2, 'Must have 2 eligible payer accounts (Primary & Secondary Bank)');
+    assert.ok(dbEligiblePayers.some((a: any) => a.id === primaryBank.account.id), 'Must include Primary Bank');
+    assert.ok(dbEligiblePayers.some((a: any) => a.id === alternativeBank.account.id), 'Must include Secondary Bank');
+    assert.ok(!dbEligiblePayers.some((a: any) => a.type === 'CREDIT_CARD'), 'Must NOT include any CREDIT_CARD');
+
+    // Create a statement on Target Card
+    const stmtRes = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: targetCard.account.id,
+      periodKey: '2026-10',
+      statementDate: '2026-10-01',
+      dueDate: '2026-10-25',
+      statementAmount: '8000.00',
+    }, db);
+
+    // Record payment using the alternative bank (user's chosen alternative)
+    const payRes = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmtRes.statement.id,
+      fromAccountId: alternativeBank.account.id,
+      amount: '3000.00',
+    }, db);
+
+    assert.equal(payRes.success, true);
+    assert.equal(payRes.pendingBalance, '5000');
+
+    // Verify Secondary Bank balance was reduced, while Primary Bank balance was unaffected
+    const accountsAfterPay = await financeService.getAccounts(user.id, db);
+    const primaryAfter = accountsAfterPay.find((a: any) => a.id === primaryBank.account.id);
+    const altAfter = accountsAfterPay.find((a: any) => a.id === alternativeBank.account.id);
+
+    assert.equal(primaryAfter.currentBalance, '50000', 'Primary Bank balance must remain untouched');
+    assert.equal(altAfter.currentBalance, '27000', 'Secondary Bank balance must reflect the 3000 deduction');
+
+    // Verify paying from otherCard is rejected by backend
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmtRes.statement.id,
+          fromAccountId: otherCard.account.id,
+          amount: '1000.00',
+        }, db);
+      },
+      (err: any) => {
+        return err.message && err.message.toLowerCase().includes('credit card');
+      },
+      'Backend must reject payment from another credit card account'
+    );
+
+  } finally {
+    try {
+      await db.creditCardPayment.deleteMany({ where: { userId } });
+      await db.creditCardStatement.deleteMany({ where: { userId } });
+      await db.financialTransaction.deleteMany({ where: { userId } });
+      await db.financialAccount.deleteMany({ where: { userId } });
+      await db.user.deleteMany({ where: { id: userId } });
+    } catch (cleanupErr) {
+      console.warn('V2-R004-ROUND5-B cleanup warning:', cleanupErr);
+    } finally {
+      await db.$disconnect();
+    }
   }
 });

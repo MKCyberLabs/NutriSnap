@@ -4,7 +4,21 @@ Purpose: short, current, cross-agent resume state for AGY-Manickam, AGY-Rohit, C
 
 This file is operational memory. Keep it concise and current. Long-term product rules belong in the roadmap/architecture; verification evidence belongs in `COMPLETE_VERIFICATION_PLAN.md`.
 
-## Current state
+## Current focused repair — 2026-10-09
+
+- Branch/worktree: `orchestration/finance-r004-autoloop` / `/home/openclaw/Projects/NutriSnap-r004-auto`.
+- Starting/current HEAD: `dbf1fa1f948a2010489d67878c34860c081fe2c1`; repair changes are uncommitted.
+- Assignment: user-authorized Codex implementation of SOL-R001-007, SOL-R004-016, SOL-R004-018, and SOL-R004-017. This scoped session supersedes the older branch/pane state retained below.
+- Changes: occurrence matching requires the same scheduled instant and user-local date aliases; opening debt principal is counted exactly once using an initial ledger marker with legacy compatibility; statement payment owns one transfer-linked completion and Undo clears all aliases for its dueDate; direct Loans EMI creates a linked completion and both Loans/Bills Undo remove it. Bills displays an accurate message for `alreadyReversed`. Round 2 worker notes have no trailing whitespace.
+- Regressions: PostgreSQL acceptance cases added to `payment-lifecycle.test.ts` and `debt.test.ts`; four additional database-free regressions exercise the same production functions. The four tests fail against original HEAD code in an isolated `/tmp` copy and pass against the repairs.
+- Verified: `npm run typecheck` PASS (0 errors); `npm run build` PASS (25/25 routes); `npm run test:finance` PASS (99/99 tests); full gate `scripts/verify-v02-local.sh` PASS (148/148 tests) on isolated test DB `nutrisnap_test` (`localhost:5433`).
+- All verification commands use `DATABASE_URL=postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test` and mocked Telegram.
+- Full finance integration gate verified by coordinator outside sandbox with 100% pass across all 99 finance tests and 148 local gate tests.
+- Whitespace: `git diff --check` PASS (0 errors).
+- Status: FOCUSED_REPAIR_COMPLETE — INDEPENDENT_REVIEW_PENDING.
+
+
+## Prior integration state (historical)
 
 - Branch: `feature/v0.1-ui-redesign`
 - GitHub execution issue: #135 — NutriSnap v0.1 — Green UI redesign and owner-ready UAT
