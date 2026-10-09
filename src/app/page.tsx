@@ -2,10 +2,16 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Loader2, Eye, EyeOff, Mail, Lock, ShieldCheck, Calendar, Utensils, IndianRupee } from 'lucide-react';
 import { Brand } from '@/components/design-system/Brand';
 import { saveAuthSession } from '@/lib/auth-mock';
@@ -17,6 +23,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [recoveryDialogOpen, setRecoveryDialogOpen] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -175,7 +182,7 @@ export default function LoginPage() {
               </span>
               <span className="flex items-center gap-1.5">
                 <IndianRupee className="h-3.5 w-3.5 text-[#6D28D9]" />
-                Direct bank &amp; card sync
+                Private offline bank &amp; card ledger
               </span>
             </div>
           </div>
@@ -195,12 +202,13 @@ export default function LoginPage() {
       <div className="w-full lg:w-1/2 bg-white flex flex-col justify-between p-6 sm:p-10 lg:p-14">
         {/* Top Header Link */}
         <div className="flex justify-end items-center w-full">
-          <Link
-            href="/reset-password"
+          <button
+            type="button"
+            onClick={() => setRecoveryDialogOpen(true)}
             className="text-xs font-medium text-[#64748B] hover:text-[#6D28D9] transition-colors py-1 px-2 rounded-lg hover:bg-[#F5F3FF]"
           >
             Trouble signing in?
-          </Link>
+          </button>
         </div>
 
         {/* Form Container */}
@@ -246,12 +254,13 @@ export default function LoginPage() {
                 <Label htmlFor="password" className="text-xs font-semibold text-[#1E293B]">
                   Password
                 </Label>
-                <Link
-                  href="/reset-password"
-                  className="text-xs font-medium text-[#6D28D9] hover:underline"
+                <button
+                  type="button"
+                  onClick={() => setRecoveryDialogOpen(true)}
+                  className="text-xs font-medium text-[#6D28D9] hover:underline cursor-pointer"
                 >
                   Forgot password?
-                </Link>
+                </button>
               </div>
               <div className="relative">
                 <Input
@@ -305,6 +314,31 @@ export default function LoginPage() {
           NutriSnap OS · Precision Health &amp; Wealth Hub
         </div>
       </div>
+
+      <Dialog open={recoveryDialogOpen} onOpenChange={setRecoveryDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-white border border-[#E2E8F0] p-6 rounded-2xl shadow-lg">
+          <DialogHeader className="space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE] flex items-center justify-center text-[#6D28D9] mb-1">
+              <Lock className="h-5 w-5" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-[#1E293B]">
+              Password Recovery
+            </DialogTitle>
+            <DialogDescription className="text-sm text-[#64748B] leading-relaxed">
+              For security on offline self-hosted NutriSnap, password resets require an administrator. Contact your NutriSnap admin or check local server documentation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 pt-4 border-t border-[#F1F5F9] flex justify-end">
+            <Button
+              type="button"
+              onClick={() => setRecoveryDialogOpen(false)}
+              className="bg-[#6D28D9] text-white hover:bg-[#5B21B6] rounded-xl px-4 py-2 text-sm font-medium"
+            >
+              Understood
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

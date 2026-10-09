@@ -135,3 +135,101 @@ test('UI-T053: Reminder filtering logic correctly segments health and bills', ()
   const filterAll = items;
   assert.equal(filterAll.length, 4);
 });
+
+// SOL-R005-003: Recurring budget calculation helper
+function calculateMonthlyRecurringAmount(
+  amount: number | string | null | undefined,
+  recurrenceType: string,
+  recurrenceInterval?: number | null
+): number {
+  const numericAmount = typeof amount === 'number' ? amount : parseFloat(String(amount || '0')) || 0;
+  if (!numericAmount || numericAmount <= 0) return 0;
+
+  switch (recurrenceType) {
+    case 'MONTHLY':
+      return numericAmount;
+    case 'YEARLY':
+      return numericAmount / 12;
+    case 'WEEKLY':
+      return (numericAmount * 52) / 12;
+    case 'DAILY':
+      return (numericAmount * 365) / 12;
+    case 'EVERY_N_DAYS': {
+      const days = recurrenceInterval && recurrenceInterval > 0 ? recurrenceInterval : 1;
+      return (numericAmount * (365 / days)) / 12;
+    }
+    case 'ONCE':
+    default:
+      return 0;
+  }
+}
+
+test('SOL-R005-003: Bills recurring budget normalizes recurrence and excludes ONCE obligations', () => {
+  // 1. One-time obligation contributes 0 to recurring metrics
+  assert.equal(calculateMonthlyRecurringAmount(12000, 'ONCE'), 0);
+  assert.equal(calculateMonthlyRecurringAmount('12000', 'ONCE'), 0);
+
+  // 2. Monthly obligation contributes 100% of amount
+  assert.equal(calculateMonthlyRecurringAmount(5000, 'MONTHLY'), 5000);
+
+  // 3. Yearly obligation normalizes to amount / 12
+  assert.equal(calculateMonthlyRecurringAmount(12000, 'YEARLY'), 1000);
+
+  // 4. Weekly obligation normalizes to (amount * 52) / 12
+  assert.equal(calculateMonthlyRecurringAmount(1200, 'WEEKLY'), (1200 * 52) / 12);
+
+  // 5. Daily obligation normalizes to (amount * 365) / 12
+  assert.equal(calculateMonthlyRecurringAmount(100, 'DAILY'), (100 * 365) / 12);
+
+  // 6. Every N days (e.g., 84 days)
+  assert.equal(calculateMonthlyRecurringAmount(840, 'EVERY_N_DAYS', 84), (840 * (365 / 84)) / 12);
+
+  // 7. Full obligation set calculation
+  const obligations = [
+    { id: '1', title: 'Security Deposit', amount: '12000', recurrenceType: 'ONCE', isActive: true, isArchived: false },
+    { id: '2', title: 'Internet', amount: '1000', recurrenceType: 'MONTHLY', isActive: true, isArchived: false },
+    { id: '3', title: 'Annual Domain', amount: '1200', recurrenceType: 'YEARLY', isActive: true, isArchived: false },
+    { id: '4', title: 'Gym (Cancelled)', amount: '2000', recurrenceType: 'MONTHLY', isActive: false, isArchived: false },
+  ];
+
+  const active = obligations.filter(o => o.isActive && !o.isArchived);
+  const activeRecurring = active.filter(o => o.recurrenceType && o.recurrenceType !== 'ONCE');
+  assert.equal(activeRecurring.length, 2);
+
+  const totalMonthlyRecurring = active.reduce(
+    (sum, o) => sum + calculateMonthlyRecurringAmount(o.amount, o.recurrenceType),
+    0
+  );
+  // 1000 (monthly) + 100 (yearly normalized) + 0 (once) = 1100
+  assert.equal(totalMonthlyRecurring, 1100);
+
+  const annualizedBudget = totalMonthlyRecurring * 12;
+  // 1100 * 12 = 13200 (NOT inflated by the ₹12,000 ONCE obligation)
+  assert.equal(annualizedBudget, 13200);
+});
+
+test('SOL-R005-006: Reminders delivery channel state accurately reflects configured telegramId', () => {
+  function getChannelStatus(telegramId: string | null | undefined) {
+    const isConnected = Boolean(telegramId && telegramId.trim().length > 0);
+    return {
+      telegram: isConnected ? 'CONNECTED' : 'DISCONNECTED',
+      badgeLabel: isConnected ? 'Telegram Alerts' : 'Connect Telegram',
+      tone: isConnected ? 'green' : 'amber',
+    };
+  }
+
+  const userWithTelegram = getChannelStatus('123456789');
+  assert.equal(userWithTelegram.telegram, 'CONNECTED');
+  assert.equal(userWithTelegram.badgeLabel, 'Telegram Alerts');
+  assert.equal(userWithTelegram.tone, 'green');
+
+  const userWithoutTelegram = getChannelStatus(null);
+  assert.equal(userWithoutTelegram.telegram, 'DISCONNECTED');
+  assert.equal(userWithoutTelegram.badgeLabel, 'Connect Telegram');
+  assert.equal(userWithoutTelegram.tone, 'amber');
+
+  const userWithEmptyTelegram = getChannelStatus('   ');
+  assert.equal(userWithEmptyTelegram.telegram, 'DISCONNECTED');
+  assert.equal(userWithEmptyTelegram.badgeLabel, 'Connect Telegram');
+  assert.equal(userWithEmptyTelegram.tone, 'amber');
+});

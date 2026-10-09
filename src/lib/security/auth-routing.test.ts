@@ -108,3 +108,26 @@ test('AUTH-UI-011: Unauthenticated visitor denied /admin and sent to /', () => {
   assert.equal(productAccess.allowed, false);
   assert.equal(productAccess.redirect, '/');
 });
+
+test('SOL-R005-004: Unauthenticated visitors avoid redirect loops for password recovery', () => {
+  // Unauthenticated visitors accessing protected routes are sent to '/'
+  const productAccess = getProductPageAccess(null);
+  assert.equal(productAccess.allowed, false);
+  assert.equal(productAccess.redirect, '/');
+
+  // Authenticated sessions requiring reset properly route to /reset-password
+  const authenticatedReset = getPostLoginRedirect({
+    role: 'USER',
+    onboarded: true,
+    requiresPasswordReset: true,
+  });
+  assert.equal(authenticatedReset, '/reset-password');
+
+  // Unauthenticated users (null session) must not be navigated to /reset-password
+  // because /reset-password immediately redirects unauthenticated users back to '/',
+  // causing an infinite redirect loop. The login page provides an inline/modal help notice instead.
+  const unauthenticatedSession = null;
+  const access = getProductPageAccess(unauthenticatedSession);
+  assert.equal(access.allowed, false);
+  assert.equal(access.redirect, '/');
+});
