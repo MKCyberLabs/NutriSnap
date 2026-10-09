@@ -633,16 +633,22 @@ export async function getMonthlyFinanceSummary(
   db: PrismaClientLike = defaultPrisma
 ) {
   if (!userId) throw new Error('Unauthorized: missing userId');
-  const date = new Date(targetDate);
-  const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-  const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+  const user = await db.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+  const tz = user?.timezone || 'Asia/Kolkata';
+
+  const parsedTargetDate = targetDate instanceof Date ? targetDate : new Date(targetDate);
+  const d = new TZDate(parsedTargetDate, tz);
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const startOfMonth = new Date(new TZDate(year, month, 1, 0, 0, 0, 0, tz).getTime());
+  const startOfNextMonth = new Date(new TZDate(year, month + 1, 1, 0, 0, 0, 0, tz).getTime());
 
   const monthlyTransactions = await db.financialTransaction.findMany({
     where: {
       userId,
       occurredAt: {
         gte: startOfMonth,
-        lte: endOfMonth,
+        lt: startOfNextMonth,
       }
     }
   });
@@ -662,7 +668,7 @@ export async function getMonthlyFinanceSummary(
   }
 
   return {
-    month: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+    month: `${year}-${String(month + 1).padStart(2, '0')}`,
     income: totals.income.toString(),
     expense: totals.expense.toString(),
     totalBalance: totalBalance.toString(),
@@ -738,9 +744,15 @@ export async function getMoneyOverview(
 ): Promise<MoneyOverviewData> {
   if (!userId) throw new Error('Unauthorized: missing userId');
 
-  const now = new Date(targetDate);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const user = await db.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+  const tz = user?.timezone || 'Asia/Kolkata';
+
+  const now = targetDate instanceof Date ? targetDate : new Date(targetDate);
+  const d = new TZDate(now, tz);
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const startOfMonth = new Date(new TZDate(year, month, 1, 0, 0, 0, 0, tz).getTime());
+  const startOfNextMonth = new Date(new TZDate(year, month + 1, 1, 0, 0, 0, 0, tz).getTime());
 
   // Parallel fetch of domain aggregates
   const [accounts, monthlyTransactions, openDebts, activeLoans, wishlistItems, obligations] =
@@ -749,7 +761,7 @@ export async function getMoneyOverview(
       db.financialTransaction.findMany({
         where: {
           userId,
-          occurredAt: { gte: startOfMonth, lte: endOfMonth },
+          occurredAt: { gte: startOfMonth, lt: startOfNextMonth },
         },
       }),
       db.personalDebt.findMany({
@@ -1679,16 +1691,29 @@ export async function markObligationPaid(
         return new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
       }
 
-      const localCandidate = new Date(new TZDate(y, m - 1, d, hh, mm, targetSecond, targetMs, tz).getTime());
-      const utcCandidate = new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
+      const scheduledInstant = new Date(new TZDate(y, m - 1, d, targetHour, targetMinute, targetSecond, targetMs, tz).getTime());
 
       if (hh === targetHour && mm === targetMinute) {
-        return localCandidate;
+        return scheduledInstant;
+      }
+      if (hh === scheduledInstant.getUTCHours() && mm === scheduledInstant.getUTCMinutes()) {
+        return scheduledInstant;
+      }
+      const parsedKey = new Date(occurrenceKey);
+      if (!isNaN(parsedKey.getTime()) && parsedKey.getTime() === scheduledInstant.getTime()) {
+        return scheduledInstant;
+      }
+
+      const utcCandidate = new Date(Date.UTC(y, m - 1, d, hh, mm, targetSecond, targetMs));
+      const utcCandidateInTz = new TZDate(utcCandidate, tz);
+      if (utcCandidateInTz.getHours() === targetHour && utcCandidateInTz.getMinutes() === targetMinute) {
+        return utcCandidate;
       }
       if (hh === anchorUtcHour && mm === anchorUtcMinute) {
         return utcCandidate;
       }
 
+      const localCandidate = new Date(new TZDate(y, m - 1, d, hh, mm, targetSecond, targetMs, tz).getTime());
       return localCandidate;
     }
 
@@ -1731,7 +1756,7 @@ export async function markObligationPaid(
     const pastCompletions = await db.obligationOccurrence.findMany({
       where: {
         obligationId,
-        status: 'COMPLETED',
+        status: { in: ['COMPLETED', 'COMPLETED_HISTORICAL'] },
       },
       include: { transaction: true },
       orderBy: { dueDate: 'desc' },
@@ -1954,7 +1979,7 @@ export async function markObligationPaid(
       const lockedPastCompletions = await tx.obligationOccurrence.findMany({
         where: {
           obligationId: currentObligation.id,
-          status: 'COMPLETED',
+          status: { in: ['COMPLETED', 'COMPLETED_HISTORICAL'] },
         },
         include: { transaction: true },
         orderBy: { dueDate: 'desc' },
@@ -2085,7 +2110,7 @@ export async function markObligationPaid(
         obligationId: currentObligation.id,
         occurrenceKey: canonicalKey,
         dueDate: resolvedDueDate,
-        status: 'COMPLETED',
+        status: isCurrentUnderLock ? 'COMPLETED' : 'COMPLETED_HISTORICAL',
         paidAt: new Date(),
         transactionId: null,
       }
@@ -2311,7 +2336,7 @@ export async function revertObligationPayment(
     );
   } else {
     // Latest completed occurrence
-    targetOccurrence = obligation.occurrences.find((o: any) => o.status === 'COMPLETED') || obligation.occurrences[0] || null;
+    targetOccurrence = obligation.occurrences.find((o: any) => o.status === 'COMPLETED' || o.status === 'COMPLETED_HISTORICAL') || obligation.occurrences[0] || null;
   }
 
   // SOL-R002-001: Statement-linked obligation reversal
@@ -2391,7 +2416,7 @@ export async function revertObligationPayment(
   // Enforce latest-only revert rule (preliminary check)
   const targetDueDate = new Date(targetOccurrence.dueDate).getTime();
   const laterOccurrence = obligation.occurrences.find(
-    (o: any) => new Date(o.dueDate).getTime() > targetDueDate && o.status === 'COMPLETED'
+    (o: any) => new Date(o.dueDate).getTime() > targetDueDate && (o.status === 'COMPLETED' || o.status === 'COMPLETED_HISTORICAL')
   );
   if (laterOccurrence) {
     throw new Error(
@@ -2424,7 +2449,7 @@ export async function revertObligationPayment(
       // Enforce latest-only revert rule under lock
       const lockedTargetDueDate = new Date(lockedTarget.dueDate).getTime();
       const lockedLaterOccurrence = lockedOccurrences.find(
-        (o: any) => o.status === 'COMPLETED' && new Date(o.dueDate).getTime() > lockedTargetDueDate
+        (o: any) => (o.status === 'COMPLETED' || o.status === 'COMPLETED_HISTORICAL') && new Date(o.dueDate).getTime() > lockedTargetDueDate
       );
       if (lockedLaterOccurrence) {
         throw new Error(
@@ -2449,7 +2474,7 @@ export async function revertObligationPayment(
 
       // Find previous completed occurrence
       const prevOccurrences = lockedOccurrences.filter(
-        (o: any) => o.id !== lockedTarget.id && o.status === 'COMPLETED'
+        (o: any) => o.id !== lockedTarget.id && (o.status === 'COMPLETED' || o.status === 'COMPLETED_HISTORICAL')
       );
       const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
 
@@ -2527,7 +2552,7 @@ export async function revertObligationPayment(
     // Enforce latest-only revert rule under lock
     const lockedTargetDueDate = new Date(lockedTarget.dueDate).getTime();
     const lockedLaterOccurrence = lockedOccurrences.find(
-      (o: any) => o.status === 'COMPLETED' && new Date(o.dueDate).getTime() > lockedTargetDueDate
+      (o: any) => (o.status === 'COMPLETED' || o.status === 'COMPLETED_HISTORICAL') && new Date(o.dueDate).getTime() > lockedTargetDueDate
     );
     if (lockedLaterOccurrence) {
       throw new Error(
@@ -2549,19 +2574,17 @@ export async function revertObligationPayment(
 
     // 3. Find previous completion (if any)
     const prevOccurrences = lockedOccurrences.filter(
-      (o: any) => o.id !== lockedTarget.id && o.status === 'COMPLETED'
+      (o: any) => o.id !== lockedTarget.id && (o.status === 'COMPLETED' || o.status === 'COMPLETED_HISTORICAL')
     );
     const lastCompletedAt = prevOccurrences.length > 0 ? prevOccurrences[0].paidAt : null;
 
-    // SOL-R004-010: Check whether the occurrence being undone was a historical occurrence
-    // An occurrence was historical if it did NOT advance the active schedule.
-    // If the occurrence was historical, leave obligation.nextDueAt UNCHANGED!
-    // Only restore obligation.nextDueAt if the occurrence being undone was the one that advanced nextDueAt.
+    // SOL-R004-010: Check whether the occurrence being undone was historical
     const currentOb = await tx.obligation.findUnique({
       where: { id: obligation.id },
       select: {
         dueAt: true,
         nextDueAt: true,
+        isActive: true,
         recurrenceType: true,
         recurrenceInterval: true,
         loan: { select: { dueDay: true } }
@@ -2569,56 +2592,33 @@ export async function revertObligationPayment(
     });
 
     const currentNextDue = currentOb?.nextDueAt || obligation.nextDueAt;
-    const currentDueAt = currentOb?.dueAt || obligation.dueAt;
+    const currentIsActive = currentOb ? currentOb.isActive : obligation.isActive;
     const recType = currentOb?.recurrenceType || obligation.recurrenceType;
-    const recInterval = currentOb?.recurrenceInterval ?? obligation.recurrenceInterval;
 
-    const targetDay = recType === 'MONTHLY'
-      ? (currentOb?.loan?.dueDay ?? obligation.loan?.dueDay ?? new TZDate(currentDueAt, tz).getDate())
-      : undefined;
-
-    const rule: RecurrenceRule = {
-      type: recType as any,
-      interval: recInterval,
-      targetDayOfMonth: targetDay,
-      timezone: tz,
-    };
-
-    const lockedTargetDueTime = new Date(lockedTarget.dueDate).getTime();
-    const anchorTime = new Date(currentDueAt).getTime();
-    const currentNextDueTime = new Date(currentNextDue).getTime();
-
-    let isHistorical = false;
-    if (lockedTargetDueTime < anchorTime) {
-      isHistorical = true;
-    } else if (recType === 'ONCE') {
-      isHistorical = lockedTargetDueTime !== currentNextDueTime;
-    } else {
-      const expectedNext = getNextOccurrence(rule, currentDueAt, lockedTarget.dueDate);
-      if (!expectedNext || expectedNext.getTime() !== currentNextDueTime) {
-        isHistorical = true;
-      }
-    }
+    const isHistorical = lockedTarget.status === 'COMPLETED_HISTORICAL';
 
     const restoredDueAt = isHistorical ? currentNextDue : lockedTarget.dueDate;
+    const restoredIsActive = isHistorical
+      ? currentIsActive
+      : (recType === 'ONCE' ? true : currentIsActive);
 
-    // 4. Restore nextDueAt and reactivate obligation
+    // 4. Restore nextDueAt and active state
     await tx.obligation.update({
       where: { id: obligation.id },
       data: {
         nextDueAt: restoredDueAt,
         lastCompletedAt,
-        isActive: true,
+        isActive: restoredIsActive,
       }
     });
 
     // 5. Cancel future unsent reminder deliveries (status == 'PENDING')
-    if (!isHistorical) {
+    if (isHistorical) {
       await tx.reminderDelivery.deleteMany({
         where: {
           obligationId: obligation.id,
           status: 'PENDING',
-          scheduledFor: { gte: lockedTarget.dueDate },
+          occurrenceKey: lockedTarget.occurrenceKey,
         }
       });
     } else {
@@ -2626,7 +2626,7 @@ export async function revertObligationPayment(
         where: {
           obligationId: obligation.id,
           status: 'PENDING',
-          occurrenceKey: lockedTarget.occurrenceKey,
+          scheduledFor: { gte: lockedTarget.dueDate },
         }
       });
     }
