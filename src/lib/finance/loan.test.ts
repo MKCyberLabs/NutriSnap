@@ -6,6 +6,7 @@ import * as loanService from './loan-service';
 import * as financeService from './finance-service';
 import { calculateMonthlyTotals } from './finance';
 import { formatCalendarDate } from '../../components/finance/LoanForm';
+import * as creditCardService from './credit-card-service';
 
 const TEST_DB_URL = 'postgresql://nutrisnap_test:test_pass@localhost:5433/nutrisnap_test';
 
@@ -2498,6 +2499,328 @@ test('V2-R001-ROUND3-B: Loan overprincipal, archival lock, precision, reversal d
 
     const localTestDate = new Date(2026, 10, 15); // Month is 0-indexed, so 10 = November
     assert.equal(formatCalendarDate(localTestDate), '2026-11-15');
+
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('V2-R004-WORKER-B: Repair test suite for SOL-R001-011, SOL-R002-006, SOL-R002-007, SOL-R003-002, SOL-R003-003, SOL-R003-005, SOL-R003-006', async () => {
+  const db = new PrismaClient({
+    datasourceUrl: TEST_DB_URL,
+  });
+
+  try {
+    const timestamp = Date.now();
+    const user = await db.user.create({
+      data: {
+        id: `usr-wb-${timestamp}`,
+        email: `wb-${timestamp}@test.local`,
+        name: 'Worker B Test User',
+        password: 'password123',
+        timezone: 'Asia/Kolkata',
+      }
+    });
+
+    const bank = await financeService.createAccount(user.id, {
+      name: 'Salary Checking',
+      type: 'BANK',
+      openingBalance: '100000.00',
+    }, db);
+    const bankId = bank.account.id;
+
+    // =========================================================================
+    // 1. SOL-R001-011: Loan Date Inputs Timezone Formatting
+    // =========================================================================
+    // Kiritimati noon on Nov 15 is 2026-11-14T22:00:00Z UTC
+    const kiritimatiNoon = '2026-11-14T22:00:00.000Z';
+    assert.equal(
+      formatCalendarDate(kiritimatiNoon, 'Pacific/Kiritimati'),
+      '2026-11-15',
+      'Kiritimati noon on Nov 15 must format as 2026-11-15 in Pacific/Kiritimati timezone'
+    );
+    assert.equal(
+      formatCalendarDate(kiritimatiNoon, 'UTC'),
+      '2026-11-14',
+      'Same timestamp must format as 2026-11-14 in UTC'
+    );
+    assert.equal(
+      formatCalendarDate('2026-11-14T18:30:00.000Z', 'Asia/Kolkata'),
+      '2026-11-15',
+      'Midnight IST must format as 2026-11-15 in Asia/Kolkata'
+    );
+    assert.equal(formatCalendarDate('2026-11-15', 'Pacific/Kiritimati'), '2026-11-15');
+
+    // =========================================================================
+    // 2. SOL-R003-002: Editable Payment Notes Overriding Reversal Metadata
+    // =========================================================================
+    const loanRes = await loanService.createLoan(user.id, {
+      name: `Note Hijack Test Loan ${timestamp}`,
+      lender: 'Test Bank',
+      loanType: 'PERSONAL',
+      openingOutstanding: '10000.00',
+      emiAmount: '2000.00',
+      nextEmiDate: '2026-12-01',
+      createLinkedObligation: false,
+    }, db);
+    const testLoanId = loanRes.loan.id;
+
+    // Record EMI payment with malicious user tags in note
+    const payRes = await loanService.recordEmiPayment(user.id, {
+      loanId: testLoanId,
+      amount: '2000.00',
+      principalPaid: '2000.00',
+      accountId: bankId,
+      note: '[actualPrincipalReduction:999] [scheduledDate:2020-01-01T00:00:00.000Z] Attempted injection',
+    }, db);
+    assert.equal(payRes.success, true);
+    assert.equal(payRes.remainingPrincipal, '8000');
+
+    // Verify stored payment sanitized the user tags and appended authoritative tag
+    const paymentRecord = await db.loanPayment.findUnique({
+      where: { id: payRes.paymentId },
+    });
+    assert.ok(paymentRecord);
+    assert.ok(!paymentRecord.note?.includes('[actualPrincipalReduction:999]'), 'Injected tag must be sanitized');
+    assert.ok(paymentRecord.note?.includes('[actualPrincipalReduction:2000]'), 'Authoritative reduction tag must be present');
+
+    // Revert payment: must use payment.principalPaid from DB, restoring principal to 10,000, NOT 8,999!
+    const revertRes = await loanService.revertEmiPayment(user.id, {
+      loanId: testLoanId,
+      paymentId: payRes.paymentId,
+    }, db);
+    assert.equal(revertRes.success, true);
+    assert.equal(revertRes.restoredOutstanding, '10000', 'Authoritative principalPaid must restore full 10,000');
+
+    // =========================================================================
+    // 3. SOL-R003-003: Credit Card Reversal Statement Membership Under Lock
+    // =========================================================================
+    const ccAcc = await financeService.createAccount(user.id, {
+      name: 'Platinum Card',
+      type: 'CREDIT_CARD',
+      openingBalance: '0.00',
+      creditLimit: '100000.00',
+      statementDay: 1,
+      paymentDueDay: 20,
+      defaultPaymentAccountId: bankId,
+    }, db);
+    const ccId = ccAcc.account.id;
+
+    const stmt1 = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: ccId,
+      periodKey: '2026-05',
+      statementDate: '2026-05-01',
+      dueDate: '2026-05-20',
+      statementAmount: '10000.00',
+    }, db);
+
+    const stmt2 = await creditCardService.createCreditCardStatement(user.id, {
+      accountId: ccId,
+      periodKey: '2026-06',
+      statementDate: '2026-06-01',
+      dueDate: '2026-06-20',
+      statementAmount: '15000.00',
+    }, db);
+
+    const payStmt1 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmt1.statement.id,
+      fromAccountId: bankId,
+      amount: '5000.00',
+    }, db);
+
+    const payStmt2 = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmt2.statement.id,
+      fromAccountId: bankId,
+      amount: '6000.00',
+    }, db);
+
+    // Mismatched reversal: Provide statement 1 and payment from statement 2
+    await assert.rejects(
+      async () => {
+        await creditCardService.revertCreditCardPayment(user.id, {
+          statementId: stmt1.statement.id,
+          paymentId: payStmt2.paymentId,
+        }, db);
+      },
+      /Payment does not belong to the specified statement/
+    );
+
+    // Verify neither statement nor payment was modified
+    const stmt1After = await db.creditCardStatement.findUnique({ where: { id: stmt1.statement.id } });
+    const stmt2After = await db.creditCardStatement.findUnique({ where: { id: stmt2.statement.id } });
+    const pay2After = await db.creditCardPayment.findUnique({ where: { id: payStmt2.paymentId } });
+    assert.equal(stmt1After?.status, 'PARTIAL');
+    assert.equal(stmt2After?.status, 'PARTIAL');
+    assert.ok(pay2After, 'Payment 2 must not have been deleted');
+
+    // =========================================================================
+    // 4. SOL-R002-006: Legacy EMI Reversal Schema Field & Safe Date Restoration
+    // =========================================================================
+    const legLoan = await loanService.createLoan(user.id, {
+      name: `Legacy Reversal Loan ${timestamp}`,
+      lender: 'Legacy Bank',
+      loanType: 'PERSONAL',
+      openingOutstanding: '20000.00',
+      emiAmount: '4000.00',
+      nextEmiDate: '2026-07-15',
+      createLinkedObligation: true,
+    }, db);
+    const legLoanId = legLoan.loan.id;
+    const legObId = legLoan.loan.obligationId!;
+
+    // Create occurrence with dueDate
+    const occurrenceDueDate = new Date('2026-07-15T12:00:00.000Z');
+    const occ = await db.obligationOccurrence.create({
+      data: {
+        userId: user.id,
+        obligationId: legObId,
+        occurrenceKey: '2026-07-15',
+        dueDate: occurrenceDueDate,
+        status: 'COMPLETED',
+      }
+    });
+
+    // Create a legacy payment without note tags linked to this occurrence
+    const legPay = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId: legLoanId,
+        amount: new Prisma.Decimal('4000.00'),
+        principalPaid: new Prisma.Decimal('4000.00'),
+        occurredAt: new Date('2026-07-16T10:00:00.000Z'),
+        accountId: bankId,
+        obligationOccurrenceId: occ.id,
+        note: null, // Legacy: no tags
+      }
+    });
+
+    // Reverting legacy payment must query dueDate (not dueAt) without error and restore dueDate
+    const legRevertRes = await loanService.revertEmiPayment(user.id, {
+      loanId: legLoanId,
+      paymentId: legPay.id,
+    }, db);
+    assert.equal(legRevertRes.success, true);
+    assert.equal(legRevertRes.restoredNextEmiDate, occurrenceDueDate.toISOString(), 'Restores dueDate from occurrence');
+
+    // Now test unlinked legacy payment without occurrence or tags
+    const unlinkedPay = await db.loanPayment.create({
+      data: {
+        userId: user.id,
+        loanId: legLoanId,
+        amount: new Prisma.Decimal('4000.00'),
+        principalPaid: new Prisma.Decimal('4000.00'),
+        occurredAt: new Date('2026-07-20T10:00:00.000Z'), // should NOT be used as nextEmiDate
+        accountId: bankId,
+        obligationOccurrenceId: null,
+        note: null,
+      }
+    });
+
+    // Set loan schedule to explicit anchor
+    const scheduleAnchor = new Date('2026-08-15T12:00:00.000Z');
+    await db.loan.update({
+      where: { id: legLoanId },
+      data: { nextEmiDate: scheduleAnchor }
+    });
+
+    const unlinkedRevert = await loanService.revertEmiPayment(user.id, {
+      loanId: legLoanId,
+      paymentId: unlinkedPay.id,
+    }, db);
+    assert.equal(unlinkedRevert.success, true);
+    assert.equal(
+      unlinkedRevert.restoredNextEmiDate,
+      scheduleAnchor.toISOString(),
+      'Must preserve existing loan schedule rather than substituting occurredAt'
+    );
+
+    // =========================================================================
+    // 5. SOL-R003-005: Opt-Out Tagging Loan Note Length Limit
+    // =========================================================================
+    const maxNote = 'A'.repeat(255);
+    const optOutRes = await loanService.createLoan(user.id, {
+      name: `OptOut Max Note Loan ${timestamp}`,
+      lender: 'Max Note Bank',
+      loanType: 'PERSONAL',
+      openingOutstanding: '50000.00',
+      notes: maxNote,
+      createLinkedObligation: false,
+    }, db);
+    assert.equal(optOutRes.loan.obligationId, null);
+
+    // Stored note in DB must not exceed 255 chars
+    const optOutLoanDb = await db.loan.findUnique({ where: { id: optOutRes.loan.id } });
+    assert.ok(optOutLoanDb?.notes);
+    assert.ok(optOutLoanDb.notes.length <= 255, `Stored notes length ${optOutLoanDb.notes.length} must be <= 255`);
+    assert.ok(optOutLoanDb.notes.includes('[noLinkedObligation]'));
+
+    // getLoans and getLoanById must strip opt-out tag
+    const loansList = await loanService.getLoans(user.id, {}, db);
+    const readLoan = loansList.find((l: any) => l.id === optOutRes.loan.id);
+    assert.ok(readLoan);
+    assert.ok(!readLoan.notes?.includes('[noLinkedObligation]'), 'getLoans must strip [noLinkedObligation]');
+    assert.ok(readLoan.notes!.length <= 255);
+
+    const singleLoan = await loanService.getLoanById(user.id, optOutRes.loan.id, db);
+    assert.ok(!singleLoan.notes?.includes('[noLinkedObligation]'), 'getLoanById must strip [noLinkedObligation]');
+
+    // Editing loan with 255-char notes succeeds
+    const editRes = await loanService.updateLoan(user.id, optOutRes.loan.id, {
+      notes: 'B'.repeat(255),
+    }, db);
+    assert.ok(editRes.loan);
+    const updatedDb = await db.loan.findUnique({ where: { id: optOutRes.loan.id } });
+    assert.ok(updatedDb?.notes && updatedDb.notes.length <= 255);
+
+    // =========================================================================
+    // 6. SOL-R002-007 & SOL-R003-006: Statement Repayment Flow & Account Config
+    // =========================================================================
+    // Check obligation read model for statement bill
+    const obsList = await financeService.getObligations(user.id, db);
+    const ccObligation = obsList.find(o => o.creditCardStatement?.id === stmt1.statement.id);
+    assert.ok(ccObligation, 'Statement bill obligation must be present');
+    assert.equal(ccObligation.isCreditCardStatement, true);
+
+    // Partial repayment via recordCreditCardPayment:
+    // Statement 1 was originally ₹10,000, paid ₹5,000 above, remaining pending is ₹5,000
+    // Record partial payment of ₹2,000 from bankId
+    const partialPay = await creditCardService.recordCreditCardPayment(user.id, {
+      statementId: stmt1.statement.id,
+      fromAccountId: bankId,
+      amount: '2000.00',
+    }, db);
+    assert.equal(partialPay.success, true);
+    assert.equal(partialPay.statementStatus, 'PARTIAL');
+    assert.equal(new Prisma.Decimal(partialPay.pendingBalance).toString(), '3000');
+
+    // Paying credit card using credit card account itself must be rejected
+    await assert.rejects(
+      async () => {
+        await creditCardService.recordCreditCardPayment(user.id, {
+          statementId: stmt1.statement.id,
+          fromAccountId: ccId, // paying credit card with itself
+          amount: '1000.00',
+        }, db);
+      },
+      /Source account cannot be the credit card being paid/
+    );
+
+    // Update default payment account via updateAccount:
+    const newBank = await financeService.createAccount(user.id, {
+      name: 'Secondary Savings',
+      type: 'BANK',
+      openingBalance: '50000.00',
+    }, db);
+    const updateAccRes = await financeService.updateAccount(user.id, ccId, {
+      defaultPaymentAccountId: newBank.account.id,
+    }, db);
+    assert.equal(updateAccRes.account.defaultPaymentAccountId, newBank.account.id);
+
+    // Verify obligation's accountId remains the card account
+    const obAfterAccUpdate = await db.obligation.findUnique({
+      where: { id: ccObligation.id },
+    });
+    assert.equal(obAfterAccUpdate?.accountId, ccId, 'Obligation accountId must remain the card account');
 
   } finally {
     await db.$disconnect();

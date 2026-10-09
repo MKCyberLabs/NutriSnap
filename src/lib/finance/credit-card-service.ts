@@ -480,7 +480,7 @@ export async function revertCreditCardPayment(
 
   let statementId = input.statementId;
 
-  if (!statementId && input.paymentId) {
+  if (input.paymentId) {
     const prePayment = await db.creditCardPayment.findUnique({
       where: { id: input.paymentId },
       select: { id: true, userId: true, statementId: true }
@@ -499,6 +499,11 @@ export async function revertCreditCardPayment(
     if (prePayment.userId !== userId) {
       throw new Error('Unauthorized: payment belongs to another user');
     }
+    // SOL-R003-003: If statementId was provided, verify membership before locking
+    if (statementId && prePayment.statementId !== statementId) {
+      throw new Error('Payment does not belong to the specified statement');
+    }
+    // Authoritatively derive statementId from the payment
     statementId = prePayment.statementId;
   }
 
@@ -559,6 +564,11 @@ export async function revertCreditCardPayment(
 
     if (payment.userId !== userId) {
       throw new Error('Unauthorized: payment belongs to another user');
+    }
+
+    // SOL-R003-003: Validate statement membership strictly under lock
+    if (payment.statementId !== statement.id) {
+      throw new Error('Payment does not belong to the locked statement');
     }
 
     // 4. Delete linked TRANSFER transaction

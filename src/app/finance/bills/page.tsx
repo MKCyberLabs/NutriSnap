@@ -22,8 +22,25 @@ import {
   toggleObligationActive,
   deleteObligation,
   archiveObligation,
+  updateAccount,
+  recordCreditCardPayment,
 } from '@/app/finance/actions';
-import { ReceiptText, Info, ExternalLink, Loader2, CreditCard } from 'lucide-react';
+import {
+  ReceiptText,
+  Info,
+  ExternalLink,
+  Loader2,
+  CreditCard,
+  CheckCircle2,
+  RotateCcw,
+  Calendar,
+  Clock,
+  Pencil,
+  ArrowRightLeft,
+} from 'lucide-react';
+import { StatusPill } from '@/components/design-system/StatusPill';
+import { MoneyAmount } from '@/components/design-system/MoneyAmount';
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +63,7 @@ export default function BillsPage() {
   const [filter, setFilter] = useState<'UPCOMING' | 'ALL'>('UPCOMING');
   const [editingObligation, setEditingObligation] = useState<any | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [repayingStatementObligation, setRepayingStatementObligation] = useState<any | null>(null);
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -204,31 +222,41 @@ export default function BillsPage() {
             <div className="space-y-3">
               {displayedObligations.map((ob) => (
                 <div key={ob.id} className="space-y-1">
-                  {ob.isCreditCardStatement && (
-                    <div className="flex items-center gap-1.5 px-1">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                        <CreditCard className="h-3 w-3" />
-                        Credit Card Statement Bill
-                      </span>
-                    </div>
+                  {ob.isCreditCardStatement ? (
+                    <StatementBillRow
+                      obligation={ob}
+                      accounts={accounts}
+                      onOpenRepayModal={(statementOb) => setRepayingStatementObligation(statementOb)}
+                      onUndoPaid={handleUndoPaid}
+                      onPaidSuccess={() => {
+                        const session = getAuthSession();
+                        if (session) loadData(session.id);
+                      }}
+                      onEdit={(obligation) => {
+                        setEditingObligation(obligation);
+                        setEditModalOpen(true);
+                      }}
+                      onArchive={handleArchive}
+                    />
+                  ) : (
+                    <ObligationRow
+                      obligation={ob}
+                      accounts={accounts}
+                      onMarkPaid={handleMarkPaid}
+                      onUndoPaid={handleUndoPaid}
+                      onToggleActive={handleToggleActive}
+                      onDelete={handleDelete}
+                      onPaidSuccess={() => {
+                        const session = getAuthSession();
+                        if (session) loadData(session.id);
+                      }}
+                      onArchive={handleArchive}
+                      onEdit={(obligation) => {
+                        setEditingObligation(obligation);
+                        setEditModalOpen(true);
+                      }}
+                    />
                   )}
-                  <ObligationRow
-                    obligation={ob}
-                    accounts={accounts}
-                    onMarkPaid={handleMarkPaid}
-                    onUndoPaid={handleUndoPaid}
-                    onToggleActive={handleToggleActive}
-                    onDelete={handleDelete}
-                    onPaidSuccess={() => {
-                      const session = getAuthSession();
-                      if (session) loadData(session.id);
-                    }}
-                    onArchive={handleArchive}
-                    onEdit={(obligation) => {
-                      setEditingObligation(obligation);
-                      setEditModalOpen(true);
-                    }}
-                  />
                 </div>
               ))}
             </div>
@@ -289,6 +317,22 @@ export default function BillsPage() {
                 }}
               />
             )
+          )}
+
+          {repayingStatementObligation && (
+            <StatementRepaymentModal
+              obligation={repayingStatementObligation}
+              accounts={accounts}
+              open={Boolean(repayingStatementObligation)}
+              onOpenChange={(isOpen) => {
+                if (!isOpen) setRepayingStatementObligation(null);
+              }}
+              onSuccess={() => {
+                const session = getAuthSession();
+                if (session) loadData(session.id);
+                setRepayingStatementObligation(null);
+              }}
+            />
           )}
         </div>
       )}
@@ -508,8 +552,18 @@ function LinkedCardStatementModal({
   const { toast } = useToast();
   const [title, setTitle] = useState(obligation?.title || '');
   const [notes, setNotes] = useState(obligation?.notes || '');
+
+  const cardAccountId = obligation?.creditCardStatement?.accountId || obligation?.account?.id || obligation?.accountId;
+  const cardAccount = (accounts || []).find((acc) => acc.id === cardAccountId);
+  const cardName = obligation?.creditCardStatement?.accountName || cardAccount?.name || obligation?.account?.name || 'Credit Card';
+
+  // Filter out credit cards and the card account itself
+  const eligiblePaymentAccounts = (accounts || []).filter(
+    (acc) => acc.type !== 'CREDIT_CARD' && acc.id !== cardAccountId
+  );
+
   const [defaultAccountId, setDefaultAccountId] = useState(
-    obligation?.account?.id || obligation?.accountId || ''
+    cardAccount?.defaultPaymentAccountId || ''
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -517,17 +571,12 @@ function LinkedCardStatementModal({
     if (obligation) {
       setTitle(obligation.title || '');
       setNotes(obligation.notes || '');
-      setDefaultAccountId(obligation?.account?.id || obligation?.accountId || '');
+      const currentCard = (accounts || []).find(
+        (acc) => acc.id === (obligation?.creditCardStatement?.accountId || obligation?.account?.id || obligation?.accountId)
+      );
+      setDefaultAccountId(currentCard?.defaultPaymentAccountId || '');
     }
-  }, [obligation, open]);
-
-  const cardAccountId = obligation?.creditCardStatement?.accountId || obligation?.account?.id;
-  const cardName = obligation?.creditCardStatement?.account?.name || obligation?.account?.name || 'Credit Card';
-
-  // Filter out credit cards and the card account itself
-  const eligiblePaymentAccounts = (accounts || []).filter(
-    (acc) => acc.type !== 'CREDIT_CARD' && acc.id !== cardAccountId
-  );
+  }, [obligation, accounts, open]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -540,14 +589,23 @@ function LinkedCardStatementModal({
 
     setSubmitting(true);
     try {
+      // SOL-R003-006: Preserve obligation.accountId as the card account!
       const res: any = await updateObligation(session.id, obligation.id, {
         title: title.trim(),
         notes: notes ? notes.trim() : null,
-        accountId: defaultAccountId || null,
+        accountId: cardAccountId || obligation.accountId,
       });
       if (res && res.error) {
         throw new Error(res.error);
       }
+
+      // Update credit card account's defaultPaymentAccountId
+      if (cardAccountId) {
+        await updateAccount(session.id, cardAccountId, {
+          defaultPaymentAccountId: defaultAccountId || null,
+        });
+      }
+
       toast({
         title: 'Obligation updated',
         description: `Successfully updated statement bill "${title.trim()}".`,
@@ -711,6 +769,417 @@ function LinkedCardStatementModal({
             >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface StatementBillRowProps {
+  obligation: any;
+  accounts: any[];
+  onOpenRepayModal: (obligation: any) => void;
+  onUndoPaid: (params: { obligationId: string; occurrenceKey?: string }) => Promise<any>;
+  onPaidSuccess: () => void;
+  onEdit: (obligation: any) => void;
+  onArchive?: (id: string) => void;
+}
+
+function StatementBillRow({
+  obligation,
+  accounts,
+  onOpenRepayModal,
+  onUndoPaid,
+  onPaidSuccess,
+  onEdit,
+  onArchive,
+}: StatementBillRowProps) {
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const cardAccountId = obligation?.creditCardStatement?.accountId || obligation?.account?.id || obligation?.accountId;
+  const cardAccount = (accounts || []).find((acc) => acc.id === cardAccountId);
+  const cardName = obligation?.creditCardStatement?.accountName || cardAccount?.name || obligation?.account?.name || 'Credit Card';
+  const periodKey = obligation?.creditCardStatement?.periodKey;
+  const statementStatus = obligation?.creditCardStatement?.status;
+
+  let dueDate: Date;
+  try {
+    dueDate = typeof obligation.nextDueAt === 'string'
+      ? parseISO(obligation.nextDueAt)
+      : obligation.nextDueAt;
+  } catch {
+    dueDate = new Date();
+  }
+
+  const isPast = dueDate.getTime() < Date.now();
+  const relativeText = formatDistanceToNow(dueDate, { addSuffix: true });
+  const formattedDate = format(dueDate, 'dd MMM yyyy');
+
+  const handleUndo = async () => {
+    setSubmitting(true);
+    try {
+      const res = await onUndoPaid({ obligationId: obligation.id });
+      if (res && res.error) throw new Error(res.error);
+      toast({
+        title: 'Payment Undone',
+        description: `Reverted last credit card payment for "${obligation.title}".`,
+      });
+      onPaidSuccess();
+    } catch (err: any) {
+      toast({
+        title: 'Error undoing payment',
+        description: err?.message || 'Could not revert credit card payment',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-blue-200 bg-white hover:border-blue-400 transition-colors gap-3">
+      <div className="flex items-start gap-3.5 min-w-0">
+        <div
+          className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5"
+          aria-hidden="true"
+        >
+          <CreditCard className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-sm font-semibold text-[#111827] truncate">
+              {obligation.title}
+            </h4>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+              Statement Bill
+            </span>
+            <StatusPill
+              label={isPast ? 'Overdue' : relativeText}
+              tone={isPast ? 'red' : 'amber'}
+            />
+            {statementStatus && (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide uppercase ${
+                statementStatus === 'PAID' ? 'bg-green-100 text-green-800' :
+                statementStatus === 'PARTIAL' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {statementStatus}
+              </span>
+            )}
+          </div>
+
+          <div className="text-xs text-[#667085] mt-1 flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3 text-[#667085]" />
+              <span>Due {formattedDate}</span>
+            </span>
+            {periodKey && (
+              <>
+                <span>•</span>
+                <span>Cycle: {periodKey}</span>
+              </>
+            )}
+            <span>•</span>
+            <span>Card: {cardName}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#E5ECE8]/60">
+        <div className="text-left sm:text-right">
+          <MoneyAmount
+            amount={obligation.amount}
+            type="NEUTRAL"
+            size="md"
+          />
+          <div className="text-[10px] text-blue-700 font-medium uppercase tracking-wider">
+            Statement Pending
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={submitting}
+            onClick={() => onEdit(obligation)}
+            className="h-9 w-9 p-0 rounded-[10px] text-[#667085] hover:text-[#344054] hover:bg-[#F0F5F2]"
+            title="Edit statement bill settings"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+
+          {obligation.lastCompletedAt && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={submitting}
+              onClick={handleUndo}
+              className="h-9 px-2.5 rounded-[10px] text-xs font-semibold text-[#667085] hover:text-[#EF4444] hover:bg-[#FDECEC] flex items-center gap-1"
+              title="Undo last statement payment"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Undo Paid</span>
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            onClick={() => onOpenRepayModal(obligation)}
+            className="h-9 px-3 rounded-[10px] bg-[#16A34A] text-white hover:bg-[#0F7A38] text-xs font-semibold shadow-xs flex items-center gap-1.5"
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+            <span>Pay Statement</span>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface StatementRepaymentModalProps {
+  obligation: any;
+  accounts: any[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}
+
+function StatementRepaymentModal({
+  obligation,
+  accounts,
+  open,
+  onOpenChange,
+  onSuccess,
+}: StatementRepaymentModalProps) {
+  const { toast } = useToast();
+  const cardAccountId = obligation?.creditCardStatement?.accountId || obligation?.account?.id || obligation?.accountId;
+  const cardAccount = (accounts || []).find((acc) => acc.id === cardAccountId);
+  const cardName = obligation?.creditCardStatement?.accountName || cardAccount?.name || obligation?.account?.name || 'Credit Card';
+
+  const eligiblePaymentAccounts = (accounts || []).filter(
+    (acc) => acc.type !== 'CREDIT_CARD' && acc.id !== cardAccountId
+  );
+
+  const pendingAmount = obligation?.amount != null ? String(obligation.amount) : '0';
+  const [paymentAmount, setPaymentAmount] = useState(pendingAmount);
+  const [fromAccountId, setFromAccountId] = useState(
+    cardAccount?.defaultPaymentAccountId && eligiblePaymentAccounts.some((a) => a.id === cardAccount.defaultPaymentAccountId)
+      ? cardAccount.defaultPaymentAccountId
+      : (eligiblePaymentAccounts[0]?.id || '')
+  );
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().substring(0, 10));
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (obligation && open) {
+      const pAmt = obligation?.amount != null ? String(obligation.amount) : '0';
+      setPaymentAmount(pAmt);
+      const foundCard = (accounts || []).find(
+        (acc) => acc.id === (obligation?.creditCardStatement?.accountId || obligation?.account?.id || obligation?.accountId)
+      );
+      const defaultId = foundCard?.defaultPaymentAccountId;
+      const validDefault = defaultId && eligiblePaymentAccounts.some((a) => a.id === defaultId);
+      setFromAccountId(validDefault ? defaultId : (eligiblePaymentAccounts[0]?.id || ''));
+      setPaymentDate(new Date().toISOString().substring(0, 10));
+      setNote('');
+    }
+  }, [obligation, accounts, open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const session = getAuthSession();
+    if (!session) return;
+
+    const numAmount = parseFloat(paymentAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Please enter a positive payment amount.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!fromAccountId) {
+      toast({
+        title: 'Payment account required',
+        description: 'Select an eligible bank, cash, or wallet account to pay from.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const statementId = obligation?.creditCardStatement?.id;
+    if (!statementId) {
+      toast({
+        title: 'Statement not found',
+        description: 'Missing linked credit card statement ID.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res: any = await recordCreditCardPayment(session.id, {
+        statementId,
+        fromAccountId,
+        amount: numAmount,
+        paidAt: paymentDate ? new Date(paymentDate) : new Date(),
+        note: note.trim() || undefined,
+      });
+
+      if (res && res.error) {
+        throw new Error(res.error);
+      }
+
+      toast({
+        title: 'Statement payment recorded',
+        description: `Successfully recorded repayment of ₹${numAmount.toLocaleString('en-IN')} towards ${cardName}.`,
+      });
+      onOpenChange(false);
+      onSuccess();
+    } catch (err: any) {
+      toast({
+        title: 'Payment failed',
+        description: err?.message || 'Could not record credit card payment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const periodKey = obligation?.creditCardStatement?.periodKey;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[460px] rounded-[18px] bg-white p-6 border border-[#E5ECE8] max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-3 border-b border-[#E5ECE8]">
+          <DialogTitle className="text-lg font-semibold text-[#111827] flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-blue-600" />
+            <span>Pay Statement Bill: {cardName}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Informational Box Explaining Transfer Semantics */}
+        <div className="mt-3 p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl flex items-start gap-3 text-blue-900 text-sm">
+          <ArrowRightLeft className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-medium text-blue-950">
+              Transfer Repayment {periodKey ? `(${periodKey})` : ''}
+            </p>
+            <p className="text-xs text-blue-800 leading-relaxed">
+              Paying a credit card bill is recorded as a <strong>transfer</strong> from your payment account to your credit card. This reduces your card balance without inflating income or expense totals.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          {/* Amount Input with partial payment support */}
+          <div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="statement-pay-amount" className="text-xs font-semibold text-[#374151]">
+                Payment Amount (₹)
+              </Label>
+              <span className="text-[11px] text-blue-700 font-medium">
+                Pending: ₹{pendingAmount}
+              </span>
+            </div>
+            <Input
+              id="statement-pay-amount"
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+              placeholder="0.00"
+              className="mt-1 font-mono text-base"
+              required
+            />
+            <p className="mt-1 text-[11px] text-[#6B7280]">
+              You can pay in full or enter a partial amount to reduce the statement balance.
+            </p>
+          </div>
+
+          {/* Source Account Dropdown */}
+          <div>
+            <Label htmlFor="statement-from-acc" className="text-xs font-semibold text-[#374151]">
+              Pay From Account
+            </Label>
+            <select
+              id="statement-from-acc"
+              value={fromAccountId}
+              onChange={(e) => setFromAccountId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#101828] focus:border-[#16A34A] focus:outline-none focus:ring-1 focus:ring-[#16A34A]"
+              required
+            >
+              {eligiblePaymentAccounts.length === 0 ? (
+                <option value="">No eligible payment accounts found</option>
+              ) : (
+                eligiblePaymentAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.type}) — Balance: ₹{acc.currentBalance ?? acc.openingBalance}
+                  </option>
+                ))
+              )}
+            </select>
+            <p className="mt-1 text-[11px] text-[#6B7280]">
+              Only bank, cash, or wallet accounts can be used to pay credit card bills.
+            </p>
+          </div>
+
+          {/* Payment Date */}
+          <div>
+            <Label htmlFor="statement-pay-date" className="text-xs font-semibold text-[#374151]">
+              Payment Date
+            </Label>
+            <Input
+              id="statement-pay-date"
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="mt-1"
+              required
+            />
+          </div>
+
+          {/* Optional Notes */}
+          <div>
+            <Label htmlFor="statement-pay-note" className="text-xs font-semibold text-[#374151]">
+              Notes (Optional)
+            </Label>
+            <Input
+              id="statement-pay-note"
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Online bill payment ref #1234"
+              className="mt-1"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-2 border-t border-[#E5ECE8]">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="bg-[#16A34A] text-white hover:bg-[#0F7A38]"
+              disabled={submitting || eligiblePaymentAccounts.length === 0}
+            >
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Record Repayment
             </Button>
           </div>
         </form>

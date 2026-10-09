@@ -32,6 +32,41 @@ export function parseCalendarDateOrIso(dateInput: string | Date | null | undefin
 }
 
 /**
+ * Strips [noLinkedObligation] opt-out tag from notes for display/editing.
+ */
+export function stripOptOutTag(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const stripped = notes.replace(/\s*\[noLinkedObligation\]/g, '').trim();
+  return stripped || null;
+}
+
+/**
+ * Formats loan notes ensuring total length never exceeds 255 chars, including [noLinkedObligation].
+ */
+export function formatNotesWithOptOut(userNotes: string | null | undefined, optOut: boolean): string | null {
+  if (!optOut) {
+    return stripOptOutTag(userNotes);
+  }
+  const clean = stripOptOutTag(userNotes) || '';
+  const tag = '[noLinkedObligation]';
+  if (!clean) return tag;
+  const maxUserLen = 255 - (tag.length + 1); // 234 chars
+  const truncated = clean.length > maxUserLen ? clean.slice(0, maxUserLen).trim() : clean;
+  return `${truncated} ${tag}`;
+}
+
+/**
+ * Sanitizes user-supplied notes for EMI payment by stripping bracketed control tags.
+ */
+export function sanitizeEmiPaymentNote(note: string | null | undefined): string | null {
+  if (!note) return null;
+  const sanitized = note
+    .replace(/\[\s*(?:actualPrincipalReduction|scheduledDate)[^\]]*\]/gi, '')
+    .trim();
+  return sanitized || null;
+}
+
+/**
  * Centralized helper for deactivating/archiving linked obligation and cancelling pending reminder claims.
  * Invoked on all loan closure paths: closeLoan, archiveLoan, reconcileOutstanding(0), and recordEmiPayment (isClosed).
  */
@@ -237,9 +272,10 @@ export async function createLoan(
       linkedObligationId = ob.id;
     }
 
-    const notesWithOptOut = parsed.createLinkedObligation === false
-      ? (parsed.notes ? `${parsed.notes} [noLinkedObligation]` : '[noLinkedObligation]')
-      : (parsed.notes || null);
+    const notesWithOptOut = formatNotesWithOptOut(
+      parsed.notes,
+      parsed.createLinkedObligation === false
+    );
 
     const loan = await tx.loan.create({
       data: {
@@ -352,7 +388,7 @@ export async function getLoans(
     merchant: l.merchant,
     obligation: l.obligation,
     status: l.status,
-    notes: l.notes,
+    notes: stripOptOutTag(l.notes),
     paymentsCount: l.payments.length,
     payments: l.payments.map((p: any) => ({
       id: p.id,
@@ -421,7 +457,7 @@ export async function getLoanById(
     merchant: loan.merchant,
     obligation: loan.obligation,
     status: loan.status,
-    notes: loan.notes,
+    notes: stripOptOutTag(loan.notes),
     payments: loan.payments.map((p: any) => ({
       id: p.id,
       amount: p.amount.toString(),
@@ -622,9 +658,8 @@ export async function recordEmiPayment(
     noteTags.push(`[obligationPayment:${parsed.obligationPaymentId}]`);
   }
   const tagsSuffix = noteTags.length > 0 ? ` ${noteTags.join(' ')}` : '';
-  const paymentNote = parsed.note
-    ? `${parsed.note}${tagsSuffix}`
-    : `EMI Payment: ${loan.name}${tagsSuffix}`;
+  const userText = sanitizeEmiPaymentNote(parsed.note) || (parsed.note ? '' : `EMI Payment: ${loan.name}`);
+  const paymentNote = userText ? `${userText}${tagsSuffix}` : (tagsSuffix.trim() || `EMI Payment: ${loan.name}`);
 
   const executeInTransaction = async (tx: any) => {
     // Row lock loan inside tx to serialize concurrent updates
@@ -726,18 +761,14 @@ export async function recordEmiPayment(
       isClosed = newOutstanding.isZero();
     }
 
-    let noteWithTags = paymentNote;
+    let noteWithTags: string | null = paymentNote || null;
     if (currentLoan.nextEmiDate) {
       const schedTag = `[scheduledDate:${currentLoan.nextEmiDate.toISOString()}]`;
-      if (!noteWithTags.includes('[scheduledDate:')) {
-        noteWithTags = noteWithTags ? `${noteWithTags} ${schedTag}` : schedTag;
-      }
+      noteWithTags = noteWithTags ? `${noteWithTags} ${schedTag}` : schedTag;
     }
     if (actualPrincipalPaid && actualPrincipalPaid.greaterThan(0)) {
       const reductionTag = `[actualPrincipalReduction:${actualPrincipalPaid.toString()}]`;
-      if (!noteWithTags.includes('[actualPrincipalReduction:')) {
-        noteWithTags = noteWithTags ? `${noteWithTags} ${reductionTag}` : reductionTag;
-      }
+      noteWithTags = noteWithTags ? `${noteWithTags} ${reductionTag}` : reductionTag;
     }
 
     let createdTxId: string | null = null;
@@ -1079,11 +1110,8 @@ export async function updateLoan(
     if (parsed.productName !== undefined) updateData.productName = parsed.productName;
     if (parsed.merchant !== undefined) updateData.merchant = parsed.merchant;
     if (parsed.notes !== undefined) {
-      if (currentLoan.notes?.includes('[noLinkedObligation]') && parsed.createLinkedObligation !== true) {
-        updateData.notes = parsed.notes ? (parsed.notes.includes('[noLinkedObligation]') ? parsed.notes : `${parsed.notes} [noLinkedObligation]`) : '[noLinkedObligation]';
-      } else {
-        updateData.notes = parsed.notes;
-      }
+      const isOptOut = currentLoan.notes?.includes('[noLinkedObligation]') && parsed.createLinkedObligation !== true;
+      updateData.notes = formatNotesWithOptOut(parsed.notes, Boolean(isOptOut));
     }
 
     if (parsed.interestRatePercent !== undefined) {
@@ -1471,6 +1499,7 @@ export async function archiveLoan(
 
 export interface RevertEmiPaymentInput {
   loanPaymentId?: string;
+  paymentId?: string;
   obligationOccurrenceId?: string;
   loanId?: string;
   revertToDate?: Date | string;
@@ -1493,9 +1522,10 @@ export async function revertEmiPayment(
   if (!userId) throw new Error('Unauthorized: missing userId');
 
   let payment: any = null;
-  if (input.loanPaymentId) {
+  const targetPaymentId = input.loanPaymentId || input.paymentId;
+  if (targetPaymentId) {
     payment = await db.loanPayment.findUnique({
-      where: { id: input.loanPaymentId },
+      where: { id: targetPaymentId },
       include: { loan: true, transaction: true }
     });
   } else if (input.obligationOccurrenceId) {
@@ -1576,16 +1606,9 @@ export async function revertEmiPayment(
       where: { id: currentPayment.id }
     });
 
-    // 3. Add back principalPaid to outstandingPrincipal if principalPaid was recorded (SOL-R002-002)
-    let principalToRestore: Decimal | null = currentPayment.principalPaid;
-    if (currentPayment.note) {
-      const match = currentPayment.note.match(/\[actualPrincipalReduction:([^\]]+)\]/);
-      if (match && match[1]) {
-        try {
-          principalToRestore = new Decimal(match[1]);
-        } catch {}
-      }
-    }
+    // 3. Add back principalPaid to outstandingPrincipal from authoritative payment record (SOL-R003-002)
+    // ALWAYS use payment.principalPaid from the database as authoritative. Never allow note tags to override payment.principalPaid.
+    const principalToRestore: Decimal | null = currentPayment.principalPaid;
 
     let restoredOutstanding = currentLoan.outstandingPrincipal;
     if (principalToRestore && principalToRestore.greaterThan(0)) {
@@ -1607,16 +1630,18 @@ export async function revertEmiPayment(
     if (!scheduledDateFromPayment && currentPayment.obligationOccurrenceId) {
       const occ = await tx.obligationOccurrence.findUnique({
         where: { id: currentPayment.obligationOccurrenceId },
-        select: { dueAt: true }
+        select: { dueDate: true }
       });
-      if (occ?.dueAt) {
-        scheduledDateFromPayment = occ.dueAt;
+      if (occ?.dueDate) {
+        scheduledDateFromPayment = occ.dueDate;
       }
     }
 
+    // For records without recoverable scheduled identity, do NOT silently substitute payment date:
+    // restore dueDate from linked occurrence, or use explicit revertToDate, or preserve existing loan schedule.
     const restoredNextEmiDate = input.revertToDate
       ? new Date(input.revertToDate)
-      : (scheduledDateFromPayment || currentPayment.occurredAt);
+      : (scheduledDateFromPayment ?? currentLoan.nextEmiDate);
 
     const restoredStatus = currentLoan.status === 'CLOSED' ? 'ACTIVE' : currentLoan.status;
 
@@ -1630,13 +1655,16 @@ export async function revertEmiPayment(
     });
 
     if (currentLoan.obligationId) {
+      const obUpdateData: any = {
+        isActive: true,
+        isArchived: false,
+      };
+      if (restoredNextEmiDate) {
+        obUpdateData.nextDueAt = restoredNextEmiDate;
+      }
       await tx.obligation.update({
         where: { id: currentLoan.obligationId },
-        data: {
-          nextDueAt: restoredNextEmiDate,
-          isActive: true,
-          isArchived: false,
-        }
+        data: obUpdateData
       });
     }
 
