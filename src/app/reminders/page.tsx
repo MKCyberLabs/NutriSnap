@@ -23,6 +23,17 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -219,7 +230,7 @@ export default function RemindersPage() {
   const handleDeleteHealthReminder = async (rem: any) => {
     const session = getAuthSession();
     if (!session) return;
-    if (!confirm(`Delete ${rem.category || rem.title} reminder?`)) return;
+
     setSubmitting(true);
     try {
       await deleteReminder(rem.id);
@@ -484,15 +495,36 @@ export default function RemindersPage() {
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteHealthReminder(rem)}
-                          className="h-8 w-8 p-0 rounded-lg text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
-                          title="Delete reminder"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 rounded-lg text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
+                              title="Delete reminder"
+                              aria-label="Delete reminder"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="rounded-[18px] border-none">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Reminder?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete this {rem.category || rem.title} reminder? This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="rounded-[10px]">Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDeleteHealthReminder(rem)}
+                                className="rounded-[10px] bg-red-600 text-white hover:bg-red-700"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                         <Switch
                           checked={rem.isActive}
                           onCheckedChange={(checked) => handleToggleReminder(rem, checked)}

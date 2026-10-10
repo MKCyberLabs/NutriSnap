@@ -105,22 +105,28 @@ export default function TransactionsPage() {
     return t.type === filter;
   });
 
+  // ⚡ Bolt Optimization: Use a single pass reduce instead of multiple array allocations and loops
+  const counts = transactions.reduce((acc, t) => {
+    acc[t.type] = (acc[t.type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
   const filterOptions = [
     { label: 'All', value: 'ALL', count: transactions.length },
     {
       label: 'Expense',
       value: 'EXPENSE',
-      count: transactions.filter((t) => t.type === 'EXPENSE').length,
+      count: counts['EXPENSE'] || 0,
     },
     {
       label: 'Income',
       value: 'INCOME',
-      count: transactions.filter((t) => t.type === 'INCOME').length,
+      count: counts['INCOME'] || 0,
     },
     {
       label: 'Transfer',
       value: 'TRANSFER',
-      count: transactions.filter((t) => t.type === 'TRANSFER').length,
+      count: counts['TRANSFER'] || 0,
     },
   ];
 
