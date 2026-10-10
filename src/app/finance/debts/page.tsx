@@ -77,17 +77,34 @@ export default function DebtsPage() {
     loadData(session.id);
   }, [router, loadData]);
 
-  // Aggregate KPI metrics
-  const activeDebts = debts.filter((d) => d.status === 'OPEN');
-  const totalReceivables = activeDebts
-    .filter((d) => d.direction === 'RECEIVABLE')
-    .reduce((sum, d) => sum + (parseFloat(d.outstandingAmount) || 0), 0);
+  // ⚡ Bolt Optimization: Use a single pass reduce instead of multiple array allocations and loops
+  const metrics = debts.reduce(
+    (acc, d) => {
+      if (d.status === 'OPEN') {
+        acc.activeDebtsCount += 1;
+        if (d.direction === 'RECEIVABLE') {
+          acc.activeReceivablesCount += 1;
+          acc.totalReceivables += parseFloat(d.outstandingAmount) || 0;
+        } else if (d.direction === 'PAYABLE') {
+          acc.activePayablesCount += 1;
+          acc.totalPayables += parseFloat(d.outstandingAmount) || 0;
+        }
+      } else if (d.status === 'SETTLED') {
+        acc.settledCount += 1;
+      }
+      return acc;
+    },
+    {
+      activeDebtsCount: 0,
+      activeReceivablesCount: 0,
+      activePayablesCount: 0,
+      totalReceivables: 0,
+      totalPayables: 0,
+      settledCount: 0,
+    }
+  );
 
-  const totalPayables = activeDebts
-    .filter((d) => d.direction === 'PAYABLE')
-    .reduce((sum, d) => sum + (parseFloat(d.outstandingAmount) || 0), 0);
-
-  const netPosition = totalReceivables - totalPayables;
+  const netPosition = metrics.totalReceivables - metrics.totalPayables;
 
   // Filtered debts
   const displayedDebts = debts.filter((d) => {
@@ -102,22 +119,22 @@ export default function DebtsPage() {
     {
       label: 'Owed to Me',
       value: 'RECEIVABLE',
-      count: activeDebts.filter((d) => d.direction === 'RECEIVABLE').length,
+      count: metrics.activeReceivablesCount,
     },
     {
       label: 'I Owe',
       value: 'PAYABLE',
-      count: activeDebts.filter((d) => d.direction === 'PAYABLE').length,
+      count: metrics.activePayablesCount,
     },
     {
       label: 'All Active',
       value: 'ALL_ACTIVE',
-      count: activeDebts.length,
+      count: metrics.activeDebtsCount,
     },
     {
       label: 'Settled',
       value: 'SETTLED',
-      count: debts.filter((d) => d.status === 'SETTLED').length,
+      count: metrics.settledCount,
     },
   ];
 
@@ -217,17 +234,17 @@ export default function DebtsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <MetricCard
               label="Owed to Me (Receivables)"
-              value={`₹${formatIndianRupees(totalReceivables)}`}
+              value={`₹${formatIndianRupees(metrics.totalReceivables)}`}
               icon={<ArrowDownLeft className="h-4 w-4" />}
               tone="green"
-              helperText={`${activeDebts.filter((d) => d.direction === 'RECEIVABLE').length} active receivables`}
+              helperText={`${metrics.activeReceivablesCount} active receivables`}
             />
             <MetricCard
               label="I Owe Friends (Payables)"
-              value={`₹${formatIndianRupees(totalPayables)}`}
+              value={`₹${formatIndianRupees(metrics.totalPayables)}`}
               icon={<ArrowUpRight className="h-4 w-4" />}
               tone="amber"
-              helperText={`${activeDebts.filter((d) => d.direction === 'PAYABLE').length} active payables`}
+              helperText={`${metrics.activePayablesCount} active payables`}
             />
             <MetricCard
               label="Net Position"
