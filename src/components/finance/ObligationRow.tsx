@@ -19,6 +19,17 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -143,7 +154,7 @@ export function ObligationRow({
 
   const handleDelete = async () => {
     if (!onDelete) return;
-    if (!confirm(`Are you sure you want to delete "${obligation.title}"?`)) return;
+
     setSubmitting(true);
     try {
       const res = await onDelete(obligation.id);
@@ -445,16 +456,37 @@ export function ObligationRow({
           </Dialog>
 
           {onDelete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={submitting}
-              onClick={handleDelete}
-              className="h-9 w-9 p-0 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
-              title="Delete obligation"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={submitting}
+                  className="h-9 w-9 p-0 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-[#FEF2F2]"
+                  aria-label="Delete obligation"
+                  title="Delete obligation"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="rounded-2xl bg-white p-6 border border-[#E2E8F0]">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-base font-semibold text-[#1E293B]">Delete Obligation?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-xs text-[#64748B]">
+                    Are you sure you want to delete &quot;{obligation.title}&quot;? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="rounded-xl border-[#E2E8F0]">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDelete}
+                    className="bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-xl transition-colors"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
 
           {onArchive && (

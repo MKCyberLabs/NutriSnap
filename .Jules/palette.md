@@ -137,3 +137,7 @@
 ## 2025-02-18 - [Accessibility: Confirmation Dialogs for Destructive Actions]
 **Learning:** Found custom delete buttons for health reminders in `reminders/page.tsx` that relied on a native `confirm()` dialog. Native confirms block the main thread, cannot be styled, and often present confusing accessibility patterns for screen readers compared to custom accessible modal components.
 **Action:** Replace native `confirm()` checks for destructive actions (like deletions) with accessible custom dialogs, such as Shadcn UI's `AlertDialog`. Ensure the trigger button uses `asChild` if wrapping a `<Button>`, has a clear `aria-label`, and that any internal decorative icons use `aria-hidden="true"`.
+
+## 2024-11-20 - [Accessibility: Accessible Delete Confirmation for Obligations]
+**Learning:** Destructive actions utilizing the native `confirm()` dialog introduce accessibility problems and negatively impact UX by blocking the main thread and failing to provide screen reader-friendly announcements compared to custom modal dialogs. This anti-pattern was found in `ObligationRow.tsx`.
+**Action:** When working on destructive actions like deletions, replace native `confirm()` checks with customized and accessible dialog components, like Shadcn UI's `AlertDialog`. Ensure to attach `aria-label` to the trigger buttons and `aria-hidden="true"` to any decorative internal icons.
